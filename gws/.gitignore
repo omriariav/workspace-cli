@@ -1,0 +1,14 @@
+# Binary
+gws
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Config (may contain secrets)
+config.yaml
+token.json
