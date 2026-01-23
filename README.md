@@ -3,6 +3,7 @@
 <p align="center"><em>Unified CLI for Google Workspace — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, and more from your terminal.</em></p>
 
 <p align="center">
+  <a href="https://github.com/omriariav/workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/omriariav/workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.23+-00ADD8.svg" alt="Go Version"></a>
 </p>
@@ -24,7 +25,7 @@
 ### Go Install
 
 ```bash
-go install github.com/omriariav/workspace-cli@latest
+go install github.com/omriariav/workspace-cli/cmd/gws@latest
 ```
 
 ### From Source
@@ -32,8 +33,8 @@ go install github.com/omriariav/workspace-cli@latest
 ```bash
 git clone https://github.com/omriariav/workspace-cli.git
 cd workspace-cli
-go build -o gws .
-./gws --help
+make build    # produces ./bin/gws
+./bin/gws --help
 ```
 
 ### Prerequisites
@@ -205,9 +206,12 @@ main.go           # Entry point
 ### Building & Testing
 
 ```bash
-go build -o gws .    # Build binary
-go test ./...        # Run tests
-go vet ./...         # Static analysis
+make build      # Build binary to ./bin/gws
+make test       # Run unit tests
+make test-race  # Run tests with race detector
+make vet        # Static analysis
+make fmt        # Format code
+make tidy       # Tidy go modules
 ```
 
 ## Credential Storage
