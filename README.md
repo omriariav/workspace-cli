@@ -1,248 +1,222 @@
-# gws - Google Workspace CLI
+# gws
 
-A unified command-line interface for Google Workspace services, built in Go. Designed for AI agents and power users who need structured, token-efficient access to Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Custom Search.
+<p align="center"><em>Unified CLI for Google Workspace — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, and more from your terminal.</em></p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.23+-00ADD8.svg" alt="Go Version"></a>
+</p>
+
+`gws` gives developers and AI agents a structured, token-efficient interface to 10+ Google Workspace services. Every command returns consistent JSON (or human-readable text), making it ideal for scripting, automation, and agent toolchains.
+
+**Built for AI & automation:** Drop `gws` into Claude Code, Codex, or shell scripts and they inherit structured output, predictable flags, and safe defaults — no wrapper code required.
 
 ## Features
 
-- **10+ Google Services** - Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Search
-- **JSON & Text Output** - Machine-readable JSON (default) or human-readable text
-- **OAuth2 + PKCE** - Secure authentication with automatic token refresh
-- **Single Auth Flow** - Authenticate once to access all services
+- **10+ Google services** — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Custom Search.
+- **Scriptable output** — `--format json` (default) or `--format text` for human-readable tables.
+- **OAuth2 + PKCE** — Secure browser-based auth with automatic token refresh and `0600` file permissions.
+- **Single auth flow** — Authenticate once to access all services; all scopes requested upfront.
+- **Lazy clients** — Service clients are initialized on-demand with mutex protection.
 
 ## Installation
+
+### Go Install
+
+```bash
+go install github.com/omriariav/workspace-cli@latest
+```
 
 ### From Source
 
 ```bash
 git clone https://github.com/omriariav/workspace-cli.git
-cd workspace-cli/gws
+cd workspace-cli
 go build -o gws .
+./gws --help
 ```
 
 ### Prerequisites
 
-1. Go 1.23+
-2. A Google Cloud Project with OAuth 2.0 credentials
-3. Enable required APIs in [Google Cloud Console](https://console.cloud.google.com/apis/library):
-   - Gmail API
-   - Google Calendar API
-   - Google Drive API
-   - Google Docs API
-   - Google Sheets API
-   - Google Slides API
-   - Tasks API
-   - (Optional) Google Chat API
-   - (Optional) Google Forms API
+1. A [Google Cloud Project](https://console.cloud.google.com/) with an **OAuth 2.0 Client ID** (Desktop type).
+2. Enable the APIs you need in the [API Library](https://console.cloud.google.com/apis/library):
+   - Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks (core)
+   - Chat, Forms (optional — require additional setup)
 
-## Configuration
+## Quickstart
 
-### Environment Variables
+### 1. Configure credentials
 
 ```bash
 export GWS_CLIENT_ID="your-client-id.apps.googleusercontent.com"
 export GWS_CLIENT_SECRET="your-client-secret"
 ```
 
-### Config File
-
-Create `~/.config/gws/config.yaml`:
+Or create `~/.config/gws/config.yaml`:
 
 ```yaml
 client_id: "your-client-id.apps.googleusercontent.com"
 client_secret: "your-client-secret"
-format: json  # or "text"
 ```
 
-## Authentication
+### 2. Authenticate
 
 ```bash
-# Login (opens browser for OAuth consent)
-gws auth login
-
-# Check status
-gws auth status
-
-# Logout
-gws auth logout
+gws auth login          # Opens browser for OAuth consent
+gws auth status         # Verify: shows email and token expiry
 ```
 
-## Usage
+### 3. Use it
 
-All commands support `--format=json` (default) or `--format=text`.
+```bash
+gws gmail list --max 5 --query "is:unread"
+gws calendar events --days 7
+gws drive search "quarterly report" --max 10
+gws docs read <document-id>
+gws sheets read <spreadsheet-id> "Sheet1!A1:D10"
+gws tasks lists
+```
+
+Add `--format text` to any command for human-readable output.
+
+## Commands
+
+### Auth
+
+| Command | Description |
+|---------|-------------|
+| `gws auth login` | Authenticate via OAuth2 + PKCE |
+| `gws auth status` | Show current auth status and email |
+| `gws auth logout` | Remove stored credentials |
 
 ### Gmail
 
-```bash
-# List recent threads
-gws gmail list --max=10
-
-# Search emails
-gws gmail list --query="is:unread from:someone@example.com"
-
-# Read a message
-gws gmail read <message-id>
-
-# Send an email
-gws gmail send --to="recipient@example.com" --subject="Hello" --body="Message body"
-```
+| Command | Description |
+|---------|-------------|
+| `gws gmail list` | List threads (`--max`, `--query`) |
+| `gws gmail read <id>` | Read message body and headers |
+| `gws gmail send` | Send email (`--to`, `--subject`, `--body`, `--cc`, `--bcc`) |
 
 ### Calendar
 
-```bash
-# List calendars
-gws calendar list
-
-# List upcoming events (next 7 days)
-gws calendar events --days=7
-
-# Create an event
-gws calendar create --title="Meeting" --start="2024-01-15 14:00" --end="2024-01-15 15:00"
-```
+| Command | Description |
+|---------|-------------|
+| `gws calendar list` | List all calendars |
+| `gws calendar events` | List upcoming events (`--days`, `--calendar-id`, `--max`) |
+| `gws calendar create` | Create event (`--title`, `--start`, `--end`, `--attendees`) |
 
 ### Tasks
 
-```bash
-# List task lists
-gws tasks lists
-
-# List tasks in a list
-gws tasks list <tasklist-id>
-
-# Create a task
-gws tasks create --title="New task" --tasklist="@default"
-
-# Complete a task
-gws tasks complete <tasklist-id> <task-id>
-```
+| Command | Description |
+|---------|-------------|
+| `gws tasks lists` | List task lists |
+| `gws tasks list <id>` | List tasks in a list (`--show-completed`) |
+| `gws tasks create` | Create task (`--title`, `--tasklist`, `--due`) |
+| `gws tasks complete <list> <task>` | Mark task as done |
 
 ### Drive
 
-```bash
-# List files in root
-gws drive list --max=20
-
-# Search for files
-gws drive search "project report"
-
-# Get file info
-gws drive info <file-id>
-
-# Download a file
-gws drive download <file-id> --output="filename.pdf"
-```
+| Command | Description |
+|---------|-------------|
+| `gws drive list` | List files (`--folder`, `--max`, `--order`) |
+| `gws drive search <query>` | Full-text search |
+| `gws drive info <id>` | File metadata, owners, permissions |
+| `gws drive download <id>` | Download file (`--output`); auto-exports Google formats |
 
 ### Docs
 
-```bash
-# Read document text
-gws docs read <document-id>
-
-# Get document info
-gws docs info <document-id>
-```
+| Command | Description |
+|---------|-------------|
+| `gws docs read <id>` | Extract document text (`--include-formatting`) |
+| `gws docs info <id>` | Document metadata and styles |
 
 ### Sheets
 
-```bash
-# Get spreadsheet info
-gws sheets info <spreadsheet-id>
-
-# List sheets in a spreadsheet
-gws sheets list <spreadsheet-id>
-
-# Read a range (returns JSON with headers)
-gws sheets read <spreadsheet-id> "Sheet1!A1:D10"
-
-# Read as CSV
-gws sheets read <spreadsheet-id> "Sheet1!A1:D10" --output-format=csv
-```
+| Command | Description |
+|---------|-------------|
+| `gws sheets info <id>` | Spreadsheet metadata |
+| `gws sheets list <id>` | List sheets in a spreadsheet |
+| `gws sheets read <id> <range>` | Read cell values (`--output-format=csv`, `--headers`) |
 
 ### Slides
 
-```bash
-# Get presentation info
-gws slides info <presentation-id>
-
-# List all slides with content
-gws slides list <presentation-id>
-
-# Read specific slide (1-indexed)
-gws slides read <presentation-id> 1
-```
+| Command | Description |
+|---------|-------------|
+| `gws slides info <id>` | Presentation metadata |
+| `gws slides list <id>` | List slides with text content |
+| `gws slides read <id> [n]` | Read slide text (specific or all) |
 
 ### Chat
 
-> Note: Requires additional setup - you need to configure a Chat App in Google Cloud Console.
+> Requires [Chat App configuration](https://console.cloud.google.com/apis/api/chat.googleapis.com/hangouts-chat) in Google Cloud Console.
 
-```bash
-# List spaces
-gws chat list
-
-# List messages in a space
-gws chat messages <space-id>
-
-# Send a message
-gws chat send --space="spaces/XXXXX" --text="Hello!"
-```
+| Command | Description |
+|---------|-------------|
+| `gws chat list` | List spaces |
+| `gws chat messages <space>` | List messages in a space |
+| `gws chat send` | Send message (`--space`, `--text`) |
 
 ### Forms
 
-> Note: Requires enabling the Google Forms API.
+> Requires enabling the [Google Forms API](https://console.cloud.google.com/apis/api/forms.googleapis.com).
 
-```bash
-# Get form info
-gws forms info <form-id>
-
-# Get form responses
-gws forms responses <form-id>
-```
+| Command | Description |
+|---------|-------------|
+| `gws forms info <id>` | Form structure and questions |
+| `gws forms responses <id>` | All form responses with answers |
 
 ### Custom Search
 
-> Note: Requires a Programmable Search Engine ID and API key.
+> Requires a [Programmable Search Engine](https://programmablesearchengine.google.com/) ID and API key.
+
+| Command | Description |
+|---------|-------------|
+| `gws search <query>` | Search the web (`--max`, `--site`, `--type`) |
+
+## Structured Output
+
+Every command returns JSON by default for machine consumption:
 
 ```bash
-export GWS_SEARCH_ENGINE_ID="your-cx-id"
-export GWS_SEARCH_API_KEY="your-api-key"
-
-gws search "golang tutorial" --max=5
-```
-
-## Output Formats
-
-### JSON (default)
-
-```bash
-gws gmail list --max=2
-```
-
-```json
+$ gws calendar events --days 1
 {
-  "count": 2,
-  "threads": [
-    {"id": "abc123", "subject": "Hello", "from": "sender@example.com"},
-    {"id": "def456", "subject": "Meeting", "from": "boss@example.com"}
+  "count": 3,
+  "events": [
+    {"id": "abc123", "summary": "Team standup", "start": "2024-01-15T09:00:00Z"},
+    ...
   ]
 }
 ```
 
-### Text
+## Development
+
+### Project Layout
+
+```
+cmd/              # Cobra command implementations
+internal/
+  auth/           # OAuth2 + PKCE flow, token management
+  client/         # Lazy-initialized Google API service factory
+  config/         # Viper configuration and path resolution
+  printer/        # JSON and text output formatters
+main.go           # Entry point
+```
+
+### Building & Testing
 
 ```bash
-gws gmail list --max=2 --format=text
+go build -o gws .    # Build binary
+go test ./...        # Run tests
+go vet ./...         # Static analysis
 ```
 
-```
-id        subject    from
------     -------    ----
-abc123    Hello      sender@example.com
-def456    Meeting    boss@example.com
-```
+## Credential Storage
 
-## Token Storage
-
-Tokens are stored at `~/.config/gws/token.json` with `0600` permissions (owner read/write only).
+| File | Permissions | Contents |
+|------|-------------|----------|
+| `~/.config/gws/config.yaml` | `0600` | OAuth client ID/secret, preferences |
+| `~/.config/gws/token.json` | `0600` | OAuth access/refresh tokens |
 
 ## License
 
-MIT
+`gws` is available under the [MIT License](LICENSE).
