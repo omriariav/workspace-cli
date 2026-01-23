@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/omriariav/workspace-cli/gws/internal/config"
+	"github.com/omriariav/workspace-cli/internal/config"
 	"golang.org/x/oauth2"
 )
 

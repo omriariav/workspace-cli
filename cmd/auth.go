@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/omriariav/workspace-cli/gws/internal/auth"
-	"github.com/omriariav/workspace-cli/gws/internal/config"
-	"github.com/omriariav/workspace-cli/gws/internal/printer"
+	"github.com/omriariav/workspace-cli/internal/auth"
+	"github.com/omriariav/workspace-cli/internal/config"
+	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"

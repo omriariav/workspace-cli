@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/omriariav/workspace-cli/gws/internal/client"
-	"github.com/omriariav/workspace-cli/gws/internal/printer"
+	"github.com/omriariav/workspace-cli/internal/client"
+	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 )
 

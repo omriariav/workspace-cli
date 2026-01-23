@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/omriariav/workspace-cli/gws/internal/auth"
-	"github.com/omriariav/workspace-cli/gws/internal/config"
+	"github.com/omriariav/workspace-cli/internal/auth"
+	"github.com/omriariav/workspace-cli/internal/config"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/chat/v1"

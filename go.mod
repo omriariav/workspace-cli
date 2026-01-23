@@ -1,4 +1,4 @@
-module github.com/omriariav/workspace-cli/gws
+module github.com/omriariav/workspace-cli
 
 go 1.23.0
 

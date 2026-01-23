@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/omriariav/workspace-cli/gws/internal/printer"
+	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/omriariav/workspace-cli/gws/cmd"
+	"github.com/omriariav/workspace-cli/cmd"
 )
 
 func main() {
