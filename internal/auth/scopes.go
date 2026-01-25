@@ -20,8 +20,7 @@ var AllScopes = []string{
 	"https://www.googleapis.com/auth/documents.readonly",
 	"https://www.googleapis.com/auth/documents",
 
-	// Sheets
-	"https://www.googleapis.com/auth/spreadsheets.readonly",
+	// Sheets (full access includes read)
 	"https://www.googleapis.com/auth/spreadsheets",
 
 	// Slides

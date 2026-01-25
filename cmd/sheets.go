@@ -435,6 +435,11 @@ func runSheetsAppend(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to append values: %w", err))
 	}
 
+	// Guard against nil Updates in response
+	if resp.Updates == nil {
+		return p.PrintError(fmt.Errorf("unexpected empty response from API"))
+	}
+
 	return p.Print(map[string]interface{}{
 		"status":        "appended",
 		"spreadsheet":   resp.SpreadsheetId,
