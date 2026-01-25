@@ -175,7 +175,9 @@ var sheetsMergeCmd = &cobra.Command{
 
 Range format examples:
   Sheet1!A1:D4     - Merge cells A1 through D4 in Sheet1
-  A1:B2            - Merge cells in first sheet`,
+  A1:B2            - Merge cells in first sheet
+
+Note: Unbounded ranges like "A:A" (whole column) or "1:1" (whole row) are not supported.`,
 	Args: cobra.ExactArgs(2),
 	RunE: runSheetsMerge,
 }
@@ -187,7 +189,9 @@ var sheetsUnmergeCmd = &cobra.Command{
 
 Range format examples:
   Sheet1!A1:D4     - Unmerge cells in range
-  A1:B2            - Unmerge cells in first sheet`,
+  A1:B2            - Unmerge cells in first sheet
+
+Note: Unbounded ranges like "A:A" (whole column) or "1:1" (whole row) are not supported.`,
 	Args: cobra.ExactArgs(2),
 	RunE: runSheetsUnmerge,
 }
@@ -199,7 +203,9 @@ var sheetsSortCmd = &cobra.Command{
 
 Range format examples:
   Sheet1!A1:D10    - Sort range in Sheet1
-  A1:D10           - Sort range in first sheet`,
+  A1:D10           - Sort range in first sheet
+
+Note: Unbounded ranges like "A:A" (whole column) or "1:1" (whole row) are not supported.`,
 	Args: cobra.ExactArgs(2),
 	RunE: runSheetsSort,
 }
@@ -1183,17 +1189,24 @@ func runSheetsDuplicateSheet(cmd *cobra.Command, args []string) error {
 	})
 }
 
-// parseRange parses a Sheets range string (e.g., "Sheet1!A1:D10") and returns sheet name and grid range.
+// parseRange parses a Sheets range string (e.g., "Sheet1!A1:D10") and returns sheet ID and grid range.
+// Note: Does not support unbounded ranges like "A:A" (whole column) or "1:1" (whole row).
 func parseRange(svc *sheets.Service, spreadsheetID, rangeStr string) (int64, *sheets.GridRange, error) {
 	// Split sheet name from range
-	var sheetName string
+	var sheetID int64
 	var cellRange string
 
 	if idx := strings.Index(rangeStr, "!"); idx != -1 {
-		sheetName = rangeStr[:idx]
+		sheetName := rangeStr[:idx]
 		cellRange = rangeStr[idx+1:]
+		// Look up sheet ID by name
+		var err error
+		sheetID, err = getSheetID(svc, spreadsheetID, sheetName)
+		if err != nil {
+			return 0, nil, err
+		}
 	} else {
-		// Assume first sheet if no sheet name
+		// Assume first sheet if no sheet name - get ID directly to avoid duplicate API call
 		spreadsheet, err := svc.Spreadsheets.Get(spreadsheetID).Do()
 		if err != nil {
 			return 0, nil, fmt.Errorf("failed to get spreadsheet: %w", err)
@@ -1201,13 +1214,8 @@ func parseRange(svc *sheets.Service, spreadsheetID, rangeStr string) (int64, *sh
 		if len(spreadsheet.Sheets) == 0 {
 			return 0, nil, fmt.Errorf("spreadsheet has no sheets")
 		}
-		sheetName = spreadsheet.Sheets[0].Properties.Title
+		sheetID = spreadsheet.Sheets[0].Properties.SheetId
 		cellRange = rangeStr
-	}
-
-	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
-	if err != nil {
-		return 0, nil, err
 	}
 
 	// Parse cell range (e.g., "A1:D10")
