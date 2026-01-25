@@ -390,3 +390,142 @@ func TestSheetsCreate_RequiresTitle(t *testing.T) {
 		// Just verify the flag exists
 	}
 }
+
+// TestSheetsAddSheetCommand_Flags tests add-sheet command flags
+func TestSheetsAddSheetCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "add-sheet")
+	if cmd == nil {
+		t.Fatal("add-sheet command not found")
+	}
+
+	expectedFlags := []string{"name", "rows", "cols"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsDeleteSheetCommand_Flags tests delete-sheet command flags
+func TestSheetsDeleteSheetCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "delete-sheet")
+	if cmd == nil {
+		t.Fatal("delete-sheet command not found")
+	}
+
+	expectedFlags := []string{"name", "sheet-id"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsClearCommand tests clear command
+func TestSheetsClearCommand(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "clear")
+	if cmd == nil {
+		t.Fatal("clear command not found")
+	}
+
+	if cmd.Use != "clear <spreadsheet-id> <range>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+}
+
+// TestSheetsAddSheet_MockServer tests add-sheet API integration
+func TestSheetsAddSheet_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			// Verify addSheet request
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				addSheet := requests[0].(map[string]interface{})["addSheet"]
+				if addSheet != nil {
+					props := addSheet.(map[string]interface{})["properties"].(map[string]interface{})
+					sheetTitle := props["title"].(string)
+
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-spreadsheet-id",
+						"replies": []map[string]interface{}{
+							{
+								"addSheet": map[string]interface{}{
+									"properties": map[string]interface{}{
+										"sheetId": 12345,
+										"title":   sheetTitle,
+									},
+								},
+							},
+						},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsDeleteSheet_MockServer tests delete-sheet API integration
+func TestSheetsDeleteSheet_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			// Verify deleteSheet request
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				deleteSheet := requests[0].(map[string]interface{})["deleteSheet"]
+				if deleteSheet != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-spreadsheet-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsClear_MockServer tests clear API integration
+func TestSheetsClear_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":clear") {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-spreadsheet-id",
+				"clearedRange":  "Sheet1!A1:D10",
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}

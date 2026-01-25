@@ -233,6 +233,7 @@ func TestDriveCommands(t *testing.T) {
 }
 
 // TestDocsCommands tests docs command structure
+// Note: Detailed docs tests are in cmd/docs_test.go
 func TestDocsCommands(t *testing.T) {
 	tests := []struct {
 		name string
@@ -241,6 +242,8 @@ func TestDocsCommands(t *testing.T) {
 		{"info"},
 		{"create"},
 		{"append"},
+		{"insert"},
+		{"replace"},
 	}
 
 	for _, tt := range tests {
@@ -252,8 +255,6 @@ func TestDocsCommands(t *testing.T) {
 		})
 	}
 }
-
-// Note: Docs flag tests are in cmd/docs_test.go
 
 // TestSheetsCommands tests sheets command structure
 // Note: Detailed sheets tests are in cmd/sheets_test.go
@@ -267,6 +268,9 @@ func TestSheetsCommands(t *testing.T) {
 		{"create"},
 		{"write"},
 		{"append"},
+		{"add-sheet"},
+		{"delete-sheet"},
+		{"clear"},
 	}
 
 	for _, tt := range tests {
@@ -280,6 +284,7 @@ func TestSheetsCommands(t *testing.T) {
 }
 
 // TestSlidesCommands tests slides command structure
+// Note: Detailed slides tests are in cmd/slides_test.go
 func TestSlidesCommands(t *testing.T) {
 	tests := []struct {
 		name string
@@ -289,6 +294,8 @@ func TestSlidesCommands(t *testing.T) {
 		{"read"},
 		{"create"},
 		{"add-slide"},
+		{"delete-slide"},
+		{"duplicate-slide"},
 	}
 
 	for _, tt := range tests {

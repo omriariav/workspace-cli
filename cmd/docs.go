@@ -49,12 +49,33 @@ var docsAppendCmd = &cobra.Command{
 	RunE:  runDocsAppend,
 }
 
+var docsInsertCmd = &cobra.Command{
+	Use:   "insert <document-id>",
+	Short: "Insert text at a position",
+	Long: `Inserts text at a specific position in the document.
+
+Position is a 1-based index (1 = start of document content).
+Use 'gws docs read <id> --include-formatting' to see element positions.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDocsInsert,
+}
+
+var docsReplaceCmd = &cobra.Command{
+	Use:   "replace <document-id>",
+	Short: "Find and replace text",
+	Long:  "Replaces all occurrences of a text string in the document.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runDocsReplace,
+}
+
 func init() {
 	rootCmd.AddCommand(docsCmd)
 	docsCmd.AddCommand(docsReadCmd)
 	docsCmd.AddCommand(docsInfoCmd)
 	docsCmd.AddCommand(docsCreateCmd)
 	docsCmd.AddCommand(docsAppendCmd)
+	docsCmd.AddCommand(docsInsertCmd)
+	docsCmd.AddCommand(docsReplaceCmd)
 
 	// Read flags
 	docsReadCmd.Flags().Bool("include-formatting", false, "Include formatting information")
@@ -68,6 +89,18 @@ func init() {
 	docsAppendCmd.Flags().String("text", "", "Text to append (required)")
 	docsAppendCmd.Flags().Bool("newline", true, "Add newline before appending")
 	docsAppendCmd.MarkFlagRequired("text")
+
+	// Insert flags
+	docsInsertCmd.Flags().String("text", "", "Text to insert (required)")
+	docsInsertCmd.Flags().Int64("at", 1, "Position to insert at (1-based index)")
+	docsInsertCmd.MarkFlagRequired("text")
+
+	// Replace flags
+	docsReplaceCmd.Flags().String("find", "", "Text to find (required)")
+	docsReplaceCmd.Flags().String("replace", "", "Replacement text (required)")
+	docsReplaceCmd.Flags().Bool("match-case", true, "Case-sensitive matching")
+	docsReplaceCmd.MarkFlagRequired("find")
+	docsReplaceCmd.MarkFlagRequired("replace")
 }
 
 func runDocsRead(cmd *cobra.Command, args []string) error {
@@ -345,5 +378,107 @@ func runDocsAppend(cmd *cobra.Command, args []string) error {
 		"document_id": docID,
 		"title":       doc.Title,
 		"text_length": len(text),
+	})
+}
+
+func runDocsInsert(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	text, _ := cmd.Flags().GetString("text")
+	position, _ := cmd.Flags().GetInt64("at")
+
+	// Validate position
+	if position < 1 {
+		return p.PrintError(fmt.Errorf("position must be >= 1"))
+	}
+
+	requests := []*docs.Request{
+		{
+			InsertText: &docs.InsertTextRequest{
+				Location: &docs.Location{
+					Index: position,
+				},
+				Text: text,
+			},
+		},
+	}
+
+	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to insert text: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "inserted",
+		"document_id": docID,
+		"position":    position,
+		"text_length": len(text),
+	})
+}
+
+func runDocsReplace(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	findText, _ := cmd.Flags().GetString("find")
+	replaceText, _ := cmd.Flags().GetString("replace")
+	matchCase, _ := cmd.Flags().GetBool("match-case")
+
+	requests := []*docs.Request{
+		{
+			ReplaceAllText: &docs.ReplaceAllTextRequest{
+				ContainsText: &docs.SubstringMatchCriteria{
+					Text:      findText,
+					MatchCase: matchCase,
+				},
+				ReplaceText: replaceText,
+			},
+		},
+	}
+
+	resp, err := svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to replace text: %w", err))
+	}
+
+	// Get replacement count from response
+	var replacements int64
+	if len(resp.Replies) > 0 && resp.Replies[0].ReplaceAllText != nil {
+		replacements = resp.Replies[0].ReplaceAllText.OccurrencesChanged
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":       "replaced",
+		"document_id":  docID,
+		"find":         findText,
+		"replace":      replaceText,
+		"replacements": replacements,
 	})
 }

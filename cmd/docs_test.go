@@ -446,3 +446,169 @@ func TestDocsRead_ExtractStructure(t *testing.T) {
 		t.Errorf("expected 3 rows, got %v", table["rows"])
 	}
 }
+
+// TestDocsInsertCommand_Flags tests insert command flags
+func TestDocsInsertCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "insert")
+	if cmd == nil {
+		t.Fatal("docs insert command not found")
+	}
+
+	expectedFlags := []string{"text", "at"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestDocsReplaceCommand_Flags tests replace command flags
+func TestDocsReplaceCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "replace")
+	if cmd == nil {
+		t.Fatal("docs replace command not found")
+	}
+
+	expectedFlags := []string{"find", "replace", "match-case"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestDocsInsert_Success tests insert text at position
+func TestDocsInsert_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-insert:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			insertReq := req.Requests[0].InsertText
+			if insertReq == nil {
+				t.Error("expected InsertText request")
+			} else {
+				if insertReq.Location.Index != 10 {
+					t.Errorf("expected index 10, got %d", insertReq.Location.Index)
+				}
+				if insertReq.Text != "Inserted text" {
+					t.Errorf("expected 'Inserted text', got '%s'", insertReq.Text)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-insert",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	_, err = svc.Documents.BatchUpdate("doc-insert", &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				InsertText: &docs.InsertTextRequest{
+					Location: &docs.Location{Index: 10},
+					Text:     "Inserted text",
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to insert text: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestDocsReplace_Success tests find and replace
+func TestDocsReplace_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-replace:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			replaceReq := req.Requests[0].ReplaceAllText
+			if replaceReq == nil {
+				t.Error("expected ReplaceAllText request")
+			} else {
+				if replaceReq.ContainsText.Text != "old" {
+					t.Errorf("expected find text 'old', got '%s'", replaceReq.ContainsText.Text)
+				}
+				if replaceReq.ReplaceText != "new" {
+					t.Errorf("expected replace text 'new', got '%s'", replaceReq.ReplaceText)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-replace",
+				Replies: []*docs.Response{
+					{
+						ReplaceAllText: &docs.ReplaceAllTextResponse{
+							OccurrencesChanged: 5,
+						},
+					},
+				},
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	resp, err := svc.Documents.BatchUpdate("doc-replace", &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				ReplaceAllText: &docs.ReplaceAllTextRequest{
+					ContainsText: &docs.SubstringMatchCriteria{
+						Text:      "old",
+						MatchCase: true,
+					},
+					ReplaceText: "new",
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to replace text: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+
+	if len(resp.Replies) == 0 || resp.Replies[0].ReplaceAllText == nil {
+		t.Error("expected ReplaceAllText response")
+	} else if resp.Replies[0].ReplaceAllText.OccurrencesChanged != 5 {
+		t.Errorf("expected 5 occurrences changed, got %d", resp.Replies[0].ReplaceAllText.OccurrencesChanged)
+	}
+}
