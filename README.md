@@ -123,6 +123,7 @@ Add `--format text` to any command for human-readable output.
 | `gws drive search <query>` | Full-text search |
 | `gws drive info <id>` | File metadata, owners, permissions |
 | `gws drive download <id>` | Download file (`--output`); auto-exports Google formats |
+| `gws drive comments <id>` | List comments and replies (`--include-resolved`, `--include-deleted`) |
 
 ### Docs
 
