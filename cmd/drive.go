@@ -48,12 +48,21 @@ var driveInfoCmd = &cobra.Command{
 	RunE:  runDriveInfo,
 }
 
+var driveCommentsCmd = &cobra.Command{
+	Use:   "comments <file-id>",
+	Short: "List comments on a file",
+	Long:  "Lists all comments and replies on a Google Drive file (Docs, Sheets, Slides, etc.).",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runDriveComments,
+}
+
 func init() {
 	rootCmd.AddCommand(driveCmd)
 	driveCmd.AddCommand(driveListCmd)
 	driveCmd.AddCommand(driveSearchCmd)
 	driveCmd.AddCommand(driveDownloadCmd)
 	driveCmd.AddCommand(driveInfoCmd)
+	driveCmd.AddCommand(driveCommentsCmd)
 
 	// List flags
 	driveListCmd.Flags().String("folder", "root", "Folder ID to list (default: root)")
@@ -65,6 +74,11 @@ func init() {
 
 	// Download flags
 	driveDownloadCmd.Flags().String("output", "", "Output file path (default: original filename)")
+
+	// Comments flags
+	driveCommentsCmd.Flags().Int64("max", 100, "Maximum number of comments")
+	driveCommentsCmd.Flags().Bool("include-resolved", false, "Include resolved comments")
+	driveCommentsCmd.Flags().Bool("include-deleted", false, "Include deleted comments")
 }
 
 func runDriveList(cmd *cobra.Command, args []string) error {
@@ -322,4 +336,106 @@ func runDriveInfo(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(result)
+}
+
+func runDriveComments(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID := args[0]
+	maxResults, _ := cmd.Flags().GetInt64("max")
+	includeResolved, _ := cmd.Flags().GetBool("include-resolved")
+	includeDeleted, _ := cmd.Flags().GetBool("include-deleted")
+
+	// Get file info first for context
+	file, err := svc.Files.Get(fileID).Fields("name, mimeType").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get file info: %w", err))
+	}
+
+	// List comments with all fields
+	commentsCall := svc.Comments.List(fileID).
+		PageSize(maxResults).
+		Fields("comments(id, content, author, createdTime, modifiedTime, resolved, quotedFileContent, replies)")
+
+	if includeDeleted {
+		commentsCall = commentsCall.IncludeDeleted(true)
+	}
+
+	resp, err := commentsCall.Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to list comments: %w", err))
+	}
+
+	comments := make([]map[string]interface{}, 0)
+	for _, comment := range resp.Comments {
+		// Skip resolved comments unless explicitly requested
+		if comment.Resolved && !includeResolved {
+			continue
+		}
+
+		c := map[string]interface{}{
+			"id":       comment.Id,
+			"content":  comment.Content,
+			"created":  comment.CreatedTime,
+			"resolved": comment.Resolved,
+		}
+
+		if comment.ModifiedTime != "" {
+			c["modified"] = comment.ModifiedTime
+		}
+
+		// Author info
+		if comment.Author != nil {
+			c["author"] = map[string]interface{}{
+				"name":  comment.Author.DisplayName,
+				"email": comment.Author.EmailAddress,
+			}
+		}
+
+		// Quoted text (the text the comment is anchored to)
+		if comment.QuotedFileContent != nil && comment.QuotedFileContent.Value != "" {
+			c["quoted_text"] = comment.QuotedFileContent.Value
+		}
+
+		// Replies
+		if len(comment.Replies) > 0 {
+			replies := make([]map[string]interface{}, 0, len(comment.Replies))
+			for _, reply := range comment.Replies {
+				r := map[string]interface{}{
+					"id":      reply.Id,
+					"content": reply.Content,
+					"created": reply.CreatedTime,
+				}
+				if reply.Author != nil {
+					r["author"] = map[string]interface{}{
+						"name":  reply.Author.DisplayName,
+						"email": reply.Author.EmailAddress,
+					}
+				}
+				replies = append(replies, r)
+			}
+			c["replies"] = replies
+		}
+
+		comments = append(comments, c)
+	}
+
+	return p.Print(map[string]interface{}{
+		"file_id":   fileID,
+		"file_name": file.Name,
+		"mime_type": file.MimeType,
+		"comments":  comments,
+		"count":     len(comments),
+	})
 }
