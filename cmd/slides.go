@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
@@ -369,14 +368,28 @@ func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
 	slideBody, _ := cmd.Flags().GetString("body")
 	layout, _ := cmd.Flags().GetString("layout")
 
-	// Generate a unique object ID for the new slide
-	slideObjectID := fmt.Sprintf("slide_%d", time.Now().UnixNano())
+	// Validate layout
+	validLayouts := map[string]bool{
+		"BLANK":                      true,
+		"CAPTION_ONLY":               true,
+		"TITLE":                      true,
+		"TITLE_AND_BODY":             true,
+		"TITLE_AND_TWO_COLUMNS":      true,
+		"TITLE_ONLY":                 true,
+		"SECTION_HEADER":             true,
+		"SECTION_TITLE_AND_DESCRIPTION": true,
+		"ONE_COLUMN_TEXT":            true,
+		"MAIN_POINT":                 true,
+		"BIG_NUMBER":                 true,
+	}
+	if !validLayouts[layout] {
+		return p.PrintError(fmt.Errorf("invalid layout '%s'. Valid layouts: BLANK, TITLE, TITLE_AND_BODY, TITLE_AND_TWO_COLUMNS, TITLE_ONLY, SECTION_HEADER, CAPTION_ONLY, MAIN_POINT, BIG_NUMBER", layout))
+	}
 
-	// Create requests for adding a slide
+	// Create requests for adding a slide (let API generate the ID)
 	requests := []*slides.Request{
 		{
 			CreateSlide: &slides.CreateSlideRequest{
-				ObjectId: slideObjectID,
 				SlideLayoutReference: &slides.LayoutReference{
 					PredefinedLayout: layout,
 				},
@@ -384,7 +397,7 @@ func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	// Execute the create slide request first
+	// Execute the create slide request
 	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
 		Requests: requests,
 	}).Do()
@@ -392,18 +405,26 @@ func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to add slide: %w", err))
 	}
 
-	// Get the created slide to find placeholder IDs
+	// Get the slide ID from the response
+	var slideObjectID string
+	if len(resp.Replies) > 0 && resp.Replies[0].CreateSlide != nil {
+		slideObjectID = resp.Replies[0].CreateSlide.ObjectId
+	}
+
+	// Get the created slide to find placeholder IDs (for adding text)
 	presentation, err := svc.Presentations.Get(presentationID).Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
 	}
 
-	// Find the new slide
+	// Find the new slide by ID
 	var newSlide *slides.Page
-	for _, slide := range presentation.Slides {
-		if slide.ObjectId == slideObjectID {
-			newSlide = slide
-			break
+	if slideObjectID != "" {
+		for _, slide := range presentation.Slides {
+			if slide.ObjectId == slideObjectID {
+				newSlide = slide
+				break
+			}
 		}
 	}
 
@@ -450,16 +471,10 @@ func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
 	}
 
 	slideNumber := len(presentation.Slides)
-	result := map[string]interface{}{
+	return p.Print(map[string]interface{}{
 		"status":          "added",
 		"presentation_id": presentationID,
 		"slide_id":        slideObjectID,
 		"slide_number":    slideNumber,
-	}
-
-	if len(resp.Replies) > 0 && resp.Replies[0].CreateSlide != nil {
-		result["slide_id"] = resp.Replies[0].CreateSlide.ObjectId
-	}
-
-	return p.Print(result)
+	})
 }

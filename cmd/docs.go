@@ -308,6 +308,11 @@ func runDocsAppend(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to get document: %w", err))
 	}
 
+	// Guard against empty document
+	if doc.Body == nil || len(doc.Body.Content) == 0 {
+		return p.PrintError(fmt.Errorf("document has no content"))
+	}
+
 	// Find the end index of the document body
 	endIndex := doc.Body.Content[len(doc.Body.Content)-1].EndIndex - 1
 

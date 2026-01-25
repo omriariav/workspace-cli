@@ -252,33 +252,7 @@ func TestDocsCommands(t *testing.T) {
 	}
 }
 
-func TestDocsCreateCommand_Flags(t *testing.T) {
-	cmd := findSubcommand(docsCmd, "create")
-	if cmd == nil {
-		t.Fatal("docs create command not found")
-	}
-
-	if cmd.Flags().Lookup("title") == nil {
-		t.Error("expected --title flag")
-	}
-	if cmd.Flags().Lookup("text") == nil {
-		t.Error("expected --text flag")
-	}
-}
-
-func TestDocsAppendCommand_Flags(t *testing.T) {
-	cmd := findSubcommand(docsCmd, "append")
-	if cmd == nil {
-		t.Fatal("docs append command not found")
-	}
-
-	if cmd.Flags().Lookup("text") == nil {
-		t.Error("expected --text flag")
-	}
-	if cmd.Flags().Lookup("newline") == nil {
-		t.Error("expected --newline flag")
-	}
-}
+// Note: Docs flag tests are in cmd/docs_test.go
 
 // TestSheetsCommands tests sheets command structure
 func TestSheetsCommands(t *testing.T) {
@@ -322,33 +296,7 @@ func TestSlidesCommands(t *testing.T) {
 	}
 }
 
-func TestSlidesCreateCommand_Flags(t *testing.T) {
-	cmd := findSubcommand(slidesCmd, "create")
-	if cmd == nil {
-		t.Fatal("slides create command not found")
-	}
-
-	if cmd.Flags().Lookup("title") == nil {
-		t.Error("expected --title flag")
-	}
-}
-
-func TestSlidesAddSlideCommand_Flags(t *testing.T) {
-	cmd := findSubcommand(slidesCmd, "add-slide")
-	if cmd == nil {
-		t.Fatal("slides add-slide command not found")
-	}
-
-	if cmd.Flags().Lookup("title") == nil {
-		t.Error("expected --title flag")
-	}
-	if cmd.Flags().Lookup("body") == nil {
-		t.Error("expected --body flag")
-	}
-	if cmd.Flags().Lookup("layout") == nil {
-		t.Error("expected --layout flag")
-	}
-}
+// Note: Slides flag tests are in cmd/slides_test.go
 
 // TestChatCommands tests chat command structure
 func TestChatCommands(t *testing.T) {

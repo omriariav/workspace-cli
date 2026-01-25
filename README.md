@@ -226,6 +226,12 @@ make tidy       # Tidy go modules
 | `~/.config/gws/config.yaml` | `0600` | OAuth client ID/secret, preferences |
 | `~/.config/gws/token.json` | `0600` | OAuth access/refresh tokens |
 
+**Note:** After upgrading `gws` to a version with new features (e.g., Docs/Slides write commands), you may need to re-authenticate to grant the new OAuth scopes:
+
+```bash
+gws auth logout && gws auth login
+```
+
 ## License
 
 `gws` is available under the [MIT License](LICENSE).
