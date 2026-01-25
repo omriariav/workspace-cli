@@ -238,6 +238,8 @@ func TestDocsCommands(t *testing.T) {
 	}{
 		{"read"},
 		{"info"},
+		{"create"},
+		{"append"},
 	}
 
 	for _, tt := range tests {
@@ -249,6 +251,8 @@ func TestDocsCommands(t *testing.T) {
 		})
 	}
 }
+
+// Note: Docs flag tests are in cmd/docs_test.go
 
 // TestSheetsCommands tests sheets command structure
 func TestSheetsCommands(t *testing.T) {
@@ -278,6 +282,8 @@ func TestSlidesCommands(t *testing.T) {
 		{"info"},
 		{"list"},
 		{"read"},
+		{"create"},
+		{"add-slide"},
 	}
 
 	for _, tt := range tests {
@@ -289,6 +295,8 @@ func TestSlidesCommands(t *testing.T) {
 		})
 	}
 }
+
+// Note: Slides flag tests are in cmd/slides_test.go
 
 // TestChatCommands tests chat command structure
 func TestChatCommands(t *testing.T) {

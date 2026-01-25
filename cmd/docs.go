@@ -34,13 +34,40 @@ var docsInfoCmd = &cobra.Command{
 	RunE:  runDocsInfo,
 }
 
+var docsCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new document",
+	Long:  "Creates a new Google Doc with optional initial content.",
+	RunE:  runDocsCreate,
+}
+
+var docsAppendCmd = &cobra.Command{
+	Use:   "append <document-id>",
+	Short: "Append text to a document",
+	Long:  "Appends text to the end of an existing Google Doc.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runDocsAppend,
+}
+
 func init() {
 	rootCmd.AddCommand(docsCmd)
 	docsCmd.AddCommand(docsReadCmd)
 	docsCmd.AddCommand(docsInfoCmd)
+	docsCmd.AddCommand(docsCreateCmd)
+	docsCmd.AddCommand(docsAppendCmd)
 
 	// Read flags
 	docsReadCmd.Flags().Bool("include-formatting", false, "Include formatting information")
+
+	// Create flags
+	docsCreateCmd.Flags().String("title", "", "Document title (required)")
+	docsCreateCmd.Flags().String("text", "", "Initial text content")
+	docsCreateCmd.MarkFlagRequired("title")
+
+	// Append flags
+	docsAppendCmd.Flags().String("text", "", "Text to append (required)")
+	docsAppendCmd.Flags().Bool("newline", true, "Add newline before appending")
+	docsAppendCmd.MarkFlagRequired("text")
 }
 
 func runDocsRead(cmd *cobra.Command, args []string) error {
@@ -201,4 +228,122 @@ func extractStructure(content []*docs.StructuralElement) []map[string]interface{
 	}
 
 	return structure
+}
+
+func runDocsCreate(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	title, _ := cmd.Flags().GetString("title")
+	text, _ := cmd.Flags().GetString("text")
+
+	// Create document with title
+	doc, err := svc.Documents.Create(&docs.Document{
+		Title: title,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create document: %w", err))
+	}
+
+	// If initial text provided, insert it
+	if text != "" {
+		requests := []*docs.Request{
+			{
+				InsertText: &docs.InsertTextRequest{
+					Location: &docs.Location{
+						Index: 1, // Insert at beginning (after document start)
+					},
+					Text: text,
+				},
+			},
+		}
+
+		_, err = svc.Documents.BatchUpdate(doc.DocumentId, &docs.BatchUpdateDocumentRequest{
+			Requests: requests,
+		}).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to add initial text: %w", err))
+		}
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "created",
+		"id":     doc.DocumentId,
+		"title":  doc.Title,
+		"url":    fmt.Sprintf("https://docs.google.com/document/d/%s/edit", doc.DocumentId),
+	})
+}
+
+func runDocsAppend(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	text, _ := cmd.Flags().GetString("text")
+	addNewline, _ := cmd.Flags().GetBool("newline")
+
+	// Get current document to find end index
+	doc, err := svc.Documents.Get(docID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get document: %w", err))
+	}
+
+	// Guard against empty document
+	if doc.Body == nil || len(doc.Body.Content) == 0 {
+		return p.PrintError(fmt.Errorf("document has no content"))
+	}
+
+	// Find the end index of the document body
+	endIndex := doc.Body.Content[len(doc.Body.Content)-1].EndIndex - 1
+
+	// Prepare text to insert
+	insertText := text
+	if addNewline {
+		insertText = "\n" + text
+	}
+
+	requests := []*docs.Request{
+		{
+			InsertText: &docs.InsertTextRequest{
+				Location: &docs.Location{
+					Index: endIndex,
+				},
+				Text: insertText,
+			},
+		},
+	}
+
+	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to append text: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "appended",
+		"document_id": docID,
+		"title":       doc.Title,
+		"text_length": len(text),
+	})
 }

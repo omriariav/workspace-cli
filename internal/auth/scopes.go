@@ -18,12 +18,14 @@ var AllScopes = []string{
 
 	// Docs
 	"https://www.googleapis.com/auth/documents.readonly",
+	"https://www.googleapis.com/auth/documents",
 
 	// Sheets
 	"https://www.googleapis.com/auth/spreadsheets.readonly",
 
 	// Slides
 	"https://www.googleapis.com/auth/presentations.readonly",
+	"https://www.googleapis.com/auth/presentations",
 
 	// Tasks
 	"https://www.googleapis.com/auth/tasks.readonly",
