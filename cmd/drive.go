@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime"
 	"os"
+	"path/filepath"
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
+	"google.golang.org/api/drive/v3"
 )
 
 var driveCmd = &cobra.Command{
@@ -60,6 +63,19 @@ since filtering happens after fetching from the API.`,
 	RunE: runDriveComments,
 }
 
+var driveUploadCmd = &cobra.Command{
+	Use:   "upload <local-file>",
+	Short: "Upload a file to Drive",
+	Long: `Uploads a local file to Google Drive.
+
+Examples:
+  gws drive upload report.pdf
+  gws drive upload data.xlsx --folder 1abc123xyz
+  gws drive upload document.docx --name "My Report"`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDriveUpload,
+}
+
 func init() {
 	rootCmd.AddCommand(driveCmd)
 	driveCmd.AddCommand(driveListCmd)
@@ -67,6 +83,7 @@ func init() {
 	driveCmd.AddCommand(driveDownloadCmd)
 	driveCmd.AddCommand(driveInfoCmd)
 	driveCmd.AddCommand(driveCommentsCmd)
+	driveCmd.AddCommand(driveUploadCmd)
 
 	// List flags
 	driveListCmd.Flags().String("folder", "root", "Folder ID to list (default: root)")
@@ -83,6 +100,11 @@ func init() {
 	driveCommentsCmd.Flags().Int64("max", 100, "Maximum number of comments")
 	driveCommentsCmd.Flags().Bool("include-resolved", false, "Include resolved comments")
 	driveCommentsCmd.Flags().Bool("include-deleted", false, "Include deleted comments")
+
+	// Upload flags
+	driveUploadCmd.Flags().String("folder", "", "Parent folder ID (default: root)")
+	driveUploadCmd.Flags().String("name", "", "File name in Drive (default: local filename)")
+	driveUploadCmd.Flags().String("mime-type", "", "MIME type (auto-detected if not specified)")
 }
 
 func runDriveList(cmd *cobra.Command, args []string) error {
@@ -444,4 +466,85 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 		"comments":  comments,
 		"count":     len(comments),
 	})
+}
+
+func runDriveUpload(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	localPath := args[0]
+	folderID, _ := cmd.Flags().GetString("folder")
+	fileName, _ := cmd.Flags().GetString("name")
+	mimeType, _ := cmd.Flags().GetString("mime-type")
+
+	// Open local file
+	file, err := os.Open(localPath)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to open file: %w", err))
+	}
+	defer file.Close()
+
+	// Get file info
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to stat file: %w", err))
+	}
+
+	// Use local filename if name not specified
+	if fileName == "" {
+		fileName = filepath.Base(localPath)
+	}
+
+	// Auto-detect MIME type if not specified
+	if mimeType == "" {
+		ext := filepath.Ext(localPath)
+		mimeType = mime.TypeByExtension(ext)
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+	}
+
+	// Build file metadata
+	driveFile := &drive.File{
+		Name:     fileName,
+		MimeType: mimeType,
+	}
+
+	// Set parent folder if specified
+	if folderID != "" {
+		driveFile.Parents = []string{folderID}
+	}
+
+	// Upload file
+	created, err := svc.Files.Create(driveFile).
+		Media(file).
+		Fields("id, name, mimeType, size, webViewLink").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to upload file: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":    "uploaded",
+		"id":        created.Id,
+		"name":      created.Name,
+		"mime_type": created.MimeType,
+		"size":      fileInfo.Size(),
+	}
+
+	if created.WebViewLink != "" {
+		result["web_link"] = created.WebViewLink
+	}
+
+	return p.Print(result)
 }

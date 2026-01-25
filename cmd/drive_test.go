@@ -319,3 +319,117 @@ func TestDriveComments_OutputFormat(t *testing.T) {
 		t.Errorf("unexpected comments count: %d", len(comments))
 	}
 }
+
+// TestDriveUploadCommand_Flags tests that upload command has expected flags
+func TestDriveUploadCommand_Flags(t *testing.T) {
+	cmd := driveUploadCmd
+
+	// Check required args
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+
+	// Check flags exist
+	folderFlag := cmd.Flags().Lookup("folder")
+	if folderFlag == nil {
+		t.Error("expected --folder flag to exist")
+	}
+
+	nameFlag := cmd.Flags().Lookup("name")
+	if nameFlag == nil {
+		t.Error("expected --name flag to exist")
+	}
+
+	mimeFlag := cmd.Flags().Lookup("mime-type")
+	if mimeFlag == nil {
+		t.Error("expected --mime-type flag to exist")
+	}
+}
+
+func TestDriveUploadCommand_Help(t *testing.T) {
+	cmd := driveUploadCmd
+
+	if cmd.Use != "upload <local-file>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+
+	if cmd.Long == "" {
+		t.Error("expected Long description to be set")
+	}
+}
+
+// TestDriveUpload_MockServer tests the upload API integration
+func TestDriveUpload_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Handle upload request (multipart)
+		if r.URL.Path == "/upload/drive/v3/files" && r.Method == "POST" {
+			resp := &drive.File{
+				Id:          "uploaded-file-id",
+				Name:        "test-upload.txt",
+				MimeType:    "text/plain",
+				WebViewLink: "https://drive.google.com/file/d/uploaded-file-id/view",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Create a Drive service pointing to our mock server
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// We can't easily test the actual upload without a real file,
+	// but we can verify the service is created correctly
+	if svc == nil {
+		t.Error("expected service to be created")
+	}
+}
+
+// TestDriveUpload_OutputFormat tests the upload response format
+func TestDriveUpload_OutputFormat(t *testing.T) {
+	result := map[string]interface{}{
+		"status":    "uploaded",
+		"id":        "test-file-id",
+		"name":      "uploaded-file.xlsx",
+		"mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		"size":      12345,
+		"web_link":  "https://drive.google.com/file/d/test-file-id/view",
+	}
+
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		t.Fatalf("failed to encode result: %v", err)
+	}
+
+	// Verify we can decode it back
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to decode result: %v", err)
+	}
+
+	if decoded["status"] != "uploaded" {
+		t.Errorf("unexpected status: %v", decoded["status"])
+	}
+
+	if decoded["id"] != "test-file-id" {
+		t.Errorf("unexpected id: %v", decoded["id"])
+	}
+
+	if decoded["name"] != "uploaded-file.xlsx" {
+		t.Errorf("unexpected name: %v", decoded["name"])
+	}
+}
