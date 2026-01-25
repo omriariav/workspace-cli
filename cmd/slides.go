@@ -57,6 +57,22 @@ var slidesAddSlideCmd = &cobra.Command{
 	RunE:  runSlidesAddSlide,
 }
 
+var slidesDeleteSlideCmd = &cobra.Command{
+	Use:   "delete-slide <presentation-id>",
+	Short: "Delete a slide",
+	Long:  "Deletes a slide from a presentation by slide ID or number.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesDeleteSlide,
+}
+
+var slidesDuplicateSlideCmd = &cobra.Command{
+	Use:   "duplicate-slide <presentation-id>",
+	Short: "Duplicate a slide",
+	Long:  "Creates a copy of an existing slide in the presentation.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesDuplicateSlide,
+}
+
 func init() {
 	rootCmd.AddCommand(slidesCmd)
 	slidesCmd.AddCommand(slidesInfoCmd)
@@ -64,6 +80,8 @@ func init() {
 	slidesCmd.AddCommand(slidesReadCmd)
 	slidesCmd.AddCommand(slidesCreateCmd)
 	slidesCmd.AddCommand(slidesAddSlideCmd)
+	slidesCmd.AddCommand(slidesDeleteSlideCmd)
+	slidesCmd.AddCommand(slidesDuplicateSlideCmd)
 
 	// Create flags
 	slidesCreateCmd.Flags().String("title", "", "Presentation title (required)")
@@ -73,6 +91,14 @@ func init() {
 	slidesAddSlideCmd.Flags().String("title", "", "Slide title")
 	slidesAddSlideCmd.Flags().String("body", "", "Slide body text")
 	slidesAddSlideCmd.Flags().String("layout", "TITLE_AND_BODY", "Slide layout (TITLE_AND_BODY, TITLE_ONLY, BLANK, etc.)")
+
+	// Delete-slide flags
+	slidesDeleteSlideCmd.Flags().String("slide-id", "", "Slide object ID to delete")
+	slidesDeleteSlideCmd.Flags().Int("slide-number", 0, "Slide number to delete (1-indexed)")
+
+	// Duplicate-slide flags
+	slidesDuplicateSlideCmd.Flags().String("slide-id", "", "Slide object ID to duplicate")
+	slidesDuplicateSlideCmd.Flags().Int("slide-number", 0, "Slide number to duplicate (1-indexed)")
 }
 
 func runSlidesInfo(cmd *cobra.Command, args []string) error {
@@ -477,4 +503,133 @@ func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
 		"slide_id":        slideObjectID,
 		"slide_number":    slideNumber,
 	})
+}
+
+func runSlidesDeleteSlide(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	slideID, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
+
+	// If slide number provided, look up slide ID
+	if slideNumber > 0 {
+		presentation, err := svc.Presentations.Get(presentationID).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
+		}
+
+		if slideNumber > len(presentation.Slides) {
+			return p.PrintError(fmt.Errorf("slide number %d out of range (1-%d)", slideNumber, len(presentation.Slides)))
+		}
+
+		slideID = presentation.Slides[slideNumber-1].ObjectId
+	} else if slideID == "" {
+		return p.PrintError(fmt.Errorf("must specify --slide-id or --slide-number"))
+	}
+
+	requests := []*slides.Request{
+		{
+			DeleteObject: &slides.DeleteObjectRequest{
+				ObjectId: slideID,
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete slide: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":          "deleted",
+		"presentation_id": presentationID,
+		"slide_id":        slideID,
+	}
+	if slideNumber > 0 {
+		result["slide_number"] = slideNumber
+	}
+
+	return p.Print(result)
+}
+
+func runSlidesDuplicateSlide(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	slideID, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
+
+	// If slide number provided, look up slide ID
+	if slideNumber > 0 {
+		presentation, err := svc.Presentations.Get(presentationID).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
+		}
+
+		if slideNumber > len(presentation.Slides) {
+			return p.PrintError(fmt.Errorf("slide number %d out of range (1-%d)", slideNumber, len(presentation.Slides)))
+		}
+
+		slideID = presentation.Slides[slideNumber-1].ObjectId
+	} else if slideID == "" {
+		return p.PrintError(fmt.Errorf("must specify --slide-id or --slide-number"))
+	}
+
+	requests := []*slides.Request{
+		{
+			DuplicateObject: &slides.DuplicateObjectRequest{
+				ObjectId: slideID,
+			},
+		},
+	}
+
+	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to duplicate slide: %w", err))
+	}
+
+	// Get the new slide ID from response
+	var newSlideID string
+	if len(resp.Replies) > 0 && resp.Replies[0].DuplicateObject != nil {
+		newSlideID = resp.Replies[0].DuplicateObject.ObjectId
+	}
+
+	result := map[string]interface{}{
+		"status":          "duplicated",
+		"presentation_id": presentationID,
+		"source_slide_id": slideID,
+		"new_slide_id":    newSlideID,
+	}
+	if slideNumber > 0 {
+		result["source_slide_number"] = slideNumber
+	}
+
+	return p.Print(result)
 }

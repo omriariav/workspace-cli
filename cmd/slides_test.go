@@ -478,3 +478,154 @@ func TestSlidesLayouts(t *testing.T) {
 		})
 	}
 }
+
+// TestSlidesDeleteSlideCommand_Flags tests delete-slide command flags
+func TestSlidesDeleteSlideCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "delete-slide")
+	if cmd == nil {
+		t.Fatal("slides delete-slide command not found")
+	}
+
+	expectedFlags := []string{"slide-id", "slide-number"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSlidesDuplicateSlideCommand_Flags tests duplicate-slide command flags
+func TestSlidesDuplicateSlideCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "duplicate-slide")
+	if cmd == nil {
+		t.Fatal("slides duplicate-slide command not found")
+	}
+
+	expectedFlags := []string{"slide-id", "slide-number"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSlidesDeleteSlide_Success tests deleting a slide
+func TestSlidesDeleteSlide_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-delete:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req slides.BatchUpdatePresentationRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			deleteReq := req.Requests[0].DeleteObject
+			if deleteReq == nil {
+				t.Error("expected DeleteObject request")
+			} else if deleteReq.ObjectId != "slide-to-delete" {
+				t.Errorf("expected object ID 'slide-to-delete', got '%s'", deleteReq.ObjectId)
+			}
+
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{
+				PresentationId: "pres-delete",
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	_, err = svc.Presentations.BatchUpdate("pres-delete", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{
+			{
+				DeleteObject: &slides.DeleteObjectRequest{
+					ObjectId: "slide-to-delete",
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to delete slide: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestSlidesDuplicateSlide_Success tests duplicating a slide
+func TestSlidesDuplicateSlide_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-dup:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req slides.BatchUpdatePresentationRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			dupReq := req.Requests[0].DuplicateObject
+			if dupReq == nil {
+				t.Error("expected DuplicateObject request")
+			} else if dupReq.ObjectId != "slide-to-dup" {
+				t.Errorf("expected object ID 'slide-to-dup', got '%s'", dupReq.ObjectId)
+			}
+
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{
+				PresentationId: "pres-dup",
+				Replies: []*slides.Response{
+					{
+						DuplicateObject: &slides.DuplicateObjectResponse{
+							ObjectId: "new-duplicated-slide",
+						},
+					},
+				},
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	resp, err := svc.Presentations.BatchUpdate("pres-dup", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{
+			{
+				DuplicateObject: &slides.DuplicateObjectRequest{
+					ObjectId: "slide-to-dup",
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to duplicate slide: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+
+	if len(resp.Replies) == 0 || resp.Replies[0].DuplicateObject == nil {
+		t.Error("expected DuplicateObject response")
+	} else if resp.Replies[0].DuplicateObject.ObjectId != "new-duplicated-slide" {
+		t.Errorf("expected new slide ID 'new-duplicated-slide', got '%s'", resp.Replies[0].DuplicateObject.ObjectId)
+	}
+}

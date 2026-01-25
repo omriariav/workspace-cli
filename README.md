@@ -134,6 +134,8 @@ Add `--format text` to any command for human-readable output.
 | `gws docs info <id>` | Document metadata and styles |
 | `gws docs create` | Create new document (`--title`, `--text`) |
 | `gws docs append <id>` | Append text to document (`--text`, `--newline`) |
+| `gws docs insert <id>` | Insert text at position (`--text`, `--at`) |
+| `gws docs replace <id>` | Find and replace text (`--find`, `--replace`, `--match-case`) |
 
 ### Sheets
 
@@ -145,6 +147,9 @@ Add `--format text` to any command for human-readable output.
 | `gws sheets create` | Create spreadsheet (`--title`, `--sheet-names`) |
 | `gws sheets write <id> <range>` | Write cell values (`--values`, `--values-json`) |
 | `gws sheets append <id> <range>` | Append rows (`--values`, `--values-json`) |
+| `gws sheets add-sheet <id>` | Add sheet (`--name`, `--rows`, `--cols`) |
+| `gws sheets delete-sheet <id>` | Delete sheet (`--name` or `--sheet-id`) |
+| `gws sheets clear <id> <range>` | Clear cell values (keeps formatting) |
 
 ### Slides
 
@@ -155,6 +160,8 @@ Add `--format text` to any command for human-readable output.
 | `gws slides read <id> [n]` | Read slide text (specific or all) |
 | `gws slides create` | Create new presentation (`--title`) |
 | `gws slides add-slide <id>` | Add slide (`--title`, `--body`, `--layout`) |
+| `gws slides delete-slide <id>` | Delete slide (`--slide-id` or `--slide-number`) |
+| `gws slides duplicate-slide <id>` | Duplicate slide (`--slide-id` or `--slide-number`) |
 
 ### Chat
 

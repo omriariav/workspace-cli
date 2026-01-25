@@ -91,6 +91,35 @@ Values format:
 	RunE: runSheetsAppend,
 }
 
+var sheetsAddSheetCmd = &cobra.Command{
+	Use:   "add-sheet <spreadsheet-id>",
+	Short: "Add a new sheet",
+	Long:  "Adds a new sheet to an existing spreadsheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsAddSheet,
+}
+
+var sheetsDeleteSheetCmd = &cobra.Command{
+	Use:   "delete-sheet <spreadsheet-id>",
+	Short: "Delete a sheet",
+	Long:  "Deletes a sheet from a spreadsheet by name or ID.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsDeleteSheet,
+}
+
+var sheetsClearCmd = &cobra.Command{
+	Use:   "clear <spreadsheet-id> <range>",
+	Short: "Clear cell values",
+	Long: `Clears all values from a range of cells (keeps formatting).
+
+Range format examples:
+  Sheet1!A1:D10    - Specific range in Sheet1
+  Sheet1           - All data in Sheet1
+  A1:D10           - Range in first sheet`,
+	Args: cobra.ExactArgs(2),
+	RunE: runSheetsClear,
+}
+
 func init() {
 	rootCmd.AddCommand(sheetsCmd)
 	sheetsCmd.AddCommand(sheetsInfoCmd)
@@ -99,6 +128,9 @@ func init() {
 	sheetsCmd.AddCommand(sheetsCreateCmd)
 	sheetsCmd.AddCommand(sheetsWriteCmd)
 	sheetsCmd.AddCommand(sheetsAppendCmd)
+	sheetsCmd.AddCommand(sheetsAddSheetCmd)
+	sheetsCmd.AddCommand(sheetsDeleteSheetCmd)
+	sheetsCmd.AddCommand(sheetsClearCmd)
 
 	// Read flags
 	sheetsReadCmd.Flags().String("output-format", "json", "Output format: json or csv")
@@ -116,6 +148,16 @@ func init() {
 	// Append flags
 	sheetsAppendCmd.Flags().String("values", "", "Values to append (comma-separated, semicolon for rows)")
 	sheetsAppendCmd.Flags().String("values-json", "", "Values as JSON array")
+
+	// Add-sheet flags
+	sheetsAddSheetCmd.Flags().String("name", "", "Sheet name (required)")
+	sheetsAddSheetCmd.Flags().Int64("rows", 1000, "Number of rows")
+	sheetsAddSheetCmd.Flags().Int64("cols", 26, "Number of columns")
+	sheetsAddSheetCmd.MarkFlagRequired("name")
+
+	// Delete-sheet flags
+	sheetsDeleteSheetCmd.Flags().String("name", "", "Sheet name to delete")
+	sheetsDeleteSheetCmd.Flags().Int64("sheet-id", -1, "Sheet ID to delete (alternative to --name)")
 }
 
 func runSheetsInfo(cmd *cobra.Command, args []string) error {
@@ -478,4 +520,156 @@ func parseValues(cmd *cobra.Command) ([][]interface{}, error) {
 	}
 
 	return nil, nil
+}
+
+func runSheetsAddSheet(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("name")
+	rows, _ := cmd.Flags().GetInt64("rows")
+	cols, _ := cmd.Flags().GetInt64("cols")
+
+	requests := []*sheets.Request{
+		{
+			AddSheet: &sheets.AddSheetRequest{
+				Properties: &sheets.SheetProperties{
+					Title: sheetName,
+					GridProperties: &sheets.GridProperties{
+						RowCount:    rows,
+						ColumnCount: cols,
+					},
+				},
+			},
+		},
+	}
+
+	resp, err := svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add sheet: %w", err))
+	}
+
+	// Get the new sheet ID from response
+	var sheetID int64
+	if len(resp.Replies) > 0 && resp.Replies[0].AddSheet != nil && resp.Replies[0].AddSheet.Properties != nil {
+		sheetID = resp.Replies[0].AddSheet.Properties.SheetId
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":       "added",
+		"spreadsheet":  spreadsheetID,
+		"sheet_name":   sheetName,
+		"sheet_id":     sheetID,
+		"rows":         rows,
+		"cols":         cols,
+	})
+}
+
+func runSheetsDeleteSheet(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("name")
+	sheetID, _ := cmd.Flags().GetInt64("sheet-id")
+
+	// If name provided, look up sheet ID
+	if sheetName != "" {
+		spreadsheet, err := svc.Spreadsheets.Get(spreadsheetID).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get spreadsheet: %w", err))
+		}
+
+		found := false
+		for _, sheet := range spreadsheet.Sheets {
+			if sheet.Properties.Title == sheetName {
+				sheetID = sheet.Properties.SheetId
+				found = true
+				break
+			}
+		}
+		if !found {
+			return p.PrintError(fmt.Errorf("sheet '%s' not found", sheetName))
+		}
+	} else if sheetID < 0 {
+		return p.PrintError(fmt.Errorf("must specify --name or --sheet-id"))
+	}
+
+	requests := []*sheets.Request{
+		{
+			DeleteSheet: &sheets.DeleteSheetRequest{
+				SheetId: sheetID,
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete sheet: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":      "deleted",
+		"spreadsheet": spreadsheetID,
+		"sheet_id":    sheetID,
+	}
+	if sheetName != "" {
+		result["sheet_name"] = sheetName
+	}
+
+	return p.Print(result)
+}
+
+func runSheetsClear(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+
+	resp, err := svc.Spreadsheets.Values.Clear(spreadsheetID, rangeStr, &sheets.ClearValuesRequest{}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to clear range: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":       "cleared",
+		"spreadsheet":  resp.SpreadsheetId,
+		"range":        resp.ClearedRange,
+	})
 }
