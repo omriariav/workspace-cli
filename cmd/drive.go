@@ -106,6 +106,8 @@ var driveDeleteCmd = &cobra.Command{
 
 By default, moves the file to trash. Use --permanent to permanently delete.
 
+Warning: --permanent bypasses trash and cannot be undone.
+
 Examples:
   gws drive delete 1abc123xyz
   gws drive delete 1abc123xyz --permanent`,
