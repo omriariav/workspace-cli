@@ -564,7 +564,7 @@ func runSheetsAddSheet(cmd *cobra.Command, args []string) error {
 
 	// Get the new sheet ID from response
 	var sheetID int64
-	if len(resp.Replies) > 0 && resp.Replies[0].AddSheet != nil {
+	if len(resp.Replies) > 0 && resp.Replies[0].AddSheet != nil && resp.Replies[0].AddSheet.Properties != nil {
 		sheetID = resp.Replies[0].AddSheet.Properties.SheetId
 	}
 
