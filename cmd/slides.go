@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
@@ -42,11 +43,37 @@ var slidesReadCmd = &cobra.Command{
 	RunE:  runSlidesRead,
 }
 
+var slidesCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new presentation",
+	Long:  "Creates a new Google Slides presentation.",
+	RunE:  runSlidesCreate,
+}
+
+var slidesAddSlideCmd = &cobra.Command{
+	Use:   "add-slide <presentation-id>",
+	Short: "Add a slide to a presentation",
+	Long:  "Adds a new slide to an existing presentation with optional title and body text.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesAddSlide,
+}
+
 func init() {
 	rootCmd.AddCommand(slidesCmd)
 	slidesCmd.AddCommand(slidesInfoCmd)
 	slidesCmd.AddCommand(slidesListCmd)
 	slidesCmd.AddCommand(slidesReadCmd)
+	slidesCmd.AddCommand(slidesCreateCmd)
+	slidesCmd.AddCommand(slidesAddSlideCmd)
+
+	// Create flags
+	slidesCreateCmd.Flags().String("title", "", "Presentation title (required)")
+	slidesCreateCmd.MarkFlagRequired("title")
+
+	// Add-slide flags
+	slidesAddSlideCmd.Flags().String("title", "", "Slide title")
+	slidesAddSlideCmd.Flags().String("body", "", "Slide body text")
+	slidesAddSlideCmd.Flags().String("layout", "TITLE_AND_BODY", "Slide layout (TITLE_AND_BODY, TITLE_ONLY, BLANK, etc.)")
 }
 
 func runSlidesInfo(cmd *cobra.Command, args []string) error {
@@ -289,4 +316,150 @@ func extractTableText(table *slides.Table) string {
 	}
 
 	return strings.Join(rows, "\n")
+}
+
+func runSlidesCreate(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	title, _ := cmd.Flags().GetString("title")
+
+	presentation, err := svc.Presentations.Create(&slides.Presentation{
+		Title: title,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create presentation: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "created",
+		"id":          presentation.PresentationId,
+		"title":       presentation.Title,
+		"slide_count": len(presentation.Slides),
+		"url":         fmt.Sprintf("https://docs.google.com/presentation/d/%s/edit", presentation.PresentationId),
+	})
+}
+
+func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	slideTitle, _ := cmd.Flags().GetString("title")
+	slideBody, _ := cmd.Flags().GetString("body")
+	layout, _ := cmd.Flags().GetString("layout")
+
+	// Generate a unique object ID for the new slide
+	slideObjectID := fmt.Sprintf("slide_%d", time.Now().UnixNano())
+
+	// Create requests for adding a slide
+	requests := []*slides.Request{
+		{
+			CreateSlide: &slides.CreateSlideRequest{
+				ObjectId: slideObjectID,
+				SlideLayoutReference: &slides.LayoutReference{
+					PredefinedLayout: layout,
+				},
+			},
+		},
+	}
+
+	// Execute the create slide request first
+	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add slide: %w", err))
+	}
+
+	// Get the created slide to find placeholder IDs
+	presentation, err := svc.Presentations.Get(presentationID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
+	}
+
+	// Find the new slide
+	var newSlide *slides.Page
+	for _, slide := range presentation.Slides {
+		if slide.ObjectId == slideObjectID {
+			newSlide = slide
+			break
+		}
+	}
+
+	if newSlide != nil && (slideTitle != "" || slideBody != "") {
+		textRequests := []*slides.Request{}
+
+		// Find title and body placeholders
+		for _, element := range newSlide.PageElements {
+			if element.Shape != nil && element.Shape.Placeholder != nil {
+				placeholderType := element.Shape.Placeholder.Type
+
+				if placeholderType == "TITLE" || placeholderType == "CENTERED_TITLE" {
+					if slideTitle != "" {
+						textRequests = append(textRequests, &slides.Request{
+							InsertText: &slides.InsertTextRequest{
+								ObjectId: element.ObjectId,
+								Text:     slideTitle,
+							},
+						})
+					}
+				}
+
+				if placeholderType == "BODY" || placeholderType == "SUBTITLE" {
+					if slideBody != "" {
+						textRequests = append(textRequests, &slides.Request{
+							InsertText: &slides.InsertTextRequest{
+								ObjectId: element.ObjectId,
+								Text:     slideBody,
+							},
+						})
+					}
+				}
+			}
+		}
+
+		if len(textRequests) > 0 {
+			_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+				Requests: textRequests,
+			}).Do()
+			if err != nil {
+				return p.PrintError(fmt.Errorf("failed to add text to slide: %w", err))
+			}
+		}
+	}
+
+	slideNumber := len(presentation.Slides)
+	result := map[string]interface{}{
+		"status":          "added",
+		"presentation_id": presentationID,
+		"slide_id":        slideObjectID,
+		"slide_number":    slideNumber,
+	}
+
+	if len(resp.Replies) > 0 && resp.Replies[0].CreateSlide != nil {
+		result["slide_id"] = resp.Replies[0].CreateSlide.ObjectId
+	}
+
+	return p.Print(result)
 }

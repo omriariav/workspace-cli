@@ -131,6 +131,8 @@ Add `--format text` to any command for human-readable output.
 |---------|-------------|
 | `gws docs read <id>` | Extract document text (`--include-formatting`) |
 | `gws docs info <id>` | Document metadata and styles |
+| `gws docs create` | Create new document (`--title`, `--text`) |
+| `gws docs append <id>` | Append text to document (`--text`, `--newline`) |
 
 ### Sheets
 
@@ -147,6 +149,8 @@ Add `--format text` to any command for human-readable output.
 | `gws slides info <id>` | Presentation metadata |
 | `gws slides list <id>` | List slides with text content |
 | `gws slides read <id> [n]` | Read slide text (specific or all) |
+| `gws slides create` | Create new presentation (`--title`) |
+| `gws slides add-slide <id>` | Add slide (`--title`, `--body`, `--layout`) |
 
 ### Chat
 
