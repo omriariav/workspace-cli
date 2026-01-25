@@ -124,6 +124,9 @@ Add `--format text` to any command for human-readable output.
 | `gws drive info <id>` | File metadata, owners, permissions |
 | `gws drive download <id>` | Download file (`--output`); auto-exports Google formats |
 | `gws drive upload <file>` | Upload file (`--folder`, `--name`, `--mime-type`) |
+| `gws drive create-folder` | Create folder (`--name`, `--parent`) |
+| `gws drive move <id>` | Move file to folder (`--to`) |
+| `gws drive delete <id>` | Delete file (`--permanent` for hard delete) |
 | `gws drive comments <id>` | List comments and replies (`--include-resolved`, `--include-deleted`) |
 
 ### Docs

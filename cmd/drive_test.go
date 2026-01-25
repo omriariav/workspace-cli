@@ -433,3 +433,446 @@ func TestDriveUpload_OutputFormat(t *testing.T) {
 		t.Errorf("unexpected name: %v", decoded["name"])
 	}
 }
+
+// TestDriveCreateFolderCommand_Flags tests that create-folder command has expected flags
+func TestDriveCreateFolderCommand_Flags(t *testing.T) {
+	cmd := driveCreateFolderCmd
+
+	// Check flags exist
+	nameFlag := cmd.Flags().Lookup("name")
+	if nameFlag == nil {
+		t.Error("expected --name flag to exist")
+	}
+
+	parentFlag := cmd.Flags().Lookup("parent")
+	if parentFlag == nil {
+		t.Error("expected --parent flag to exist")
+	}
+}
+
+func TestDriveCreateFolderCommand_Help(t *testing.T) {
+	cmd := driveCreateFolderCmd
+
+	if cmd.Use != "create-folder" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+
+	if cmd.Long == "" {
+		t.Error("expected Long description to be set")
+	}
+}
+
+// TestDriveCreateFolder_MockServer tests create-folder API integration
+func TestDriveCreateFolder_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// The Google API client uses /files not /drive/v3/files
+		if r.URL.Path == "/files" && r.Method == "POST" {
+			// Decode request to verify folder creation
+			var file drive.File
+			if err := json.NewDecoder(r.Body).Decode(&file); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			// Verify MIME type is folder
+			if file.MimeType != "application/vnd.google-apps.folder" {
+				t.Errorf("expected folder MIME type, got: %s", file.MimeType)
+			}
+
+			resp := &drive.File{
+				Id:          "new-folder-id",
+				Name:        file.Name,
+				WebViewLink: "https://drive.google.com/drive/folders/new-folder-id",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Test folder creation
+	folder := &drive.File{
+		Name:     "Test Folder",
+		MimeType: "application/vnd.google-apps.folder",
+	}
+
+	created, err := svc.Files.Create(folder).Fields("id, name, webViewLink").Do()
+	if err != nil {
+		t.Fatalf("failed to create folder: %v", err)
+	}
+
+	if created.Id != "new-folder-id" {
+		t.Errorf("unexpected folder id: %s", created.Id)
+	}
+
+	if created.Name != "Test Folder" {
+		t.Errorf("unexpected folder name: %s", created.Name)
+	}
+}
+
+// TestDriveCreateFolder_OutputFormat tests the create-folder response format
+func TestDriveCreateFolder_OutputFormat(t *testing.T) {
+	result := map[string]interface{}{
+		"status":   "created",
+		"id":       "new-folder-id",
+		"name":     "My Folder",
+		"web_link": "https://drive.google.com/drive/folders/new-folder-id",
+	}
+
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		t.Fatalf("failed to encode result: %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to decode result: %v", err)
+	}
+
+	if decoded["status"] != "created" {
+		t.Errorf("unexpected status: %v", decoded["status"])
+	}
+
+	if decoded["id"] != "new-folder-id" {
+		t.Errorf("unexpected id: %v", decoded["id"])
+	}
+}
+
+// TestDriveMoveCommand_Flags tests that move command has expected flags
+func TestDriveMoveCommand_Flags(t *testing.T) {
+	cmd := driveMoveCmd
+
+	// Check required args
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+
+	// Check flags exist
+	toFlag := cmd.Flags().Lookup("to")
+	if toFlag == nil {
+		t.Error("expected --to flag to exist")
+	}
+}
+
+func TestDriveMoveCommand_Help(t *testing.T) {
+	cmd := driveMoveCmd
+
+	if cmd.Use != "move <file-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+
+	if cmd.Long == "" {
+		t.Error("expected Long description to be set")
+	}
+}
+
+// TestDriveMove_MockServer tests move API integration
+func TestDriveMove_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Get file info
+		if r.URL.Path == "/files/test-file-id" && r.Method == "GET" {
+			resp := &drive.File{
+				Id:      "test-file-id",
+				Name:    "Test File.docx",
+				Parents: []string{"old-folder-id"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Update file (move)
+		if r.URL.Path == "/files/test-file-id" && r.Method == "PATCH" {
+			addParents := r.URL.Query().Get("addParents")
+			removeParents := r.URL.Query().Get("removeParents")
+
+			if addParents != "new-folder-id" {
+				t.Errorf("expected addParents=new-folder-id, got: %s", addParents)
+			}
+			if removeParents != "old-folder-id" {
+				t.Errorf("expected removeParents=old-folder-id, got: %s", removeParents)
+			}
+
+			resp := &drive.File{
+				Id:          "test-file-id",
+				Name:        "Test File.docx",
+				Parents:     []string{"new-folder-id"},
+				WebViewLink: "https://drive.google.com/file/d/test-file-id/view",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Get file info first
+	file, err := svc.Files.Get("test-file-id").Fields("name, parents").Do()
+	if err != nil {
+		t.Fatalf("failed to get file: %v", err)
+	}
+
+	if len(file.Parents) != 1 || file.Parents[0] != "old-folder-id" {
+		t.Errorf("unexpected parents: %v", file.Parents)
+	}
+
+	// Move file
+	updated, err := svc.Files.Update("test-file-id", nil).
+		AddParents("new-folder-id").
+		RemoveParents("old-folder-id").
+		Fields("id, name, parents, webViewLink").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to move file: %v", err)
+	}
+
+	if len(updated.Parents) != 1 || updated.Parents[0] != "new-folder-id" {
+		t.Errorf("unexpected parents after move: %v", updated.Parents)
+	}
+}
+
+// TestDriveMove_OutputFormat tests the move response format
+func TestDriveMove_OutputFormat(t *testing.T) {
+	result := map[string]interface{}{
+		"status":   "moved",
+		"id":       "test-file-id",
+		"name":     "My File.docx",
+		"parents":  []string{"new-folder-id"},
+		"web_link": "https://drive.google.com/file/d/test-file-id/view",
+	}
+
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		t.Fatalf("failed to encode result: %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to decode result: %v", err)
+	}
+
+	if decoded["status"] != "moved" {
+		t.Errorf("unexpected status: %v", decoded["status"])
+	}
+
+	parents := decoded["parents"].([]interface{})
+	if len(parents) != 1 || parents[0] != "new-folder-id" {
+		t.Errorf("unexpected parents: %v", parents)
+	}
+}
+
+// TestDriveDeleteCommand_Flags tests that delete command has expected flags
+func TestDriveDeleteCommand_Flags(t *testing.T) {
+	cmd := driveDeleteCmd
+
+	// Check required args
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+
+	// Check flags exist
+	permanentFlag := cmd.Flags().Lookup("permanent")
+	if permanentFlag == nil {
+		t.Error("expected --permanent flag to exist")
+	}
+	if permanentFlag.DefValue != "false" {
+		t.Errorf("expected --permanent default to be false, got %s", permanentFlag.DefValue)
+	}
+}
+
+func TestDriveDeleteCommand_Help(t *testing.T) {
+	cmd := driveDeleteCmd
+
+	if cmd.Use != "delete <file-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+
+	if cmd.Long == "" {
+		t.Error("expected Long description to be set")
+	}
+}
+
+// TestDriveDelete_MockServer_Trash tests trash (soft delete) API integration
+func TestDriveDelete_MockServer_Trash(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Get file info
+		if r.URL.Path == "/files/test-file-id" && r.Method == "GET" {
+			resp := &drive.File{
+				Id:   "test-file-id",
+				Name: "Test File.docx",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Update file (trash)
+		if r.URL.Path == "/files/test-file-id" && r.Method == "PATCH" {
+			var file drive.File
+			if err := json.NewDecoder(r.Body).Decode(&file); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			if !file.Trashed {
+				t.Error("expected Trashed to be true")
+			}
+
+			resp := &drive.File{
+				Id:      "test-file-id",
+				Name:    "Test File.docx",
+				Trashed: true,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Get file info
+	file, err := svc.Files.Get("test-file-id").Fields("name").Do()
+	if err != nil {
+		t.Fatalf("failed to get file: %v", err)
+	}
+
+	if file.Name != "Test File.docx" {
+		t.Errorf("unexpected file name: %s", file.Name)
+	}
+
+	// Trash file
+	_, err = svc.Files.Update("test-file-id", &drive.File{Trashed: true}).Do()
+	if err != nil {
+		t.Fatalf("failed to trash file: %v", err)
+	}
+}
+
+// TestDriveDelete_MockServer_Permanent tests permanent delete API integration
+func TestDriveDelete_MockServer_Permanent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Get file info
+		if r.URL.Path == "/files/test-file-id" && r.Method == "GET" {
+			resp := &drive.File{
+				Id:   "test-file-id",
+				Name: "Test File.docx",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Delete file (permanent)
+		if r.URL.Path == "/files/test-file-id" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Get file info
+	file, err := svc.Files.Get("test-file-id").Fields("name").Do()
+	if err != nil {
+		t.Fatalf("failed to get file: %v", err)
+	}
+
+	if file.Name != "Test File.docx" {
+		t.Errorf("unexpected file name: %s", file.Name)
+	}
+
+	// Permanently delete file
+	err = svc.Files.Delete("test-file-id").Do()
+	if err != nil {
+		t.Fatalf("failed to delete file: %v", err)
+	}
+}
+
+// TestDriveDelete_OutputFormat tests the delete response formats
+func TestDriveDelete_OutputFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   string
+		expected string
+	}{
+		{"trash", "trashed", "trashed"},
+		{"permanent", "deleted", "deleted"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := map[string]interface{}{
+				"status": tt.status,
+				"id":     "test-file-id",
+				"name":   "Test File.docx",
+			}
+
+			var buf bytes.Buffer
+			encoder := json.NewEncoder(&buf)
+			encoder.SetIndent("", "  ")
+			if err := encoder.Encode(result); err != nil {
+				t.Fatalf("failed to encode result: %v", err)
+			}
+
+			var decoded map[string]interface{}
+			if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+				t.Fatalf("failed to decode result: %v", err)
+			}
+
+			if decoded["status"] != tt.expected {
+				t.Errorf("unexpected status: %v", decoded["status"])
+			}
+		})
+	}
+}

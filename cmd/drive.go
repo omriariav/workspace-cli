@@ -76,6 +76,43 @@ Examples:
 	RunE: runDriveUpload,
 }
 
+var driveCreateFolderCmd = &cobra.Command{
+	Use:   "create-folder",
+	Short: "Create a new folder",
+	Long: `Creates a new folder in Google Drive.
+
+Examples:
+  gws drive create-folder --name "Project Files"
+  gws drive create-folder --name "Subproject" --parent 1abc123xyz`,
+	RunE: runDriveCreateFolder,
+}
+
+var driveMoveCmd = &cobra.Command{
+	Use:   "move <file-id>",
+	Short: "Move a file to another folder",
+	Long: `Moves a file to a different folder in Google Drive.
+
+Examples:
+  gws drive move 1abc123xyz --to 2def456uvw
+  gws drive move 1abc123xyz --to root`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDriveMove,
+}
+
+var driveDeleteCmd = &cobra.Command{
+	Use:   "delete <file-id>",
+	Short: "Delete a file",
+	Long: `Deletes a file from Google Drive.
+
+By default, moves the file to trash. Use --permanent to permanently delete.
+
+Examples:
+  gws drive delete 1abc123xyz
+  gws drive delete 1abc123xyz --permanent`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDriveDelete,
+}
+
 func init() {
 	rootCmd.AddCommand(driveCmd)
 	driveCmd.AddCommand(driveListCmd)
@@ -84,6 +121,9 @@ func init() {
 	driveCmd.AddCommand(driveInfoCmd)
 	driveCmd.AddCommand(driveCommentsCmd)
 	driveCmd.AddCommand(driveUploadCmd)
+	driveCmd.AddCommand(driveCreateFolderCmd)
+	driveCmd.AddCommand(driveMoveCmd)
+	driveCmd.AddCommand(driveDeleteCmd)
 
 	// List flags
 	driveListCmd.Flags().String("folder", "root", "Folder ID to list (default: root)")
@@ -105,6 +145,18 @@ func init() {
 	driveUploadCmd.Flags().String("folder", "", "Parent folder ID (default: root)")
 	driveUploadCmd.Flags().String("name", "", "File name in Drive (default: local filename)")
 	driveUploadCmd.Flags().String("mime-type", "", "MIME type (auto-detected if not specified)")
+
+	// Create folder flags
+	driveCreateFolderCmd.Flags().String("name", "", "Folder name (required)")
+	driveCreateFolderCmd.Flags().String("parent", "", "Parent folder ID (default: root)")
+	driveCreateFolderCmd.MarkFlagRequired("name")
+
+	// Move flags
+	driveMoveCmd.Flags().String("to", "", "Destination folder ID (required)")
+	driveMoveCmd.MarkFlagRequired("to")
+
+	// Delete flags
+	driveDeleteCmd.Flags().Bool("permanent", false, "Permanently delete (skip trash)")
 }
 
 func runDriveList(cmd *cobra.Command, args []string) error {
@@ -547,4 +599,161 @@ func runDriveUpload(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(result)
+}
+
+func runDriveCreateFolder(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	name, _ := cmd.Flags().GetString("name")
+	parentID, _ := cmd.Flags().GetString("parent")
+
+	// Build folder metadata
+	folder := &drive.File{
+		Name:     name,
+		MimeType: "application/vnd.google-apps.folder",
+	}
+
+	// Set parent folder if specified
+	if parentID != "" {
+		folder.Parents = []string{parentID}
+	}
+
+	// Create folder
+	created, err := svc.Files.Create(folder).
+		Fields("id, name, webViewLink").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create folder: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status": "created",
+		"id":     created.Id,
+		"name":   created.Name,
+	}
+
+	if created.WebViewLink != "" {
+		result["web_link"] = created.WebViewLink
+	}
+
+	return p.Print(result)
+}
+
+func runDriveMove(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID := args[0]
+	toFolderID, _ := cmd.Flags().GetString("to")
+
+	// Get current file info to find existing parents
+	file, err := svc.Files.Get(fileID).Fields("name, parents").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get file info: %w", err))
+	}
+
+	// Build removeParents string (comma-separated list of current parents)
+	var removeParents string
+	if len(file.Parents) > 0 {
+		for i, parent := range file.Parents {
+			if i > 0 {
+				removeParents += ","
+			}
+			removeParents += parent
+		}
+	}
+
+	// Move file by adding new parent and removing old parents
+	updated, err := svc.Files.Update(fileID, nil).
+		AddParents(toFolderID).
+		RemoveParents(removeParents).
+		Fields("id, name, parents, webViewLink").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to move file: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":  "moved",
+		"id":      updated.Id,
+		"name":    updated.Name,
+		"parents": updated.Parents,
+	}
+
+	if updated.WebViewLink != "" {
+		result["web_link"] = updated.WebViewLink
+	}
+
+	return p.Print(result)
+}
+
+func runDriveDelete(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID := args[0]
+	permanent, _ := cmd.Flags().GetBool("permanent")
+
+	// Get file info first for the response
+	file, err := svc.Files.Get(fileID).Fields("name").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get file info: %w", err))
+	}
+
+	if permanent {
+		// Permanently delete
+		err = svc.Files.Delete(fileID).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to delete file: %w", err))
+		}
+
+		return p.Print(map[string]interface{}{
+			"status": "deleted",
+			"id":     fileID,
+			"name":   file.Name,
+		})
+	}
+
+	// Move to trash
+	_, err = svc.Files.Update(fileID, &drive.File{Trashed: true}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to trash file: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "trashed",
+		"id":     fileID,
+		"name":   file.Name,
+	})
 }
