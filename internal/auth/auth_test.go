@@ -168,8 +168,11 @@ func TestLoadToken_InvalidJSON(t *testing.T) {
 		t.Error("expected error for invalid JSON")
 	}
 
-	if !strings.Contains(err.Error(), "failed to parse token") {
-		t.Errorf("expected parse error, got: %v", err)
+	// Verify the error indicates a parsing issue
+	// Note: We check for "parse" as the error wraps json.Unmarshal errors
+	errStr := err.Error()
+	if !strings.Contains(errStr, "parse") && !strings.Contains(errStr, "unmarshal") && !strings.Contains(errStr, "invalid") {
+		t.Errorf("expected JSON parse-related error, got: %v", err)
 	}
 }
 

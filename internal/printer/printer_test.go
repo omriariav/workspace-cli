@@ -318,4 +318,9 @@ func TestTextPrinter_Print_ReflectSlice(t *testing.T) {
 	if output == "" {
 		t.Error("expected non-empty output")
 	}
+
+	// Verify the actual content is present
+	if !strings.Contains(output, "test") {
+		t.Errorf("expected 'test' in output: %s", output)
+	}
 }

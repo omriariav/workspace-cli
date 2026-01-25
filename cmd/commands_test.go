@@ -210,6 +210,7 @@ func TestTasksCommands(t *testing.T) {
 }
 
 // TestDriveCommands tests drive command structure
+// NOTE: Add {"comments"} after PR #1 (feature/drive-comments) is merged
 func TestDriveCommands(t *testing.T) {
 	tests := []struct {
 		name string

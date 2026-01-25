@@ -95,8 +95,8 @@ func TestEnsureConfigDir(t *testing.T) {
 }
 
 func TestGetFormat_Default(t *testing.T) {
-	// Reset viper for clean test
 	viper.Reset()
+	t.Cleanup(viper.Reset)
 
 	format := GetFormat()
 	if format != "json" {
@@ -106,9 +106,9 @@ func TestGetFormat_Default(t *testing.T) {
 
 func TestGetFormat_Set(t *testing.T) {
 	viper.Reset()
-	viper.Set(KeyFormat, "text")
-	defer viper.Reset()
+	t.Cleanup(viper.Reset)
 
+	viper.Set(KeyFormat, "text")
 	format := GetFormat()
 	if format != "text" {
 		t.Errorf("expected format 'text', got '%s'", format)
@@ -117,9 +117,9 @@ func TestGetFormat_Set(t *testing.T) {
 
 func TestGetClientID(t *testing.T) {
 	viper.Reset()
-	viper.Set(KeyClientID, "test-client-id")
-	defer viper.Reset()
+	t.Cleanup(viper.Reset)
 
+	viper.Set(KeyClientID, "test-client-id")
 	id := GetClientID()
 	if id != "test-client-id" {
 		t.Errorf("expected 'test-client-id', got '%s'", id)
@@ -128,9 +128,9 @@ func TestGetClientID(t *testing.T) {
 
 func TestGetClientSecret(t *testing.T) {
 	viper.Reset()
-	viper.Set(KeyClientSecret, "test-secret")
-	defer viper.Reset()
+	t.Cleanup(viper.Reset)
 
+	viper.Set(KeyClientSecret, "test-secret")
 	secret := GetClientSecret()
 	if secret != "test-secret" {
 		t.Errorf("expected 'test-secret', got '%s'", secret)
@@ -139,9 +139,9 @@ func TestGetClientSecret(t *testing.T) {
 
 func TestSetDefaults(t *testing.T) {
 	viper.Reset()
-	SetDefaults()
-	defer viper.Reset()
+	t.Cleanup(viper.Reset)
 
+	SetDefaults()
 	format := viper.GetString(KeyFormat)
 	if format != "json" {
 		t.Errorf("expected default format 'json', got '%s'", format)
@@ -150,10 +150,11 @@ func TestSetDefaults(t *testing.T) {
 
 func TestLoad(t *testing.T) {
 	viper.Reset()
+	t.Cleanup(viper.Reset)
+
 	viper.Set(KeyClientID, "load-test-id")
 	viper.Set(KeyClientSecret, "load-test-secret")
 	viper.Set(KeyFormat, "text")
-	defer viper.Reset()
 
 	cfg, err := Load()
 	if err != nil {
