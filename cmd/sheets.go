@@ -120,6 +120,104 @@ Range format examples:
 	RunE: runSheetsClear,
 }
 
+var sheetsInsertRowsCmd = &cobra.Command{
+	Use:   "insert-rows <spreadsheet-id>",
+	Short: "Insert rows into a sheet",
+	Long:  "Inserts empty rows at a specified position in a sheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsInsertRows,
+}
+
+var sheetsDeleteRowsCmd = &cobra.Command{
+	Use:   "delete-rows <spreadsheet-id>",
+	Short: "Delete rows from a sheet",
+	Long:  "Deletes rows from a specified range in a sheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsDeleteRows,
+}
+
+var sheetsInsertColsCmd = &cobra.Command{
+	Use:   "insert-cols <spreadsheet-id>",
+	Short: "Insert columns into a sheet",
+	Long:  "Inserts empty columns at a specified position in a sheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsInsertCols,
+}
+
+var sheetsDeleteColsCmd = &cobra.Command{
+	Use:   "delete-cols <spreadsheet-id>",
+	Short: "Delete columns from a sheet",
+	Long:  "Deletes columns from a specified range in a sheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsDeleteCols,
+}
+
+var sheetsRenameSheetCmd = &cobra.Command{
+	Use:   "rename-sheet <spreadsheet-id>",
+	Short: "Rename a sheet",
+	Long:  "Renames a sheet within a spreadsheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsRenameSheet,
+}
+
+var sheetsDuplicateSheetCmd = &cobra.Command{
+	Use:   "duplicate-sheet <spreadsheet-id>",
+	Short: "Duplicate a sheet",
+	Long:  "Creates a copy of an existing sheet within the spreadsheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsDuplicateSheet,
+}
+
+var sheetsMergeCmd = &cobra.Command{
+	Use:   "merge <spreadsheet-id> <range>",
+	Short: "Merge cells",
+	Long: `Merges a range of cells into a single cell.
+
+Range format examples:
+  Sheet1!A1:D4     - Merge cells A1 through D4 in Sheet1
+  A1:B2            - Merge cells in first sheet
+
+Note: Unbounded ranges like "A:A" (whole column) or "1:1" (whole row) are not supported.`,
+	Args: cobra.ExactArgs(2),
+	RunE: runSheetsMerge,
+}
+
+var sheetsUnmergeCmd = &cobra.Command{
+	Use:   "unmerge <spreadsheet-id> <range>",
+	Short: "Unmerge cells",
+	Long: `Unmerges previously merged cells in a range.
+
+Range format examples:
+  Sheet1!A1:D4     - Unmerge cells in range
+  A1:B2            - Unmerge cells in first sheet
+
+Note: Unbounded ranges like "A:A" (whole column) or "1:1" (whole row) are not supported.`,
+	Args: cobra.ExactArgs(2),
+	RunE: runSheetsUnmerge,
+}
+
+var sheetsSortCmd = &cobra.Command{
+	Use:   "sort <spreadsheet-id> <range>",
+	Short: "Sort a range",
+	Long: `Sorts data in a range by a specified column.
+
+Range format examples:
+  Sheet1!A1:D10    - Sort range in Sheet1
+  A1:D10           - Sort range in first sheet
+
+Note: Unbounded ranges like "A:A" (whole column) or "1:1" (whole row) are not supported.`,
+	Args: cobra.ExactArgs(2),
+	RunE: runSheetsSort,
+}
+
+var sheetsFindReplaceCmd = &cobra.Command{
+	Use:   "find-replace <spreadsheet-id>",
+	Short: "Find and replace in spreadsheet",
+	Long:  "Finds and replaces text across the spreadsheet or within a specific sheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsFindReplace,
+}
+
 func init() {
 	rootCmd.AddCommand(sheetsCmd)
 	sheetsCmd.AddCommand(sheetsInfoCmd)
@@ -131,6 +229,16 @@ func init() {
 	sheetsCmd.AddCommand(sheetsAddSheetCmd)
 	sheetsCmd.AddCommand(sheetsDeleteSheetCmd)
 	sheetsCmd.AddCommand(sheetsClearCmd)
+	sheetsCmd.AddCommand(sheetsInsertRowsCmd)
+	sheetsCmd.AddCommand(sheetsDeleteRowsCmd)
+	sheetsCmd.AddCommand(sheetsInsertColsCmd)
+	sheetsCmd.AddCommand(sheetsDeleteColsCmd)
+	sheetsCmd.AddCommand(sheetsRenameSheetCmd)
+	sheetsCmd.AddCommand(sheetsDuplicateSheetCmd)
+	sheetsCmd.AddCommand(sheetsMergeCmd)
+	sheetsCmd.AddCommand(sheetsUnmergeCmd)
+	sheetsCmd.AddCommand(sheetsSortCmd)
+	sheetsCmd.AddCommand(sheetsFindReplaceCmd)
 
 	// Read flags
 	sheetsReadCmd.Flags().String("output-format", "json", "Output format: json or csv")
@@ -158,6 +266,59 @@ func init() {
 	// Delete-sheet flags
 	sheetsDeleteSheetCmd.Flags().String("name", "", "Sheet name to delete")
 	sheetsDeleteSheetCmd.Flags().Int64("sheet-id", -1, "Sheet ID to delete (alternative to --name)")
+
+	// Insert-rows flags
+	sheetsInsertRowsCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsInsertRowsCmd.Flags().Int64("at", 0, "Row index to insert at (0-based)")
+	sheetsInsertRowsCmd.Flags().Int64("count", 1, "Number of rows to insert")
+	sheetsInsertRowsCmd.MarkFlagRequired("sheet")
+
+	// Delete-rows flags
+	sheetsDeleteRowsCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsDeleteRowsCmd.Flags().Int64("from", 0, "Start row index (0-based, inclusive)")
+	sheetsDeleteRowsCmd.Flags().Int64("to", 0, "End row index (0-based, exclusive)")
+	sheetsDeleteRowsCmd.MarkFlagRequired("sheet")
+
+	// Insert-cols flags
+	sheetsInsertColsCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsInsertColsCmd.Flags().Int64("at", 0, "Column index to insert at (0-based)")
+	sheetsInsertColsCmd.Flags().Int64("count", 1, "Number of columns to insert")
+	sheetsInsertColsCmd.MarkFlagRequired("sheet")
+
+	// Delete-cols flags
+	sheetsDeleteColsCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsDeleteColsCmd.Flags().Int64("from", 0, "Start column index (0-based, inclusive)")
+	sheetsDeleteColsCmd.Flags().Int64("to", 0, "End column index (0-based, exclusive)")
+	sheetsDeleteColsCmd.MarkFlagRequired("sheet")
+
+	// Rename-sheet flags
+	sheetsRenameSheetCmd.Flags().String("sheet", "", "Current sheet name (required)")
+	sheetsRenameSheetCmd.Flags().String("name", "", "New sheet name (required)")
+	sheetsRenameSheetCmd.MarkFlagRequired("sheet")
+	sheetsRenameSheetCmd.MarkFlagRequired("name")
+
+	// Duplicate-sheet flags
+	sheetsDuplicateSheetCmd.Flags().String("sheet", "", "Sheet name to duplicate (required)")
+	sheetsDuplicateSheetCmd.Flags().String("new-name", "", "Name for the new sheet")
+	sheetsDuplicateSheetCmd.MarkFlagRequired("sheet")
+
+	// Merge flags (no additional flags needed, range is positional)
+
+	// Unmerge flags (no additional flags needed, range is positional)
+
+	// Sort flags
+	sheetsSortCmd.Flags().String("by", "A", "Column to sort by (e.g., A, B, C)")
+	sheetsSortCmd.Flags().Bool("desc", false, "Sort in descending order")
+	sheetsSortCmd.Flags().Bool("has-header", false, "First row is a header (excluded from sort)")
+
+	// Find-replace flags
+	sheetsFindReplaceCmd.Flags().String("find", "", "Text to find (required)")
+	sheetsFindReplaceCmd.Flags().String("replace", "", "Replacement text (required)")
+	sheetsFindReplaceCmd.Flags().String("sheet", "", "Limit to specific sheet (optional)")
+	sheetsFindReplaceCmd.Flags().Bool("match-case", false, "Case-sensitive matching")
+	sheetsFindReplaceCmd.Flags().Bool("entire-cell", false, "Match entire cell contents only")
+	sheetsFindReplaceCmd.MarkFlagRequired("find")
+	sheetsFindReplaceCmd.MarkFlagRequired("replace")
 }
 
 func runSheetsInfo(cmd *cobra.Command, args []string) error {
@@ -672,4 +833,703 @@ func runSheetsClear(cmd *cobra.Command, args []string) error {
 		"spreadsheet":  resp.SpreadsheetId,
 		"range":        resp.ClearedRange,
 	})
+}
+
+// getSheetID looks up a sheet ID by name within a spreadsheet.
+func getSheetID(svc *sheets.Service, spreadsheetID, sheetName string) (int64, error) {
+	spreadsheet, err := svc.Spreadsheets.Get(spreadsheetID).Do()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get spreadsheet: %w", err)
+	}
+
+	for _, sheet := range spreadsheet.Sheets {
+		if sheet.Properties.Title == sheetName {
+			return sheet.Properties.SheetId, nil
+		}
+	}
+	return 0, fmt.Errorf("sheet '%s' not found", sheetName)
+}
+
+func runSheetsInsertRows(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	at, _ := cmd.Flags().GetInt64("at")
+	count, _ := cmd.Flags().GetInt64("count")
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			InsertDimension: &sheets.InsertDimensionRequest{
+				Range: &sheets.DimensionRange{
+					SheetId:    sheetID,
+					Dimension:  "ROWS",
+					StartIndex: at,
+					EndIndex:   at + count,
+				},
+				InheritFromBefore: at > 0,
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to insert rows: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "inserted",
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+		"at":          at,
+		"count":       count,
+		"dimension":   "rows",
+	})
+}
+
+func runSheetsDeleteRows(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	from, _ := cmd.Flags().GetInt64("from")
+	to, _ := cmd.Flags().GetInt64("to")
+
+	if to <= from {
+		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+	}
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			DeleteDimension: &sheets.DeleteDimensionRequest{
+				Range: &sheets.DimensionRange{
+					SheetId:    sheetID,
+					Dimension:  "ROWS",
+					StartIndex: from,
+					EndIndex:   to,
+				},
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete rows: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "deleted",
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+		"from":        from,
+		"to":          to,
+		"count":       to - from,
+		"dimension":   "rows",
+	})
+}
+
+func runSheetsInsertCols(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	at, _ := cmd.Flags().GetInt64("at")
+	count, _ := cmd.Flags().GetInt64("count")
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			InsertDimension: &sheets.InsertDimensionRequest{
+				Range: &sheets.DimensionRange{
+					SheetId:    sheetID,
+					Dimension:  "COLUMNS",
+					StartIndex: at,
+					EndIndex:   at + count,
+				},
+				InheritFromBefore: at > 0,
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to insert columns: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "inserted",
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+		"at":          at,
+		"count":       count,
+		"dimension":   "columns",
+	})
+}
+
+func runSheetsDeleteCols(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	from, _ := cmd.Flags().GetInt64("from")
+	to, _ := cmd.Flags().GetInt64("to")
+
+	if to <= from {
+		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+	}
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			DeleteDimension: &sheets.DeleteDimensionRequest{
+				Range: &sheets.DimensionRange{
+					SheetId:    sheetID,
+					Dimension:  "COLUMNS",
+					StartIndex: from,
+					EndIndex:   to,
+				},
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete columns: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "deleted",
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+		"from":        from,
+		"to":          to,
+		"count":       to - from,
+		"dimension":   "columns",
+	})
+}
+
+func runSheetsRenameSheet(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	oldName, _ := cmd.Flags().GetString("sheet")
+	newName, _ := cmd.Flags().GetString("name")
+
+	sheetID, err := getSheetID(svc, spreadsheetID, oldName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			UpdateSheetProperties: &sheets.UpdateSheetPropertiesRequest{
+				Properties: &sheets.SheetProperties{
+					SheetId: sheetID,
+					Title:   newName,
+				},
+				Fields: "title",
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to rename sheet: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "renamed",
+		"spreadsheet": spreadsheetID,
+		"old_name":    oldName,
+		"new_name":    newName,
+		"sheet_id":    sheetID,
+	})
+}
+
+func runSheetsDuplicateSheet(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	newName, _ := cmd.Flags().GetString("new-name")
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	duplicateReq := &sheets.DuplicateSheetRequest{
+		SourceSheetId: sheetID,
+	}
+	if newName != "" {
+		duplicateReq.NewSheetName = newName
+	}
+
+	requests := []*sheets.Request{
+		{
+			DuplicateSheet: duplicateReq,
+		},
+	}
+
+	resp, err := svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to duplicate sheet: %w", err))
+	}
+
+	// Get the new sheet info from response
+	var newSheetID int64
+	var actualNewName string
+	if len(resp.Replies) > 0 && resp.Replies[0].DuplicateSheet != nil && resp.Replies[0].DuplicateSheet.Properties != nil {
+		newSheetID = resp.Replies[0].DuplicateSheet.Properties.SheetId
+		actualNewName = resp.Replies[0].DuplicateSheet.Properties.Title
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":           "duplicated",
+		"spreadsheet":      spreadsheetID,
+		"source_sheet":     sheetName,
+		"new_sheet_name":   actualNewName,
+		"new_sheet_id":     newSheetID,
+	})
+}
+
+// parseRange parses a Sheets range string (e.g., "Sheet1!A1:D10") and returns sheet ID and grid range.
+// Note: Does not support unbounded ranges like "A:A" (whole column) or "1:1" (whole row).
+func parseRange(svc *sheets.Service, spreadsheetID, rangeStr string) (int64, *sheets.GridRange, error) {
+	// Split sheet name from range
+	var sheetID int64
+	var cellRange string
+
+	if idx := strings.Index(rangeStr, "!"); idx != -1 {
+		sheetName := rangeStr[:idx]
+		cellRange = rangeStr[idx+1:]
+		// Look up sheet ID by name
+		var err error
+		sheetID, err = getSheetID(svc, spreadsheetID, sheetName)
+		if err != nil {
+			return 0, nil, err
+		}
+	} else {
+		// Assume first sheet if no sheet name - get ID directly to avoid duplicate API call
+		spreadsheet, err := svc.Spreadsheets.Get(spreadsheetID).Do()
+		if err != nil {
+			return 0, nil, fmt.Errorf("failed to get spreadsheet: %w", err)
+		}
+		if len(spreadsheet.Sheets) == 0 {
+			return 0, nil, fmt.Errorf("spreadsheet has no sheets")
+		}
+		sheetID = spreadsheet.Sheets[0].Properties.SheetId
+		cellRange = rangeStr
+	}
+
+	// Parse cell range (e.g., "A1:D10")
+	startCol, startRow, endCol, endRow, err := parseCellRange(cellRange)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return sheetID, &sheets.GridRange{
+		SheetId:          sheetID,
+		StartColumnIndex: startCol,
+		StartRowIndex:    startRow,
+		EndColumnIndex:   endCol,
+		EndRowIndex:      endRow,
+	}, nil
+}
+
+// parseCellRange parses a cell range like "A1:D10" into column and row indices.
+func parseCellRange(cellRange string) (startCol, startRow, endCol, endRow int64, err error) {
+	parts := strings.Split(cellRange, ":")
+	if len(parts) != 2 {
+		return 0, 0, 0, 0, fmt.Errorf("invalid range format: %s (expected format: A1:D10)", cellRange)
+	}
+
+	startCol, startRow, err = parseCellRef(parts[0])
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	endCol, endRow, err = parseCellRef(parts[1])
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	// End indices are exclusive in Grid API
+	endCol++
+	endRow++
+
+	return startCol, startRow, endCol, endRow, nil
+}
+
+// parseCellRef parses a cell reference like "A1" into column and row indices (0-based).
+func parseCellRef(ref string) (col, row int64, err error) {
+	ref = strings.ToUpper(strings.TrimSpace(ref))
+
+	// Extract column letters and row number
+	colStr := ""
+	rowStr := ""
+	for _, c := range ref {
+		if c >= 'A' && c <= 'Z' {
+			colStr += string(c)
+		} else if c >= '0' && c <= '9' {
+			rowStr += string(c)
+		}
+	}
+
+	if colStr == "" || rowStr == "" {
+		return 0, 0, fmt.Errorf("invalid cell reference: %s", ref)
+	}
+
+	// Convert column letters to index (A=0, B=1, ..., Z=25, AA=26, etc.)
+	col = 0
+	for _, c := range colStr {
+		col = col*26 + int64(c-'A'+1)
+	}
+	col-- // Convert to 0-based
+
+	// Parse row number and convert to 0-based
+	var rowNum int
+	_, err = fmt.Sscanf(rowStr, "%d", &rowNum)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid row number: %s", rowStr)
+	}
+	row = int64(rowNum - 1)
+
+	return col, row, nil
+}
+
+func runSheetsMerge(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			MergeCells: &sheets.MergeCellsRequest{
+				Range:     gridRange,
+				MergeType: "MERGE_ALL",
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to merge cells: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "merged",
+		"spreadsheet": spreadsheetID,
+		"range":       rangeStr,
+	})
+}
+
+func runSheetsUnmerge(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			UnmergeCells: &sheets.UnmergeCellsRequest{
+				Range: gridRange,
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to unmerge cells: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "unmerged",
+		"spreadsheet": spreadsheetID,
+		"range":       rangeStr,
+	})
+}
+
+// columnLetterToIndex converts a column letter (A, B, ..., Z, AA, etc.) to a 0-based index.
+func columnLetterToIndex(col string) int64 {
+	col = strings.ToUpper(strings.TrimSpace(col))
+	var index int64
+	for _, c := range col {
+		index = index*26 + int64(c-'A'+1)
+	}
+	return index - 1 // Convert to 0-based
+}
+
+func runSheetsSort(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+	sortBy, _ := cmd.Flags().GetString("by")
+	desc, _ := cmd.Flags().GetBool("desc")
+	hasHeader, _ := cmd.Flags().GetBool("has-header")
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	// If has header, adjust start row
+	if hasHeader {
+		gridRange.StartRowIndex++
+	}
+
+	sortOrder := "ASCENDING"
+	if desc {
+		sortOrder = "DESCENDING"
+	}
+
+	sortColIndex := columnLetterToIndex(sortBy)
+
+	requests := []*sheets.Request{
+		{
+			SortRange: &sheets.SortRangeRequest{
+				Range: gridRange,
+				SortSpecs: []*sheets.SortSpec{
+					{
+						DimensionIndex: sortColIndex,
+						SortOrder:      sortOrder,
+					},
+				},
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to sort range: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "sorted",
+		"spreadsheet": spreadsheetID,
+		"range":       rangeStr,
+		"sort_column": sortBy,
+		"order":       sortOrder,
+	})
+}
+
+func runSheetsFindReplace(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	findText, _ := cmd.Flags().GetString("find")
+	replaceText, _ := cmd.Flags().GetString("replace")
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	matchCase, _ := cmd.Flags().GetBool("match-case")
+	entireCell, _ := cmd.Flags().GetBool("entire-cell")
+
+	findReplaceReq := &sheets.FindReplaceRequest{
+		Find:        findText,
+		Replacement: replaceText,
+		MatchCase:   matchCase,
+		MatchEntireCell: entireCell,
+		AllSheets:   sheetName == "",
+	}
+
+	// If specific sheet, set sheet ID
+	if sheetName != "" {
+		sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		findReplaceReq.SheetId = sheetID
+	}
+
+	requests := []*sheets.Request{
+		{
+			FindReplace: findReplaceReq,
+		},
+	}
+
+	resp, err := svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to find/replace: %w", err))
+	}
+
+	// Get replacement count from response
+	var occurrences int64
+	var sheetsChanged int64
+	if len(resp.Replies) > 0 && resp.Replies[0].FindReplace != nil {
+		occurrences = resp.Replies[0].FindReplace.OccurrencesChanged
+		sheetsChanged = resp.Replies[0].FindReplace.SheetsChanged
+	}
+
+	result := map[string]interface{}{
+		"status":            "replaced",
+		"spreadsheet":       spreadsheetID,
+		"find":              findText,
+		"replace":           replaceText,
+		"occurrences_changed": occurrences,
+		"sheets_changed":    sheetsChanged,
+	}
+	if sheetName != "" {
+		result["sheet"] = sheetName
+	}
+
+	return p.Print(result)
 }

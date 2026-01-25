@@ -136,6 +136,8 @@ Add `--format text` to any command for human-readable output.
 | `gws docs append <id>` | Append text to document (`--text`, `--newline`) |
 | `gws docs insert <id>` | Insert text at position (`--text`, `--at`) |
 | `gws docs replace <id>` | Find and replace text (`--find`, `--replace`, `--match-case`) |
+| `gws docs delete <id>` | Delete content range (`--from`, `--to`) |
+| `gws docs add-table <id>` | Insert table (`--rows`, `--cols`, `--at`) |
 
 ### Sheets
 
@@ -150,6 +152,16 @@ Add `--format text` to any command for human-readable output.
 | `gws sheets add-sheet <id>` | Add sheet (`--name`, `--rows`, `--cols`) |
 | `gws sheets delete-sheet <id>` | Delete sheet (`--name` or `--sheet-id`) |
 | `gws sheets clear <id> <range>` | Clear cell values (keeps formatting) |
+| `gws sheets insert-rows <id>` | Insert rows (`--sheet`, `--at`, `--count`) |
+| `gws sheets delete-rows <id>` | Delete rows (`--sheet`, `--from`, `--to`) |
+| `gws sheets insert-cols <id>` | Insert columns (`--sheet`, `--at`, `--count`) |
+| `gws sheets delete-cols <id>` | Delete columns (`--sheet`, `--from`, `--to`) |
+| `gws sheets rename-sheet <id>` | Rename sheet (`--sheet`, `--name`) |
+| `gws sheets duplicate-sheet <id>` | Duplicate sheet (`--sheet`, `--new-name`) |
+| `gws sheets merge <id> <range>` | Merge cells |
+| `gws sheets unmerge <id> <range>` | Unmerge cells |
+| `gws sheets sort <id> <range>` | Sort data (`--by`, `--desc`, `--has-header`) |
+| `gws sheets find-replace <id>` | Find and replace (`--find`, `--replace`, `--sheet`, `--match-case`) |
 
 ### Slides
 
@@ -162,6 +174,10 @@ Add `--format text` to any command for human-readable output.
 | `gws slides add-slide <id>` | Add slide (`--title`, `--body`, `--layout`) |
 | `gws slides delete-slide <id>` | Delete slide (`--slide-id` or `--slide-number`) |
 | `gws slides duplicate-slide <id>` | Duplicate slide (`--slide-id` or `--slide-number`) |
+| `gws slides add-shape <id>` | Add shape (`--slide-id/--slide-number`, `--type`, `--x`, `--y`, `--width`, `--height`) |
+| `gws slides add-image <id>` | Add image (`--slide-id/--slide-number`, `--url`, `--x`, `--y`, `--width`) |
+| `gws slides add-text <id>` | Insert text into object (`--object-id`, `--text`, `--at`) |
+| `gws slides replace-text <id>` | Find and replace text (`--find`, `--replace`, `--match-case`) |
 
 ### Chat
 

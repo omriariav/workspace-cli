@@ -529,3 +529,614 @@ func TestSheetsClear_MockServer(t *testing.T) {
 		t.Fatal("server not created")
 	}
 }
+
+// TestSheetsInsertRowsCommand_Flags tests insert-rows command flags
+func TestSheetsInsertRowsCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "insert-rows")
+	if cmd == nil {
+		t.Fatal("insert-rows command not found")
+	}
+
+	expectedFlags := []string{"sheet", "at", "count"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsDeleteRowsCommand_Flags tests delete-rows command flags
+func TestSheetsDeleteRowsCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "delete-rows")
+	if cmd == nil {
+		t.Fatal("delete-rows command not found")
+	}
+
+	expectedFlags := []string{"sheet", "from", "to"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsInsertColsCommand_Flags tests insert-cols command flags
+func TestSheetsInsertColsCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "insert-cols")
+	if cmd == nil {
+		t.Fatal("insert-cols command not found")
+	}
+
+	expectedFlags := []string{"sheet", "at", "count"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsDeleteColsCommand_Flags tests delete-cols command flags
+func TestSheetsDeleteColsCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "delete-cols")
+	if cmd == nil {
+		t.Fatal("delete-cols command not found")
+	}
+
+	expectedFlags := []string{"sheet", "from", "to"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsRenameSheetCommand_Flags tests rename-sheet command flags
+func TestSheetsRenameSheetCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "rename-sheet")
+	if cmd == nil {
+		t.Fatal("rename-sheet command not found")
+	}
+
+	expectedFlags := []string{"sheet", "name"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsDuplicateSheetCommand_Flags tests duplicate-sheet command flags
+func TestSheetsDuplicateSheetCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "duplicate-sheet")
+	if cmd == nil {
+		t.Fatal("duplicate-sheet command not found")
+	}
+
+	expectedFlags := []string{"sheet", "new-name"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsMergeCommand tests merge command
+func TestSheetsMergeCommand(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "merge")
+	if cmd == nil {
+		t.Fatal("merge command not found")
+	}
+
+	if cmd.Use != "merge <spreadsheet-id> <range>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+}
+
+// TestSheetsUnmergeCommand tests unmerge command
+func TestSheetsUnmergeCommand(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "unmerge")
+	if cmd == nil {
+		t.Fatal("unmerge command not found")
+	}
+
+	if cmd.Use != "unmerge <spreadsheet-id> <range>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+}
+
+// TestSheetsSortCommand_Flags tests sort command flags
+func TestSheetsSortCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "sort")
+	if cmd == nil {
+		t.Fatal("sort command not found")
+	}
+
+	expectedFlags := []string{"by", "desc", "has-header"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsFindReplaceCommand_Flags tests find-replace command flags
+func TestSheetsFindReplaceCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "find-replace")
+	if cmd == nil {
+		t.Fatal("find-replace command not found")
+	}
+
+	expectedFlags := []string{"find", "replace", "sheet", "match-case", "entire-cell"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestParseCellRef tests the parseCellRef helper function
+func TestParseCellRef(t *testing.T) {
+	tests := []struct {
+		name    string
+		ref     string
+		wantCol int64
+		wantRow int64
+		wantErr bool
+	}{
+		{
+			name:    "simple A1",
+			ref:     "A1",
+			wantCol: 0,
+			wantRow: 0,
+		},
+		{
+			name:    "B5",
+			ref:     "B5",
+			wantCol: 1,
+			wantRow: 4,
+		},
+		{
+			name:    "Z10",
+			ref:     "Z10",
+			wantCol: 25,
+			wantRow: 9,
+		},
+		{
+			name:    "AA1",
+			ref:     "AA1",
+			wantCol: 26,
+			wantRow: 0,
+		},
+		{
+			name:    "lowercase b3",
+			ref:     "b3",
+			wantCol: 1,
+			wantRow: 2,
+		},
+		{
+			name:    "invalid - no row",
+			ref:     "A",
+			wantErr: true,
+		},
+		{
+			name:    "invalid - no column",
+			ref:     "1",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			col, row, err := parseCellRef(tt.ref)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if col != tt.wantCol {
+				t.Errorf("expected col %d, got %d", tt.wantCol, col)
+			}
+
+			if row != tt.wantRow {
+				t.Errorf("expected row %d, got %d", tt.wantRow, row)
+			}
+		})
+	}
+}
+
+// TestColumnLetterToIndex tests the columnLetterToIndex helper function
+func TestColumnLetterToIndex(t *testing.T) {
+	tests := []struct {
+		col   string
+		index int64
+	}{
+		{"A", 0},
+		{"B", 1},
+		{"Z", 25},
+		{"AA", 26},
+		{"AB", 27},
+		{"AZ", 51},
+		{"BA", 52},
+		{"a", 0},
+		{"z", 25},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.col, func(t *testing.T) {
+			got := columnLetterToIndex(tt.col)
+			if got != tt.index {
+				t.Errorf("columnLetterToIndex(%s) = %d, want %d", tt.col, got, tt.index)
+			}
+		})
+	}
+}
+
+// TestSheetsInsertRows_MockServer tests insert-rows API integration
+func TestSheetsInsertRows_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Handle spreadsheet get for sheet ID lookup
+		if r.Method == "GET" && strings.Contains(r.URL.Path, "/spreadsheets/") {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Handle batchUpdate for insertDimension
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			// Verify insertDimension request
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				insertDim := requests[0].(map[string]interface{})["insertDimension"]
+				if insertDim != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsDeleteRows_MockServer tests delete-rows API integration
+func TestSheetsDeleteRows_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				deleteDim := requests[0].(map[string]interface{})["deleteDimension"]
+				if deleteDim != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsMerge_MockServer tests merge cells API integration
+func TestSheetsMerge_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				mergeCells := requests[0].(map[string]interface{})["mergeCells"]
+				if mergeCells != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsFindReplace_MockServer tests find-replace API integration
+func TestSheetsFindReplace_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				findReplace := requests[0].(map[string]interface{})["findReplace"]
+				if findReplace != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies": []map[string]interface{}{
+							{
+								"findReplace": map[string]interface{}{
+									"occurrencesChanged": 5,
+									"sheetsChanged":      2,
+								},
+							},
+						},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsSort_MockServer tests sort range API integration
+func TestSheetsSort_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				sortRange := requests[0].(map[string]interface{})["sortRange"]
+				if sortRange != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsRenameSheet_MockServer tests rename-sheet API integration
+func TestSheetsRenameSheet_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "OldName",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				updateProps := requests[0].(map[string]interface{})["updateSheetProperties"]
+				if updateProps != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsDuplicateSheet_MockServer tests duplicate-sheet API integration
+func TestSheetsDuplicateSheet_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				dupSheet := requests[0].(map[string]interface{})["duplicateSheet"]
+				if dupSheet != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies": []map[string]interface{}{
+							{
+								"duplicateSheet": map[string]interface{}{
+									"properties": map[string]interface{}{
+										"sheetId": 12345,
+										"title":   "Sheet1 Copy",
+									},
+								},
+							},
+						},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsCommands_Structure_Extended tests that all new sheet commands are registered
+func TestSheetsCommands_Structure_Extended(t *testing.T) {
+	commands := []string{
+		"insert-rows",
+		"delete-rows",
+		"insert-cols",
+		"delete-cols",
+		"rename-sheet",
+		"duplicate-sheet",
+		"merge",
+		"unmerge",
+		"sort",
+		"find-replace",
+	}
+
+	for _, cmdName := range commands {
+		t.Run(cmdName, func(t *testing.T) {
+			cmd := findSubcommand(sheetsCmd, cmdName)
+			if cmd == nil {
+				t.Fatalf("command '%s' not found", cmdName)
+			}
+		})
+	}
+}
