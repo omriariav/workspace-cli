@@ -68,6 +68,26 @@ var docsReplaceCmd = &cobra.Command{
 	RunE:  runDocsReplace,
 }
 
+var docsDeleteCmd = &cobra.Command{
+	Use:   "delete <document-id>",
+	Short: "Delete content from a document",
+	Long: `Deletes content from a range of positions in the document.
+
+Positions are 1-based indices. Use 'gws docs read <id> --include-formatting' to see positions.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDocsDelete,
+}
+
+var docsAddTableCmd = &cobra.Command{
+	Use:   "add-table <document-id>",
+	Short: "Add a table to the document",
+	Long: `Adds a table at a specified position in the document.
+
+Position is a 1-based index. Use 'gws docs read <id> --include-formatting' to see positions.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDocsAddTable,
+}
+
 func init() {
 	rootCmd.AddCommand(docsCmd)
 	docsCmd.AddCommand(docsReadCmd)
@@ -76,6 +96,8 @@ func init() {
 	docsCmd.AddCommand(docsAppendCmd)
 	docsCmd.AddCommand(docsInsertCmd)
 	docsCmd.AddCommand(docsReplaceCmd)
+	docsCmd.AddCommand(docsDeleteCmd)
+	docsCmd.AddCommand(docsAddTableCmd)
 
 	// Read flags
 	docsReadCmd.Flags().Bool("include-formatting", false, "Include formatting information")
@@ -101,6 +123,17 @@ func init() {
 	docsReplaceCmd.Flags().Bool("match-case", true, "Case-sensitive matching")
 	docsReplaceCmd.MarkFlagRequired("find")
 	docsReplaceCmd.MarkFlagRequired("replace")
+
+	// Delete flags
+	docsDeleteCmd.Flags().Int64("from", 0, "Start position (1-based index, required)")
+	docsDeleteCmd.Flags().Int64("to", 0, "End position (1-based index, required)")
+	docsDeleteCmd.MarkFlagRequired("from")
+	docsDeleteCmd.MarkFlagRequired("to")
+
+	// Add-table flags
+	docsAddTableCmd.Flags().Int64("rows", 3, "Number of rows")
+	docsAddTableCmd.Flags().Int64("cols", 3, "Number of columns")
+	docsAddTableCmd.Flags().Int64("at", 1, "Position to insert at (1-based index)")
 }
 
 func runDocsRead(cmd *cobra.Command, args []string) error {
@@ -480,5 +513,116 @@ func runDocsReplace(cmd *cobra.Command, args []string) error {
 		"find":         findText,
 		"replace":      replaceText,
 		"replacements": replacements,
+	})
+}
+
+func runDocsDelete(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	from, _ := cmd.Flags().GetInt64("from")
+	to, _ := cmd.Flags().GetInt64("to")
+
+	// Validate positions
+	if from < 1 {
+		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+	}
+	if to <= from {
+		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+	}
+
+	requests := []*docs.Request{
+		{
+			DeleteContentRange: &docs.DeleteContentRangeRequest{
+				Range: &docs.Range{
+					StartIndex: from,
+					EndIndex:   to,
+				},
+			},
+		},
+	}
+
+	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete content: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "deleted",
+		"document_id": docID,
+		"from":        from,
+		"to":          to,
+		"characters":  to - from,
+	})
+}
+
+func runDocsAddTable(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	rows, _ := cmd.Flags().GetInt64("rows")
+	cols, _ := cmd.Flags().GetInt64("cols")
+	position, _ := cmd.Flags().GetInt64("at")
+
+	// Validate
+	if position < 1 {
+		return p.PrintError(fmt.Errorf("--at must be >= 1"))
+	}
+	if rows < 1 {
+		return p.PrintError(fmt.Errorf("--rows must be >= 1"))
+	}
+	if cols < 1 {
+		return p.PrintError(fmt.Errorf("--cols must be >= 1"))
+	}
+
+	requests := []*docs.Request{
+		{
+			InsertTable: &docs.InsertTableRequest{
+				Rows:    rows,
+				Columns: cols,
+				Location: &docs.Location{
+					Index: position,
+				},
+			},
+		},
+	}
+
+	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add table: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "created",
+		"document_id": docID,
+		"rows":        rows,
+		"columns":     cols,
+		"position":    position,
 	})
 }

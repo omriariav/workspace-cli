@@ -612,3 +612,176 @@ func TestDocsReplace_Success(t *testing.T) {
 		t.Errorf("expected 5 occurrences changed, got %d", resp.Replies[0].ReplaceAllText.OccurrencesChanged)
 	}
 }
+
+// TestDocsDeleteCommand_Flags tests delete command flags
+func TestDocsDeleteCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "delete")
+	if cmd == nil {
+		t.Fatal("docs delete command not found")
+	}
+
+	expectedFlags := []string{"from", "to"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestDocsAddTableCommand_Flags tests add-table command flags
+func TestDocsAddTableCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "add-table")
+	if cmd == nil {
+		t.Fatal("docs add-table command not found")
+	}
+
+	expectedFlags := []string{"rows", "cols", "at"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestDocsDelete_Success tests deleting content
+func TestDocsDelete_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-delete:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			deleteReq := req.Requests[0].DeleteContentRange
+			if deleteReq == nil {
+				t.Error("expected DeleteContentRange request")
+			} else {
+				if deleteReq.Range.StartIndex != 10 {
+					t.Errorf("expected start index 10, got %d", deleteReq.Range.StartIndex)
+				}
+				if deleteReq.Range.EndIndex != 50 {
+					t.Errorf("expected end index 50, got %d", deleteReq.Range.EndIndex)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-delete",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	_, err = svc.Documents.BatchUpdate("doc-delete", &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				DeleteContentRange: &docs.DeleteContentRangeRequest{
+					Range: &docs.Range{
+						StartIndex: 10,
+						EndIndex:   50,
+					},
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to delete content: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestDocsAddTable_Success tests adding a table
+func TestDocsAddTable_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-table:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			insertTableReq := req.Requests[0].InsertTable
+			if insertTableReq == nil {
+				t.Error("expected InsertTable request")
+			} else {
+				if insertTableReq.Rows != 3 {
+					t.Errorf("expected 3 rows, got %d", insertTableReq.Rows)
+				}
+				if insertTableReq.Columns != 4 {
+					t.Errorf("expected 4 columns, got %d", insertTableReq.Columns)
+				}
+				if insertTableReq.Location.Index != 10 {
+					t.Errorf("expected index 10, got %d", insertTableReq.Location.Index)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-table",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	_, err = svc.Documents.BatchUpdate("doc-table", &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				InsertTable: &docs.InsertTableRequest{
+					Rows:     3,
+					Columns:  4,
+					Location: &docs.Location{Index: 10},
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to add table: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestDocsCommands_Structure_Extended tests that all new docs commands are registered
+func TestDocsCommands_Structure_Extended(t *testing.T) {
+	commands := []string{
+		"delete",
+		"add-table",
+	}
+
+	for _, cmdName := range commands {
+		t.Run(cmdName, func(t *testing.T) {
+			cmd := findSubcommand(docsCmd, cmdName)
+			if cmd == nil {
+				t.Fatalf("command '%s' not found", cmdName)
+			}
+		})
+	}
+}

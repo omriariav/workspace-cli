@@ -629,3 +629,384 @@ func TestSlidesDuplicateSlide_Success(t *testing.T) {
 		t.Errorf("expected new slide ID 'new-duplicated-slide', got '%s'", resp.Replies[0].DuplicateObject.ObjectId)
 	}
 }
+
+// TestSlidesAddShapeCommand_Flags tests add-shape command flags
+func TestSlidesAddShapeCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "add-shape")
+	if cmd == nil {
+		t.Fatal("slides add-shape command not found")
+	}
+
+	expectedFlags := []string{"slide-id", "slide-number", "type", "x", "y", "width", "height"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSlidesAddImageCommand_Flags tests add-image command flags
+func TestSlidesAddImageCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "add-image")
+	if cmd == nil {
+		t.Fatal("slides add-image command not found")
+	}
+
+	expectedFlags := []string{"slide-id", "slide-number", "url", "x", "y", "width"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSlidesAddTextCommand_Flags tests add-text command flags
+func TestSlidesAddTextCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "add-text")
+	if cmd == nil {
+		t.Fatal("slides add-text command not found")
+	}
+
+	expectedFlags := []string{"object-id", "text", "at"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSlidesReplaceTextCommand_Flags tests replace-text command flags
+func TestSlidesReplaceTextCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "replace-text")
+	if cmd == nil {
+		t.Fatal("slides replace-text command not found")
+	}
+
+	expectedFlags := []string{"find", "replace", "match-case"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSlidesAddShape_Success tests creating a shape
+func TestSlidesAddShape_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-shape:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req slides.BatchUpdatePresentationRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			createShape := req.Requests[0].CreateShape
+			if createShape == nil {
+				t.Error("expected CreateShape request")
+			} else {
+				if createShape.ShapeType != "RECTANGLE" {
+					t.Errorf("expected shape type 'RECTANGLE', got '%s'", createShape.ShapeType)
+				}
+				if createShape.ElementProperties.PageObjectId != "slide-1" {
+					t.Errorf("expected page object ID 'slide-1', got '%s'", createShape.ElementProperties.PageObjectId)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{
+				PresentationId: "pres-shape",
+				Replies: []*slides.Response{
+					{
+						CreateShape: &slides.CreateShapeResponse{
+							ObjectId: "new-shape-id",
+						},
+					},
+				},
+			})
+		},
+		"/v1/presentations/pres-shape": func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(&slides.Presentation{
+				PresentationId: "pres-shape",
+				Slides: []*slides.Page{
+					{ObjectId: "slide-1"},
+				},
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	resp, err := svc.Presentations.BatchUpdate("pres-shape", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{
+			{
+				CreateShape: &slides.CreateShapeRequest{
+					ShapeType: "RECTANGLE",
+					ElementProperties: &slides.PageElementProperties{
+						PageObjectId: "slide-1",
+						Size: &slides.Size{
+							Width:  &slides.Dimension{Magnitude: 200, Unit: "PT"},
+							Height: &slides.Dimension{Magnitude: 100, Unit: "PT"},
+						},
+						Transform: &slides.AffineTransform{
+							ScaleX:     1,
+							ScaleY:     1,
+							TranslateX: 100,
+							TranslateY: 100,
+							Unit:       "PT",
+						},
+					},
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to create shape: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+
+	if len(resp.Replies) == 0 || resp.Replies[0].CreateShape == nil {
+		t.Error("expected CreateShape response")
+	} else if resp.Replies[0].CreateShape.ObjectId != "new-shape-id" {
+		t.Errorf("expected shape ID 'new-shape-id', got '%s'", resp.Replies[0].CreateShape.ObjectId)
+	}
+}
+
+// TestSlidesAddImage_Success tests adding an image
+func TestSlidesAddImage_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-image:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req slides.BatchUpdatePresentationRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			createImage := req.Requests[0].CreateImage
+			if createImage == nil {
+				t.Error("expected CreateImage request")
+			} else {
+				if createImage.Url != "https://example.com/image.png" {
+					t.Errorf("expected URL 'https://example.com/image.png', got '%s'", createImage.Url)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{
+				PresentationId: "pres-image",
+				Replies: []*slides.Response{
+					{
+						CreateImage: &slides.CreateImageResponse{
+							ObjectId: "new-image-id",
+						},
+					},
+				},
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	resp, err := svc.Presentations.BatchUpdate("pres-image", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{
+			{
+				CreateImage: &slides.CreateImageRequest{
+					Url: "https://example.com/image.png",
+					ElementProperties: &slides.PageElementProperties{
+						PageObjectId: "slide-1",
+						Size: &slides.Size{
+							Width: &slides.Dimension{Magnitude: 400, Unit: "PT"},
+						},
+						Transform: &slides.AffineTransform{
+							ScaleX:     1,
+							ScaleY:     1,
+							TranslateX: 100,
+							TranslateY: 100,
+							Unit:       "PT",
+						},
+					},
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to create image: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+
+	if len(resp.Replies) == 0 || resp.Replies[0].CreateImage == nil {
+		t.Error("expected CreateImage response")
+	} else if resp.Replies[0].CreateImage.ObjectId != "new-image-id" {
+		t.Errorf("expected image ID 'new-image-id', got '%s'", resp.Replies[0].CreateImage.ObjectId)
+	}
+}
+
+// TestSlidesAddText_Success tests inserting text
+func TestSlidesAddText_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-text:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req slides.BatchUpdatePresentationRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			insertText := req.Requests[0].InsertText
+			if insertText == nil {
+				t.Error("expected InsertText request")
+			} else {
+				if insertText.ObjectId != "text-box-1" {
+					t.Errorf("expected object ID 'text-box-1', got '%s'", insertText.ObjectId)
+				}
+				if insertText.Text != "Hello World" {
+					t.Errorf("expected text 'Hello World', got '%s'", insertText.Text)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{
+				PresentationId: "pres-text",
+				Replies:        []*slides.Response{{}},
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	_, err = svc.Presentations.BatchUpdate("pres-text", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{
+			{
+				InsertText: &slides.InsertTextRequest{
+					ObjectId:       "text-box-1",
+					Text:           "Hello World",
+					InsertionIndex: 0,
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to insert text: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestSlidesReplaceText_Success tests find and replace
+func TestSlidesReplaceText_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-replace:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req slides.BatchUpdatePresentationRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			replaceText := req.Requests[0].ReplaceAllText
+			if replaceText == nil {
+				t.Error("expected ReplaceAllText request")
+			} else {
+				if replaceText.ContainsText.Text != "old text" {
+					t.Errorf("expected find text 'old text', got '%s'", replaceText.ContainsText.Text)
+				}
+				if replaceText.ReplaceText != "new text" {
+					t.Errorf("expected replace text 'new text', got '%s'", replaceText.ReplaceText)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{
+				PresentationId: "pres-replace",
+				Replies: []*slides.Response{
+					{
+						ReplaceAllText: &slides.ReplaceAllTextResponse{
+							OccurrencesChanged: 5,
+						},
+					},
+				},
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	resp, err := svc.Presentations.BatchUpdate("pres-replace", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{
+			{
+				ReplaceAllText: &slides.ReplaceAllTextRequest{
+					ContainsText: &slides.SubstringMatchCriteria{
+						Text:      "old text",
+						MatchCase: true,
+					},
+					ReplaceText: "new text",
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to replace text: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+
+	if len(resp.Replies) == 0 || resp.Replies[0].ReplaceAllText == nil {
+		t.Error("expected ReplaceAllText response")
+	} else if resp.Replies[0].ReplaceAllText.OccurrencesChanged != 5 {
+		t.Errorf("expected 5 occurrences changed, got %d", resp.Replies[0].ReplaceAllText.OccurrencesChanged)
+	}
+}
+
+// TestSlidesCommands_Structure_Extended tests that all new slides commands are registered
+func TestSlidesCommands_Structure_Extended(t *testing.T) {
+	commands := []string{
+		"add-shape",
+		"add-image",
+		"add-text",
+		"replace-text",
+	}
+
+	for _, cmdName := range commands {
+		t.Run(cmdName, func(t *testing.T) {
+			cmd := findSubcommand(slidesCmd, cmdName)
+			if cmd == nil {
+				t.Fatalf("command '%s' not found", cmdName)
+			}
+		})
+	}
+}

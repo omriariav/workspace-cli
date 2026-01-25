@@ -73,6 +73,45 @@ var slidesDuplicateSlideCmd = &cobra.Command{
 	RunE:  runSlidesDuplicateSlide,
 }
 
+var slidesAddShapeCmd = &cobra.Command{
+	Use:   "add-shape <presentation-id>",
+	Short: "Add a shape to a slide",
+	Long: `Adds a shape to a slide at specified position.
+
+Available shape types: RECTANGLE, ELLIPSE, TEXT_BOX, ROUND_RECTANGLE,
+TRIANGLE, ARROW, etc.
+
+Position and size are in points (PT).`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesAddShape,
+}
+
+var slidesAddImageCmd = &cobra.Command{
+	Use:   "add-image <presentation-id>",
+	Short: "Add an image to a slide",
+	Long: `Adds an image to a slide from a URL.
+
+Position and size are in points (PT). The image URL must be publicly accessible.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesAddImage,
+}
+
+var slidesAddTextCmd = &cobra.Command{
+	Use:   "add-text <presentation-id>",
+	Short: "Add text to an object",
+	Long:  "Inserts text into an existing shape or text box on a slide.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesAddText,
+}
+
+var slidesReplaceTextCmd = &cobra.Command{
+	Use:   "replace-text <presentation-id>",
+	Short: "Find and replace text",
+	Long:  "Replaces all occurrences of text across all slides in the presentation.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesReplaceText,
+}
+
 func init() {
 	rootCmd.AddCommand(slidesCmd)
 	slidesCmd.AddCommand(slidesInfoCmd)
@@ -82,6 +121,10 @@ func init() {
 	slidesCmd.AddCommand(slidesAddSlideCmd)
 	slidesCmd.AddCommand(slidesDeleteSlideCmd)
 	slidesCmd.AddCommand(slidesDuplicateSlideCmd)
+	slidesCmd.AddCommand(slidesAddShapeCmd)
+	slidesCmd.AddCommand(slidesAddImageCmd)
+	slidesCmd.AddCommand(slidesAddTextCmd)
+	slidesCmd.AddCommand(slidesReplaceTextCmd)
 
 	// Create flags
 	slidesCreateCmd.Flags().String("title", "", "Presentation title (required)")
@@ -99,6 +142,38 @@ func init() {
 	// Duplicate-slide flags
 	slidesDuplicateSlideCmd.Flags().String("slide-id", "", "Slide object ID to duplicate")
 	slidesDuplicateSlideCmd.Flags().Int("slide-number", 0, "Slide number to duplicate (1-indexed)")
+
+	// Add-shape flags
+	slidesAddShapeCmd.Flags().String("slide-id", "", "Slide object ID")
+	slidesAddShapeCmd.Flags().Int("slide-number", 0, "Slide number (1-indexed)")
+	slidesAddShapeCmd.Flags().String("type", "RECTANGLE", "Shape type (RECTANGLE, ELLIPSE, TEXT_BOX, etc.)")
+	slidesAddShapeCmd.Flags().Float64("x", 100, "X position in points")
+	slidesAddShapeCmd.Flags().Float64("y", 100, "Y position in points")
+	slidesAddShapeCmd.Flags().Float64("width", 200, "Width in points")
+	slidesAddShapeCmd.Flags().Float64("height", 100, "Height in points")
+
+	// Add-image flags
+	slidesAddImageCmd.Flags().String("slide-id", "", "Slide object ID")
+	slidesAddImageCmd.Flags().Int("slide-number", 0, "Slide number (1-indexed)")
+	slidesAddImageCmd.Flags().String("url", "", "Image URL (required, must be publicly accessible)")
+	slidesAddImageCmd.Flags().Float64("x", 100, "X position in points")
+	slidesAddImageCmd.Flags().Float64("y", 100, "Y position in points")
+	slidesAddImageCmd.Flags().Float64("width", 400, "Width in points (height auto-calculated to maintain aspect ratio)")
+	slidesAddImageCmd.MarkFlagRequired("url")
+
+	// Add-text flags
+	slidesAddTextCmd.Flags().String("object-id", "", "Object ID to insert text into (required)")
+	slidesAddTextCmd.Flags().String("text", "", "Text to insert (required)")
+	slidesAddTextCmd.Flags().Int("at", 0, "Position to insert at (0 = beginning)")
+	slidesAddTextCmd.MarkFlagRequired("object-id")
+	slidesAddTextCmd.MarkFlagRequired("text")
+
+	// Replace-text flags
+	slidesReplaceTextCmd.Flags().String("find", "", "Text to find (required)")
+	slidesReplaceTextCmd.Flags().String("replace", "", "Replacement text (required)")
+	slidesReplaceTextCmd.Flags().Bool("match-case", true, "Case-sensitive matching")
+	slidesReplaceTextCmd.MarkFlagRequired("find")
+	slidesReplaceTextCmd.MarkFlagRequired("replace")
 }
 
 func runSlidesInfo(cmd *cobra.Command, args []string) error {
@@ -632,4 +707,275 @@ func runSlidesDuplicateSlide(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(result)
+}
+
+// getSlideID resolves a slide ID from either --slide-id or --slide-number flags.
+func getSlideID(svc *slides.Service, presentationID string, slideIDFlag string, slideNumber int) (string, error) {
+	if slideIDFlag != "" {
+		return slideIDFlag, nil
+	}
+
+	if slideNumber > 0 {
+		presentation, err := svc.Presentations.Get(presentationID).Do()
+		if err != nil {
+			return "", fmt.Errorf("failed to get presentation: %w", err)
+		}
+
+		if slideNumber > len(presentation.Slides) {
+			return "", fmt.Errorf("slide number %d out of range (1-%d)", slideNumber, len(presentation.Slides))
+		}
+
+		return presentation.Slides[slideNumber-1].ObjectId, nil
+	}
+
+	return "", fmt.Errorf("must specify --slide-id or --slide-number")
+}
+
+func runSlidesAddShape(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
+	shapeType, _ := cmd.Flags().GetString("type")
+	x, _ := cmd.Flags().GetFloat64("x")
+	y, _ := cmd.Flags().GetFloat64("y")
+	width, _ := cmd.Flags().GetFloat64("width")
+	height, _ := cmd.Flags().GetFloat64("height")
+
+	slideID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*slides.Request{
+		{
+			CreateShape: &slides.CreateShapeRequest{
+				ShapeType: shapeType,
+				ElementProperties: &slides.PageElementProperties{
+					PageObjectId: slideID,
+					Size: &slides.Size{
+						Width:  &slides.Dimension{Magnitude: width, Unit: "PT"},
+						Height: &slides.Dimension{Magnitude: height, Unit: "PT"},
+					},
+					Transform: &slides.AffineTransform{
+						ScaleX:     1,
+						ScaleY:     1,
+						TranslateX: x,
+						TranslateY: y,
+						Unit:       "PT",
+					},
+				},
+			},
+		},
+	}
+
+	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add shape: %w", err))
+	}
+
+	// Get the shape object ID from response
+	var shapeObjectID string
+	if len(resp.Replies) > 0 && resp.Replies[0].CreateShape != nil {
+		shapeObjectID = resp.Replies[0].CreateShape.ObjectId
+	}
+
+	result := map[string]interface{}{
+		"status":          "created",
+		"presentation_id": presentationID,
+		"slide_id":        slideID,
+		"shape_id":        shapeObjectID,
+		"shape_type":      shapeType,
+		"position":        map[string]float64{"x": x, "y": y},
+		"size":            map[string]float64{"width": width, "height": height},
+	}
+
+	return p.Print(result)
+}
+
+func runSlidesAddImage(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
+	imageURL, _ := cmd.Flags().GetString("url")
+	x, _ := cmd.Flags().GetFloat64("x")
+	y, _ := cmd.Flags().GetFloat64("y")
+	width, _ := cmd.Flags().GetFloat64("width")
+
+	slideID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*slides.Request{
+		{
+			CreateImage: &slides.CreateImageRequest{
+				Url: imageURL,
+				ElementProperties: &slides.PageElementProperties{
+					PageObjectId: slideID,
+					Size: &slides.Size{
+						Width: &slides.Dimension{Magnitude: width, Unit: "PT"},
+						// Height not set - will maintain aspect ratio
+					},
+					Transform: &slides.AffineTransform{
+						ScaleX:     1,
+						ScaleY:     1,
+						TranslateX: x,
+						TranslateY: y,
+						Unit:       "PT",
+					},
+				},
+			},
+		},
+	}
+
+	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add image: %w", err))
+	}
+
+	// Get the image object ID from response
+	var imageObjectID string
+	if len(resp.Replies) > 0 && resp.Replies[0].CreateImage != nil {
+		imageObjectID = resp.Replies[0].CreateImage.ObjectId
+	}
+
+	result := map[string]interface{}{
+		"status":          "created",
+		"presentation_id": presentationID,
+		"slide_id":        slideID,
+		"image_id":        imageObjectID,
+		"url":             imageURL,
+		"position":        map[string]float64{"x": x, "y": y},
+		"width":           width,
+	}
+
+	return p.Print(result)
+}
+
+func runSlidesAddText(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	objectID, _ := cmd.Flags().GetString("object-id")
+	text, _ := cmd.Flags().GetString("text")
+	insertionIndex, _ := cmd.Flags().GetInt("at")
+
+	requests := []*slides.Request{
+		{
+			InsertText: &slides.InsertTextRequest{
+				ObjectId:       objectID,
+				Text:           text,
+				InsertionIndex: int64(insertionIndex),
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add text: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "inserted",
+		"presentation_id": presentationID,
+		"object_id":       objectID,
+		"text_length":     len(text),
+		"position":        insertionIndex,
+	})
+}
+
+func runSlidesReplaceText(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	findText, _ := cmd.Flags().GetString("find")
+	replaceText, _ := cmd.Flags().GetString("replace")
+	matchCase, _ := cmd.Flags().GetBool("match-case")
+
+	requests := []*slides.Request{
+		{
+			ReplaceAllText: &slides.ReplaceAllTextRequest{
+				ContainsText: &slides.SubstringMatchCriteria{
+					Text:      findText,
+					MatchCase: matchCase,
+				},
+				ReplaceText: replaceText,
+			},
+		},
+	}
+
+	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to replace text: %w", err))
+	}
+
+	// Get replacement count from response
+	var occurrences int64
+	if len(resp.Replies) > 0 && resp.Replies[0].ReplaceAllText != nil {
+		occurrences = resp.Replies[0].ReplaceAllText.OccurrencesChanged
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":              "replaced",
+		"presentation_id":     presentationID,
+		"find":                findText,
+		"replace":             replaceText,
+		"occurrences_changed": occurrences,
+	})
 }
