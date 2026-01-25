@@ -22,6 +22,7 @@ var AllScopes = []string{
 
 	// Sheets
 	"https://www.googleapis.com/auth/spreadsheets.readonly",
+	"https://www.googleapis.com/auth/spreadsheets",
 
 	// Slides
 	"https://www.googleapis.com/auth/presentations.readonly",

@@ -123,6 +123,7 @@ Add `--format text` to any command for human-readable output.
 | `gws drive search <query>` | Full-text search |
 | `gws drive info <id>` | File metadata, owners, permissions |
 | `gws drive download <id>` | Download file (`--output`); auto-exports Google formats |
+| `gws drive upload <file>` | Upload file (`--folder`, `--name`, `--mime-type`) |
 | `gws drive comments <id>` | List comments and replies (`--include-resolved`, `--include-deleted`) |
 
 ### Docs
@@ -141,6 +142,9 @@ Add `--format text` to any command for human-readable output.
 | `gws sheets info <id>` | Spreadsheet metadata |
 | `gws sheets list <id>` | List sheets in a spreadsheet |
 | `gws sheets read <id> <range>` | Read cell values (`--output-format=csv`, `--headers`) |
+| `gws sheets create` | Create spreadsheet (`--title`, `--sheet-names`) |
+| `gws sheets write <id> <range>` | Write cell values (`--values`, `--values-json`) |
+| `gws sheets append <id> <range>` | Append rows (`--values`, `--values-json`) |
 
 ### Slides
 

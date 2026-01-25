@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
+	"google.golang.org/api/sheets/v4"
 )
 
 var sheetsCmd = &cobra.Command{
@@ -48,15 +50,72 @@ var sheetsListCmd = &cobra.Command{
 	RunE:  runSheetsList,
 }
 
+var sheetsCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new spreadsheet",
+	Long:  "Creates a new Google Sheets spreadsheet with optional sheet names.",
+	RunE:  runSheetsCreate,
+}
+
+var sheetsWriteCmd = &cobra.Command{
+	Use:   "write <spreadsheet-id> <range>",
+	Short: "Write values to cells",
+	Long: `Writes values to a range of cells in a spreadsheet.
+
+Range format examples:
+  Sheet1!A1:D10    - Specific range in Sheet1
+  Sheet1!A1        - Single cell in Sheet1
+  A1:D10           - Range in first sheet
+
+Values format:
+  --values "a,b,c"           - Single row
+  --values "a,b,c;d,e,f"     - Multiple rows (semicolon-separated)
+  --values-json '[["a","b"],["c","d"]]'  - JSON array format`,
+	Args: cobra.ExactArgs(2),
+	RunE: runSheetsWrite,
+}
+
+var sheetsAppendCmd = &cobra.Command{
+	Use:   "append <spreadsheet-id> <range>",
+	Short: "Append rows to a sheet",
+	Long: `Appends rows after the last row with data in a range.
+
+The range is used to find the table to append to. Data will be added
+after the last row of the table.
+
+Values format:
+  --values "a,b,c"           - Single row
+  --values "a,b,c;d,e,f"     - Multiple rows (semicolon-separated)
+  --values-json '[["a","b"],["c","d"]]'  - JSON array format`,
+	Args: cobra.ExactArgs(2),
+	RunE: runSheetsAppend,
+}
+
 func init() {
 	rootCmd.AddCommand(sheetsCmd)
 	sheetsCmd.AddCommand(sheetsInfoCmd)
 	sheetsCmd.AddCommand(sheetsReadCmd)
 	sheetsCmd.AddCommand(sheetsListCmd)
+	sheetsCmd.AddCommand(sheetsCreateCmd)
+	sheetsCmd.AddCommand(sheetsWriteCmd)
+	sheetsCmd.AddCommand(sheetsAppendCmd)
 
 	// Read flags
 	sheetsReadCmd.Flags().String("output-format", "json", "Output format: json or csv")
 	sheetsReadCmd.Flags().Bool("headers", true, "Treat first row as headers (for json output)")
+
+	// Create flags
+	sheetsCreateCmd.Flags().String("title", "", "Spreadsheet title (required)")
+	sheetsCreateCmd.Flags().StringSlice("sheet-names", nil, "Sheet names (comma-separated, default: Sheet1)")
+	sheetsCreateCmd.MarkFlagRequired("title")
+
+	// Write flags
+	sheetsWriteCmd.Flags().String("values", "", "Values to write (comma-separated, semicolon for rows)")
+	sheetsWriteCmd.Flags().String("values-json", "", "Values as JSON array (e.g., '[[\"a\",\"b\"],[\"c\",\"d\"]]')")
+
+	// Append flags
+	sheetsAppendCmd.Flags().String("values", "", "Values to append (comma-separated, semicolon for rows)")
+	sheetsAppendCmd.Flags().String("values-json", "", "Values as JSON array")
 }
 
 func runSheetsInfo(cmd *cobra.Command, args []string) error {
@@ -232,4 +291,186 @@ func runSheetsList(cmd *cobra.Command, args []string) error {
 		"sheets": sheets,
 		"count":  len(sheets),
 	})
+}
+
+func runSheetsCreate(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	title, _ := cmd.Flags().GetString("title")
+	sheetNames, _ := cmd.Flags().GetStringSlice("sheet-names")
+
+	// Build spreadsheet with sheets
+	spreadsheet := &sheets.Spreadsheet{
+		Properties: &sheets.SpreadsheetProperties{
+			Title: title,
+		},
+	}
+
+	// Add custom sheets if specified
+	if len(sheetNames) > 0 {
+		spreadsheet.Sheets = make([]*sheets.Sheet, len(sheetNames))
+		for i, name := range sheetNames {
+			spreadsheet.Sheets[i] = &sheets.Sheet{
+				Properties: &sheets.SheetProperties{
+					Title: name,
+					Index: int64(i),
+				},
+			}
+		}
+	}
+
+	created, err := svc.Spreadsheets.Create(spreadsheet).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create spreadsheet: %w", err))
+	}
+
+	// Get sheet names from response
+	createdSheets := make([]string, len(created.Sheets))
+	for i, sheet := range created.Sheets {
+		createdSheets[i] = sheet.Properties.Title
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "created",
+		"id":          created.SpreadsheetId,
+		"title":       created.Properties.Title,
+		"sheets":      createdSheets,
+		"sheet_count": len(createdSheets),
+		"url":         created.SpreadsheetUrl,
+	})
+}
+
+func runSheetsWrite(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+
+	values, err := parseValues(cmd)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	if len(values) == 0 {
+		return p.PrintError(fmt.Errorf("no values provided; use --values or --values-json"))
+	}
+
+	valueRange := &sheets.ValueRange{
+		Values: values,
+	}
+
+	resp, err := svc.Spreadsheets.Values.Update(spreadsheetID, rangeStr, valueRange).
+		ValueInputOption("USER_ENTERED").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to write values: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":        "written",
+		"spreadsheet":   resp.SpreadsheetId,
+		"range":         resp.UpdatedRange,
+		"rows_updated":  resp.UpdatedRows,
+		"cells_updated": resp.UpdatedCells,
+	})
+}
+
+func runSheetsAppend(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+
+	values, err := parseValues(cmd)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	if len(values) == 0 {
+		return p.PrintError(fmt.Errorf("no values provided; use --values or --values-json"))
+	}
+
+	valueRange := &sheets.ValueRange{
+		Values: values,
+	}
+
+	resp, err := svc.Spreadsheets.Values.Append(spreadsheetID, rangeStr, valueRange).
+		ValueInputOption("USER_ENTERED").
+		InsertDataOption("INSERT_ROWS").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to append values: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":        "appended",
+		"spreadsheet":   resp.SpreadsheetId,
+		"range":         resp.Updates.UpdatedRange,
+		"rows_appended": resp.Updates.UpdatedRows,
+		"cells_updated": resp.Updates.UpdatedCells,
+	})
+}
+
+// parseValues parses values from either --values or --values-json flags.
+func parseValues(cmd *cobra.Command) ([][]interface{}, error) {
+	valuesStr, _ := cmd.Flags().GetString("values")
+	valuesJSON, _ := cmd.Flags().GetString("values-json")
+
+	// JSON format takes precedence
+	if valuesJSON != "" {
+		var rawValues [][]interface{}
+		if err := json.Unmarshal([]byte(valuesJSON), &rawValues); err != nil {
+			return nil, fmt.Errorf("invalid JSON format: %w", err)
+		}
+		return rawValues, nil
+	}
+
+	// Parse simple format: "a,b,c;d,e,f"
+	if valuesStr != "" {
+		rows := strings.Split(valuesStr, ";")
+		values := make([][]interface{}, len(rows))
+		for i, row := range rows {
+			cells := strings.Split(row, ",")
+			values[i] = make([]interface{}, len(cells))
+			for j, cell := range cells {
+				values[i][j] = strings.TrimSpace(cell)
+			}
+		}
+		return values, nil
+	}
+
+	return nil, nil
 }

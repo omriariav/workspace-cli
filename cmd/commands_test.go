@@ -219,6 +219,7 @@ func TestDriveCommands(t *testing.T) {
 		{"info"},
 		{"download"},
 		{"comments"},
+		{"upload"},
 	}
 
 	for _, tt := range tests {
@@ -255,6 +256,7 @@ func TestDocsCommands(t *testing.T) {
 // Note: Docs flag tests are in cmd/docs_test.go
 
 // TestSheetsCommands tests sheets command structure
+// Note: Detailed sheets tests are in cmd/sheets_test.go
 func TestSheetsCommands(t *testing.T) {
 	tests := []struct {
 		name string
@@ -262,6 +264,9 @@ func TestSheetsCommands(t *testing.T) {
 		{"info"},
 		{"list"},
 		{"read"},
+		{"create"},
+		{"write"},
+		{"append"},
 	}
 
 	for _, tt := range tests {
