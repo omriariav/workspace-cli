@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -131,7 +132,7 @@ func TestDriveComments_ParseResponse(t *testing.T) {
 	defer server.Close()
 
 	// Create a Drive service pointing to our mock server
-	svc, err := drive.NewService(nil, option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
 	if err != nil {
 		t.Fatalf("failed to create drive service: %v", err)
 	}
@@ -205,7 +206,7 @@ func TestDriveComments_FilterResolved(t *testing.T) {
 	)
 	defer server.Close()
 
-	svc, err := drive.NewService(nil, option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
 	if err != nil {
 		t.Fatalf("failed to create drive service: %v", err)
 	}
@@ -257,7 +258,7 @@ func TestDriveComments_EmptyResponse(t *testing.T) {
 	)
 	defer server.Close()
 
-	svc, err := drive.NewService(nil, option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
 	if err != nil {
 		t.Fatalf("failed to create drive service: %v", err)
 	}

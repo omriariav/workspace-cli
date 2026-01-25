@@ -51,9 +51,13 @@ var driveInfoCmd = &cobra.Command{
 var driveCommentsCmd = &cobra.Command{
 	Use:   "comments <file-id>",
 	Short: "List comments on a file",
-	Long:  "Lists all comments and replies on a Google Drive file (Docs, Sheets, Slides, etc.).",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runDriveComments,
+	Long: `Lists all comments and replies on a Google Drive file (Docs, Sheets, Slides, etc.).
+
+By default, resolved comments are excluded. Use --include-resolved to see them.
+Note: When filtering resolved comments, the actual result count may be less than --max
+since filtering happens after fetching from the API.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDriveComments,
 }
 
 func init() {
@@ -376,6 +380,8 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to list comments: %w", err))
 	}
+
+	// TODO: Handle pagination via resp.NextPageToken for files with many comments
 
 	comments := make([]map[string]interface{}, 0)
 	for _, comment := range resp.Comments {
