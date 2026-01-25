@@ -2,12 +2,23 @@ BINARY := gws
 PKG := ./cmd/gws
 BUILD_DIR := ./bin
 
-.PHONY: build test lint vet fmt tidy clean run help
+# Version info
+VERSION ?= 0.2.0
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+LDFLAGS := -ldflags "-X github.com/omriariav/workspace-cli/cmd.Version=$(VERSION) \
+	-X github.com/omriariav/workspace-cli/cmd.Commit=$(COMMIT) \
+	-X github.com/omriariav/workspace-cli/cmd.BuildDate=$(BUILD_DATE)"
+
+.PHONY: build test lint vet fmt tidy clean run help install
 
 ## Build
 
 build: ## Build the binary to ./bin/gws
-	go build -o $(BUILD_DIR)/$(BINARY) $(PKG)
+	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY) $(PKG)
+
+install: ## Install gws to $GOPATH/bin
+	go install $(LDFLAGS) $(PKG)
 
 run: ## Run gws with arguments (e.g., make run ARGS="gmail list --max 5")
 	go run $(PKG) $(ARGS)

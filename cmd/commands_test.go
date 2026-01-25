@@ -329,6 +329,21 @@ func TestFormsCommands(t *testing.T) {
 	}
 }
 
+// TestVersionCommand tests version command structure
+func TestVersionCommand(t *testing.T) {
+	if versionCmd == nil {
+		t.Fatal("version command not found")
+	}
+
+	if versionCmd.Use != "version" {
+		t.Errorf("unexpected Use: %s", versionCmd.Use)
+	}
+
+	if versionCmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+}
+
 // TestSearchCommand tests search command structure
 func TestSearchCommand(t *testing.T) {
 	if searchCmd == nil {
