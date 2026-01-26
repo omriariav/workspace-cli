@@ -100,27 +100,13 @@ func TestCalendarRsvpCommand_Help(t *testing.T) {
 	}
 }
 
-// TestCalendarUpdate_MockServer tests update API integration
+// TestCalendarUpdate_MockServer tests update API integration using Patch
 func TestCalendarUpdate_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		// Get event
-		if r.URL.Path == "/calendars/primary/events/evt-123" && r.Method == "GET" {
-			resp := &calendar.Event{
-				Id:          "evt-123",
-				Summary:     "Original Title",
-				Description: "Original description",
-				Start:       &calendar.EventDateTime{DateTime: "2024-02-01T10:00:00Z"},
-				End:         &calendar.EventDateTime{DateTime: "2024-02-01T11:00:00Z"},
-				HtmlLink:    "https://calendar.google.com/event?id=evt-123",
-			}
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-
-		// Update event
-		if r.URL.Path == "/calendars/primary/events/evt-123" && r.Method == "PUT" {
+		// Patch event (partial update)
+		if r.URL.Path == "/calendars/primary/events/evt-123" && r.Method == "PATCH" {
 			var event calendar.Event
 			if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
 				t.Errorf("failed to decode request: %v", err)
@@ -131,8 +117,6 @@ func TestCalendarUpdate_MockServer(t *testing.T) {
 			resp := &calendar.Event{
 				Id:       "evt-123",
 				Summary:  event.Summary,
-				Start:    event.Start,
-				End:      event.End,
 				HtmlLink: "https://calendar.google.com/event?id=evt-123",
 			}
 			json.NewEncoder(w).Encode(resp)
@@ -149,21 +133,11 @@ func TestCalendarUpdate_MockServer(t *testing.T) {
 		t.Fatalf("failed to create calendar service: %v", err)
 	}
 
-	// Get existing event
-	event, err := svc.Events.Get("primary", "evt-123").Do()
+	// Patch with only changed fields
+	patch := &calendar.Event{Summary: "Updated Title"}
+	updated, err := svc.Events.Patch("primary", "evt-123", patch).Do()
 	if err != nil {
-		t.Fatalf("failed to get event: %v", err)
-	}
-
-	if event.Summary != "Original Title" {
-		t.Errorf("unexpected summary: %s", event.Summary)
-	}
-
-	// Update it
-	event.Summary = "Updated Title"
-	updated, err := svc.Events.Update("primary", "evt-123", event).Do()
-	if err != nil {
-		t.Fatalf("failed to update event: %v", err)
+		t.Fatalf("failed to patch event: %v", err)
 	}
 
 	if updated.Summary != "Updated Title" {

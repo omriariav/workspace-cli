@@ -314,6 +314,18 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
 	ctx := context.Background()
 
+	updateFlags := []string{"title", "start", "end", "description", "location", "add-attendees"}
+	hasChanges := false
+	for _, flag := range updateFlags {
+		if cmd.Flags().Changed(flag) {
+			hasChanges = true
+			break
+		}
+	}
+	if !hasChanges {
+		return p.PrintError(fmt.Errorf("at least one update flag is required (--title, --start, --end, --description, --location, --add-attendees)"))
+	}
+
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -327,24 +339,21 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 	eventID := args[0]
 	calendarID, _ := cmd.Flags().GetString("calendar-id")
 
-	// Fetch existing event
-	event, err := svc.Events.Get(calendarID, eventID).Do()
-	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to get event: %w", err))
-	}
+	// Build patch with only changed fields to avoid triggering
+	// unnecessary notifications or overwriting server-side fields
+	patch := &calendar.Event{}
 
-	// Apply updates only for flags that were explicitly set
 	if cmd.Flags().Changed("title") {
 		title, _ := cmd.Flags().GetString("title")
-		event.Summary = title
+		patch.Summary = title
 	}
 	if cmd.Flags().Changed("description") {
 		description, _ := cmd.Flags().GetString("description")
-		event.Description = description
+		patch.Description = description
 	}
 	if cmd.Flags().Changed("location") {
 		location, _ := cmd.Flags().GetString("location")
-		event.Location = location
+		patch.Location = location
 	}
 	if cmd.Flags().Changed("start") {
 		startStr, _ := cmd.Flags().GetString("start")
@@ -352,7 +361,7 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return p.PrintError(fmt.Errorf("invalid start time: %w", err))
 		}
-		event.Start = &calendar.EventDateTime{
+		patch.Start = &calendar.EventDateTime{
 			DateTime: startTime.Format(time.RFC3339),
 			TimeZone: startTime.Location().String(),
 		}
@@ -363,19 +372,25 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return p.PrintError(fmt.Errorf("invalid end time: %w", err))
 		}
-		event.End = &calendar.EventDateTime{
+		patch.End = &calendar.EventDateTime{
 			DateTime: endTime.Format(time.RFC3339),
 			TimeZone: endTime.Location().String(),
 		}
 	}
 	if cmd.Flags().Changed("add-attendees") {
+		// For attendees we need the existing list, so fetch the event
+		event, err := svc.Events.Get(calendarID, eventID).Fields("attendees").Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get event: %w", err))
+		}
 		newAttendees, _ := cmd.Flags().GetStringSlice("add-attendees")
+		patch.Attendees = event.Attendees
 		for _, email := range newAttendees {
-			event.Attendees = append(event.Attendees, &calendar.EventAttendee{Email: email})
+			patch.Attendees = append(patch.Attendees, &calendar.EventAttendee{Email: email})
 		}
 	}
 
-	updated, err := svc.Events.Update(calendarID, eventID, event).Do()
+	updated, err := svc.Events.Patch(calendarID, eventID, patch).Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to update event: %w", err))
 	}
