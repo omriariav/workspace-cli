@@ -5,13 +5,13 @@
     "email": "omriariav@gmail.com"
   },
   "metadata": {
-    "description": "Google Workspace CLI skills — teach Claude how to use gws for Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search",
+    "description": "Unofficial Google Workspace CLI skills — teach Claude how to use gws for Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search. Not affiliated with Google.",
     "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "gws",
-      "description": "Google Workspace CLI — manage Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search from the terminal",
+      "description": "Unofficial Google Workspace CLI — manage Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search from the terminal. Not affiliated with Google.",
       "source": "./",
       "strict": false,
       "skills": [
