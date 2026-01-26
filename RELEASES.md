@@ -1,5 +1,18 @@
 # Releases
 
+## v1.0.0
+
+**Claude Code Plugin — Workspace Skills**
+
+- `.claude-plugin/plugin.json` manifest for plugin distribution
+- 11 per-service skills (gmail, calendar, drive, docs, sheets, slides, tasks, chat, forms, search, auth)
+  - Each skill: SKILL.md with YAML frontmatter, quick reference table, detailed usage, output modes, AI agent tips
+  - Each service: `references/commands.md` with exhaustive flag documentation
+  - Auth skill: `references/setup-guide.md` — step-by-step GCP project + OAuth setup walkthrough
+- Cross-referencing test suite (`cmd/skills_test.go`) validates skills match actual CLI commands
+- README: added Claude Code Plugin install section
+- Unofficial/not-endorsed-by-Google disclaimer on all skill files
+
 ## v0.9.0
 
 **Calendar Management**
