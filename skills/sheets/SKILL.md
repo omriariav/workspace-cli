@@ -11,7 +11,7 @@ metadata:
 
 `gws sheets` provides CLI access to Google Sheets with structured JSON output. This is the largest skill with 19 commands covering full spreadsheet management.
 
-> **Disclaimer:** This is an unofficial CLI tool, not endorsed by or affiliated with Google.
+> **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
 ## Dependency Check
 

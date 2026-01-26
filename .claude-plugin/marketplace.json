@@ -1,0 +1,32 @@
+{
+  "name": "workspace-cli",
+  "owner": {
+    "name": "Omri Ariav",
+    "email": "omriariav@gmail.com"
+  },
+  "metadata": {
+    "description": "Google Workspace CLI skills — teach Claude how to use gws for Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "gws",
+      "description": "Google Workspace CLI — manage Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search from the terminal",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/gmail",
+        "./skills/calendar",
+        "./skills/drive",
+        "./skills/docs",
+        "./skills/sheets",
+        "./skills/slides",
+        "./skills/tasks",
+        "./skills/chat",
+        "./skills/forms",
+        "./skills/search",
+        "./skills/auth"
+      ]
+    }
+  ]
+}

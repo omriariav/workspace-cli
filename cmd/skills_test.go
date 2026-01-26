@@ -32,51 +32,94 @@ func pluginDir(t *testing.T) string {
 
 // --- Plugin Manifest Tests ---
 
-func TestPluginJSON_Valid(t *testing.T) {
-	path := filepath.Join(pluginDir(t), "plugin.json")
+func TestMarketplaceJSON_Valid(t *testing.T) {
+	path := filepath.Join(pluginDir(t), "marketplace.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("failed to read plugin.json: %v", err)
+		t.Fatalf("failed to read marketplace.json: %v", err)
 	}
 
 	var manifest map[string]interface{}
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		t.Fatalf("plugin.json is not valid JSON: %v", err)
+		t.Fatalf("marketplace.json is not valid JSON: %v", err)
 	}
 
-	// Check required fields
-	requiredFields := []string{"name", "description", "author", "repository", "license", "skills", "keywords"}
+	// Check required top-level fields
+	requiredFields := []string{"name", "owner", "metadata", "plugins"}
 	for _, field := range requiredFields {
 		if _, ok := manifest[field]; !ok {
-			t.Errorf("plugin.json missing required field: %s", field)
+			t.Errorf("marketplace.json missing required field: %s", field)
 		}
 	}
 
 	// Validate name
-	if name, ok := manifest["name"].(string); !ok || name != "gws" {
-		t.Errorf("expected plugin name 'gws', got '%v'", manifest["name"])
+	if name, ok := manifest["name"].(string); !ok || name != "workspace-cli" {
+		t.Errorf("expected marketplace name 'workspace-cli', got '%v'", manifest["name"])
 	}
 
-	// Validate skills path
-	if skills, ok := manifest["skills"].(string); !ok || skills != "./skills/" {
-		t.Errorf("expected skills path './skills/', got '%v'", manifest["skills"])
-	}
-
-	// Validate author has name and url
-	if author, ok := manifest["author"].(map[string]interface{}); ok {
-		if _, ok := author["name"]; !ok {
-			t.Error("plugin.json author missing 'name'")
+	// Validate owner has name and email
+	if owner, ok := manifest["owner"].(map[string]interface{}); ok {
+		if _, ok := owner["name"]; !ok {
+			t.Error("marketplace.json owner missing 'name'")
 		}
-		if _, ok := author["url"]; !ok {
-			t.Error("plugin.json author missing 'url'")
+		if _, ok := owner["email"]; !ok {
+			t.Error("marketplace.json owner missing 'email'")
 		}
 	} else {
-		t.Error("plugin.json author is not an object")
+		t.Error("marketplace.json owner is not an object")
 	}
 
-	// Validate keywords is a non-empty array
-	if keywords, ok := manifest["keywords"].([]interface{}); !ok || len(keywords) == 0 {
-		t.Error("plugin.json keywords should be a non-empty array")
+	// Validate metadata has description and version
+	if meta, ok := manifest["metadata"].(map[string]interface{}); ok {
+		if _, ok := meta["description"]; !ok {
+			t.Error("marketplace.json metadata missing 'description'")
+		}
+		if _, ok := meta["version"]; !ok {
+			t.Error("marketplace.json metadata missing 'version'")
+		}
+	} else {
+		t.Error("marketplace.json metadata is not an object")
+	}
+
+	// Validate plugins array
+	plugins, ok := manifest["plugins"].([]interface{})
+	if !ok || len(plugins) == 0 {
+		t.Fatal("marketplace.json plugins should be a non-empty array")
+	}
+
+	// Validate the gws plugin entry
+	gwsPlugin, ok := plugins[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("first plugin entry is not an object")
+	}
+
+	if name, ok := gwsPlugin["name"].(string); !ok || name != "gws" {
+		t.Errorf("expected plugin name 'gws', got '%v'", gwsPlugin["name"])
+	}
+
+	// Validate skills array lists all 11 skill paths
+	skills, ok := gwsPlugin["skills"].([]interface{})
+	if !ok {
+		t.Fatal("plugin skills is not an array")
+	}
+
+	if len(skills) != len(expectedSkills) {
+		t.Errorf("expected %d skills in marketplace.json, got %d", len(expectedSkills), len(skills))
+	}
+
+	// Verify each expected skill has a path entry
+	for _, expected := range expectedSkills {
+		expectedPath := "./skills/" + expected
+		found := false
+		for _, s := range skills {
+			if s.(string) == expectedPath {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("marketplace.json missing skill path: %s", expectedPath)
+		}
 	}
 }
 
@@ -210,8 +253,8 @@ func TestSKILLmd_HasDisclaimer(t *testing.T) {
 			}
 			content := string(data)
 
-			if !strings.Contains(content, "unofficial") || !strings.Contains(content, "not endorsed by") {
-				t.Error("SKILL.md missing unofficial/not-endorsed disclaimer")
+			if !strings.Contains(content, "not the official Google CLI") || !strings.Contains(content, "not endorsed by") {
+				t.Error("SKILL.md missing not-official-Google-CLI disclaimer")
 			}
 		})
 	}
@@ -464,7 +507,7 @@ func TestReferenceFiles_HaveDisclaimer(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to read file: %v", err)
 			}
-			if !strings.Contains(string(data), "unofficial") {
+			if !strings.Contains(string(data), "not the official Google CLI") {
 				t.Error("references/commands.md missing unofficial disclaimer")
 			}
 		})
@@ -476,7 +519,7 @@ func TestReferenceFiles_HaveDisclaimer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to read file: %v", err)
 		}
-		if !strings.Contains(string(data), "unofficial") {
+		if !strings.Contains(string(data), "not the official Google CLI") {
 			t.Error("auth setup-guide.md missing unofficial disclaimer")
 		}
 	})
@@ -512,8 +555,8 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 
 	count := 0
 
-	// plugin.json
-	if _, err := os.Stat(filepath.Join(pDir, "plugin.json")); err == nil {
+	// marketplace.json
+	if _, err := os.Stat(filepath.Join(pDir, "marketplace.json")); err == nil {
 		count++
 	}
 
@@ -537,7 +580,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		count++
 	}
 
-	expectedTotal := 23 // 1 plugin.json + 11 SKILL.md + 10 commands.md + 1 setup-guide.md
+	expectedTotal := 23 // 1 marketplace.json + 11 SKILL.md + 10 commands.md + 1 setup-guide.md
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}

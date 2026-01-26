@@ -11,7 +11,7 @@ metadata:
 
 `gws drive` provides CLI access to Google Drive with structured JSON output.
 
-> **Disclaimer:** This is an unofficial CLI tool, not endorsed by or affiliated with Google.
+> **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
 ## Dependency Check
 
