@@ -152,6 +152,9 @@ func TestCalendarCommands(t *testing.T) {
 		{"list", "list"},
 		{"events", "events"},
 		{"create", "create"},
+		{"update", "update <event-id>"},
+		{"delete", "delete <event-id>"},
+		{"rsvp", "rsvp <event-id>"},
 	}
 
 	for _, tt := range tests {
