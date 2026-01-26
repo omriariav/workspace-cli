@@ -1,5 +1,28 @@
 # Releases
 
+## v0.9.0
+
+**Calendar Management**
+
+- `gws calendar update` - Update event fields (`--title`, `--start`, `--end`, `--description`, `--location`, `--add-attendees`)
+  - Uses `Events.Patch` to send only changed fields (avoids unnecessary attendee notifications)
+  - No-op guard when no update flags specified
+- `gws calendar delete` - Delete event from calendar
+- `gws calendar rsvp` - Accept/decline/tentative response to invites
+  - Finds current user via `Self` attendee field
+  - Client-side validation of response values
+
+## v0.8.0
+
+**Gmail Label Management**
+
+- `gws gmail labels` - List all Gmail labels (system + user)
+- `gws gmail label` - Add/remove labels by name (`--add`, `--remove`, comma-separated)
+  - Case-insensitive label name resolution via `fetchLabelMap` + `resolveFromMap`
+  - Single API call for label lookup even with both `--add` and `--remove`
+- `gws gmail archive` - Archive message (removes INBOX label)
+- `gws gmail trash` - Move message to trash
+
 ## v0.7.0
 
 **Drive Write Commands**
