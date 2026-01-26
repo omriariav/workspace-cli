@@ -109,6 +109,9 @@ Add `--format text` to any command for human-readable output.
 | `gws calendar list` | List all calendars |
 | `gws calendar events` | List upcoming events (`--days`, `--calendar-id`, `--max`) |
 | `gws calendar create` | Create event (`--title`, `--start`, `--end`, `--attendees`) |
+| `gws calendar update <id>` | Update event (`--title`, `--start`, `--end`, `--add-attendees`) |
+| `gws calendar delete <id>` | Delete event |
+| `gws calendar rsvp <id>` | RSVP to invite (`--response accepted/declined/tentative`) |
 
 ### Tasks
 

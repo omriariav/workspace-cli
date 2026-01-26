@@ -39,11 +39,61 @@ var calendarCreateCmd = &cobra.Command{
 	RunE:  runCalendarCreate,
 }
 
+var calendarUpdateCmd = &cobra.Command{
+	Use:   "update <event-id>",
+	Short: "Update an event",
+	Long: `Updates an existing calendar event. Only specified fields are changed.
+
+Examples:
+  gws calendar update abc123 --title "New Title"
+  gws calendar update abc123 --start "2024-02-01 14:00" --end "2024-02-01 15:00"
+  gws calendar update abc123 --add-attendees user@example.com
+  gws calendar update abc123 --location "Room 42" --description "Updated agenda"`,
+	Args: cobra.ExactArgs(1),
+	RunE: runCalendarUpdate,
+}
+
+var calendarDeleteCmd = &cobra.Command{
+	Use:   "delete <event-id>",
+	Short: "Delete an event",
+	Long: `Deletes a calendar event.
+
+Examples:
+  gws calendar delete abc123
+  gws calendar delete abc123 --calendar-id work@group.calendar.google.com`,
+	Args: cobra.ExactArgs(1),
+	RunE: runCalendarDelete,
+}
+
+var calendarRsvpCmd = &cobra.Command{
+	Use:   "rsvp <event-id>",
+	Short: "Respond to an event invitation",
+	Long: `Sets your RSVP status for a calendar event.
+
+Valid responses: accepted, declined, tentative
+
+Examples:
+  gws calendar rsvp abc123 --response accepted
+  gws calendar rsvp abc123 --response declined
+  gws calendar rsvp abc123 --response tentative`,
+	Args: cobra.ExactArgs(1),
+	RunE: runCalendarRsvp,
+}
+
+var validRsvpResponses = map[string]bool{
+	"accepted":  true,
+	"declined":  true,
+	"tentative": true,
+}
+
 func init() {
 	rootCmd.AddCommand(calendarCmd)
 	calendarCmd.AddCommand(calendarListCmd)
 	calendarCmd.AddCommand(calendarEventsCmd)
 	calendarCmd.AddCommand(calendarCreateCmd)
+	calendarCmd.AddCommand(calendarUpdateCmd)
+	calendarCmd.AddCommand(calendarDeleteCmd)
+	calendarCmd.AddCommand(calendarRsvpCmd)
 
 	// Events flags
 	calendarEventsCmd.Flags().Int("days", 7, "Number of days to look ahead")
@@ -61,6 +111,23 @@ func init() {
 	calendarCreateCmd.MarkFlagRequired("title")
 	calendarCreateCmd.MarkFlagRequired("start")
 	calendarCreateCmd.MarkFlagRequired("end")
+
+	// Update flags
+	calendarUpdateCmd.Flags().String("title", "", "New event title")
+	calendarUpdateCmd.Flags().String("start", "", "New start time")
+	calendarUpdateCmd.Flags().String("end", "", "New end time")
+	calendarUpdateCmd.Flags().String("description", "", "New event description")
+	calendarUpdateCmd.Flags().String("location", "", "New event location")
+	calendarUpdateCmd.Flags().StringSlice("add-attendees", nil, "Attendee emails to add")
+	calendarUpdateCmd.Flags().String("calendar-id", "primary", "Calendar ID")
+
+	// Delete flags
+	calendarDeleteCmd.Flags().String("calendar-id", "primary", "Calendar ID")
+
+	// RSVP flags
+	calendarRsvpCmd.Flags().String("response", "", "Response: accepted, declined, tentative (required)")
+	calendarRsvpCmd.Flags().String("calendar-id", "primary", "Calendar ID")
+	calendarRsvpCmd.MarkFlagRequired("response")
 }
 
 func runCalendarList(cmd *cobra.Command, args []string) error {
@@ -240,6 +307,209 @@ func runCalendarCreate(cmd *cobra.Command, args []string) error {
 		"id":           created.Id,
 		"html_link":    created.HtmlLink,
 		"hangout_link": created.HangoutLink,
+	})
+}
+
+func runCalendarUpdate(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	updateFlags := []string{"title", "start", "end", "description", "location", "add-attendees"}
+	hasChanges := false
+	for _, flag := range updateFlags {
+		if cmd.Flags().Changed(flag) {
+			hasChanges = true
+			break
+		}
+	}
+	if !hasChanges {
+		return p.PrintError(fmt.Errorf("at least one update flag is required (--title, --start, --end, --description, --location, --add-attendees)"))
+	}
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Calendar()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	eventID := args[0]
+	calendarID, _ := cmd.Flags().GetString("calendar-id")
+
+	// Build patch with only changed fields to avoid triggering
+	// unnecessary notifications or overwriting server-side fields
+	patch := &calendar.Event{}
+
+	if cmd.Flags().Changed("title") {
+		title, _ := cmd.Flags().GetString("title")
+		patch.Summary = title
+	}
+	if cmd.Flags().Changed("description") {
+		description, _ := cmd.Flags().GetString("description")
+		patch.Description = description
+	}
+	if cmd.Flags().Changed("location") {
+		location, _ := cmd.Flags().GetString("location")
+		patch.Location = location
+	}
+	if cmd.Flags().Changed("start") {
+		startStr, _ := cmd.Flags().GetString("start")
+		startTime, err := parseTime(startStr)
+		if err != nil {
+			return p.PrintError(fmt.Errorf("invalid start time: %w", err))
+		}
+		patch.Start = &calendar.EventDateTime{
+			DateTime: startTime.Format(time.RFC3339),
+			TimeZone: startTime.Location().String(),
+		}
+	}
+	if cmd.Flags().Changed("end") {
+		endStr, _ := cmd.Flags().GetString("end")
+		endTime, err := parseTime(endStr)
+		if err != nil {
+			return p.PrintError(fmt.Errorf("invalid end time: %w", err))
+		}
+		patch.End = &calendar.EventDateTime{
+			DateTime: endTime.Format(time.RFC3339),
+			TimeZone: endTime.Location().String(),
+		}
+	}
+	if cmd.Flags().Changed("add-attendees") {
+		// For attendees we need the existing list, so fetch the event
+		event, err := svc.Events.Get(calendarID, eventID).Fields("attendees").Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get event: %w", err))
+		}
+		newAttendees, _ := cmd.Flags().GetStringSlice("add-attendees")
+		patch.Attendees = event.Attendees
+		for _, email := range newAttendees {
+			patch.Attendees = append(patch.Attendees, &calendar.EventAttendee{Email: email})
+		}
+	}
+
+	updated, err := svc.Events.Patch(calendarID, eventID, patch).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update event: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":    "updated",
+		"id":        updated.Id,
+		"summary":   updated.Summary,
+		"html_link": updated.HtmlLink,
+	}
+
+	if updated.Start != nil {
+		if updated.Start.DateTime != "" {
+			result["start"] = updated.Start.DateTime
+		} else {
+			result["start"] = updated.Start.Date
+		}
+	}
+	if updated.End != nil {
+		if updated.End.DateTime != "" {
+			result["end"] = updated.End.DateTime
+		} else {
+			result["end"] = updated.End.Date
+		}
+	}
+
+	return p.Print(result)
+}
+
+func runCalendarDelete(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Calendar()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	eventID := args[0]
+	calendarID, _ := cmd.Flags().GetString("calendar-id")
+
+	// Get event info first for the response
+	event, err := svc.Events.Get(calendarID, eventID).Fields("summary").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get event: %w", err))
+	}
+
+	err = svc.Events.Delete(calendarID, eventID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete event: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":  "deleted",
+		"id":      eventID,
+		"summary": event.Summary,
+	})
+}
+
+func runCalendarRsvp(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Calendar()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	eventID := args[0]
+	calendarID, _ := cmd.Flags().GetString("calendar-id")
+	response, _ := cmd.Flags().GetString("response")
+
+	if !validRsvpResponses[response] {
+		return p.PrintError(fmt.Errorf("invalid response '%s': must be accepted, declined, or tentative", response))
+	}
+
+	// Get the event to find our attendee entry
+	event, err := svc.Events.Get(calendarID, eventID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get event: %w", err))
+	}
+
+	// Find and update our RSVP status
+	// The "self" field indicates the current user's attendee entry
+	found := false
+	for _, attendee := range event.Attendees {
+		if attendee.Self {
+			attendee.ResponseStatus = response
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return p.PrintError(fmt.Errorf("you are not an attendee of this event"))
+	}
+
+	updated, err := svc.Events.Patch(calendarID, eventID, &calendar.Event{
+		Attendees: event.Attendees,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update RSVP: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":   response,
+		"id":       updated.Id,
+		"summary":  updated.Summary,
+		"html_link": updated.HtmlLink,
 	})
 }
 
