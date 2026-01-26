@@ -1,0 +1,406 @@
+package cmd
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/option"
+)
+
+func TestGmailLabelsCommand_Help(t *testing.T) {
+	cmd := gmailLabelsCmd
+
+	if cmd.Use != "labels" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+}
+
+func TestGmailLabelCommand_Flags(t *testing.T) {
+	cmd := gmailLabelCmd
+
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+
+	addFlag := cmd.Flags().Lookup("add")
+	if addFlag == nil {
+		t.Error("expected --add flag to exist")
+	}
+
+	removeFlag := cmd.Flags().Lookup("remove")
+	if removeFlag == nil {
+		t.Error("expected --remove flag to exist")
+	}
+}
+
+func TestGmailLabelCommand_Help(t *testing.T) {
+	cmd := gmailLabelCmd
+
+	if cmd.Use != "label <message-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+
+	if cmd.Long == "" {
+		t.Error("expected Long description to be set")
+	}
+}
+
+func TestGmailArchiveCommand_Help(t *testing.T) {
+	cmd := gmailArchiveCmd
+
+	if cmd.Use != "archive <message-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestGmailTrashCommand_Help(t *testing.T) {
+	cmd := gmailTrashCmd
+
+	if cmd.Use != "trash <message-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// TestGmailLabels_MockServer tests labels list API integration
+func TestGmailLabels_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/gmail/v1/users/me/labels" && r.Method == "GET" {
+			resp := &gmail.ListLabelsResponse{
+				Labels: []*gmail.Label{
+					{Id: "INBOX", Name: "INBOX", Type: "system"},
+					{Id: "STARRED", Name: "STARRED", Type: "system"},
+					{Id: "UNREAD", Name: "UNREAD", Type: "system"},
+					{Id: "TRASH", Name: "TRASH", Type: "system"},
+					{Id: "Label_1", Name: "ActionNeeded", Type: "user"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	resp, err := svc.Users.Labels.List("me").Do()
+	if err != nil {
+		t.Fatalf("failed to list labels: %v", err)
+	}
+
+	if len(resp.Labels) != 5 {
+		t.Errorf("expected 5 labels, got %d", len(resp.Labels))
+	}
+
+	// Verify user label
+	found := false
+	for _, label := range resp.Labels {
+		if label.Name == "ActionNeeded" && label.Type == "user" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find 'ActionNeeded' user label")
+	}
+}
+
+// TestGmailLabel_MockServer tests label modify API integration
+func TestGmailLabel_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Labels list (for name resolution)
+		if r.URL.Path == "/gmail/v1/users/me/labels" && r.Method == "GET" {
+			resp := &gmail.ListLabelsResponse{
+				Labels: []*gmail.Label{
+					{Id: "INBOX", Name: "INBOX", Type: "system"},
+					{Id: "STARRED", Name: "STARRED", Type: "system"},
+					{Id: "Label_1", Name: "ActionNeeded", Type: "user"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Modify message
+		if r.URL.Path == "/gmail/v1/users/me/messages/msg-123/modify" && r.Method == "POST" {
+			var req gmail.ModifyMessageRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			// Verify label IDs in request
+			if len(req.AddLabelIds) != 1 || req.AddLabelIds[0] != "STARRED" {
+				t.Errorf("unexpected AddLabelIds: %v", req.AddLabelIds)
+			}
+			if len(req.RemoveLabelIds) != 1 || req.RemoveLabelIds[0] != "INBOX" {
+				t.Errorf("unexpected RemoveLabelIds: %v", req.RemoveLabelIds)
+			}
+
+			resp := &gmail.Message{
+				Id:       "msg-123",
+				LabelIds: []string{"STARRED", "Label_1"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	// Resolve label names to IDs
+	ids, err := resolveLabelNames(svc, []string{"STARRED"})
+	if err != nil {
+		t.Fatalf("failed to resolve label names: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != "STARRED" {
+		t.Errorf("unexpected resolved IDs: %v", ids)
+	}
+
+	// Modify message
+	req := &gmail.ModifyMessageRequest{
+		AddLabelIds:    []string{"STARRED"},
+		RemoveLabelIds: []string{"INBOX"},
+	}
+
+	msg, err := svc.Users.Messages.Modify("me", "msg-123", req).Do()
+	if err != nil {
+		t.Fatalf("failed to modify message: %v", err)
+	}
+
+	if msg.Id != "msg-123" {
+		t.Errorf("unexpected message id: %s", msg.Id)
+	}
+}
+
+// TestGmailArchive_MockServer tests archive API integration
+func TestGmailArchive_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/gmail/v1/users/me/messages/msg-456/modify" && r.Method == "POST" {
+			var req gmail.ModifyMessageRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			if len(req.RemoveLabelIds) != 1 || req.RemoveLabelIds[0] != "INBOX" {
+				t.Errorf("expected RemoveLabelIds=[INBOX], got: %v", req.RemoveLabelIds)
+			}
+
+			resp := &gmail.Message{
+				Id:       "msg-456",
+				LabelIds: []string{"UNREAD"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	req := &gmail.ModifyMessageRequest{
+		RemoveLabelIds: []string{"INBOX"},
+	}
+
+	msg, err := svc.Users.Messages.Modify("me", "msg-456", req).Do()
+	if err != nil {
+		t.Fatalf("failed to archive message: %v", err)
+	}
+
+	if msg.Id != "msg-456" {
+		t.Errorf("unexpected message id: %s", msg.Id)
+	}
+
+	// Verify INBOX was removed
+	for _, label := range msg.LabelIds {
+		if label == "INBOX" {
+			t.Error("INBOX label should have been removed")
+		}
+	}
+}
+
+// TestGmailTrash_MockServer tests trash API integration
+func TestGmailTrash_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/gmail/v1/users/me/messages/msg-789/trash" && r.Method == "POST" {
+			resp := &gmail.Message{
+				Id:       "msg-789",
+				LabelIds: []string{"TRASH"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	msg, err := svc.Users.Messages.Trash("me", "msg-789").Do()
+	if err != nil {
+		t.Fatalf("failed to trash message: %v", err)
+	}
+
+	if msg.Id != "msg-789" {
+		t.Errorf("unexpected message id: %s", msg.Id)
+	}
+}
+
+// TestResolveLabelNames tests label name to ID resolution
+func TestResolveLabelNames(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/gmail/v1/users/me/labels" && r.Method == "GET" {
+			resp := &gmail.ListLabelsResponse{
+				Labels: []*gmail.Label{
+					{Id: "INBOX", Name: "INBOX", Type: "system"},
+					{Id: "STARRED", Name: "STARRED", Type: "system"},
+					{Id: "Label_1", Name: "ActionNeeded", Type: "user"},
+					{Id: "Label_2", Name: "FollowUp", Type: "user"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	t.Run("resolve system label", func(t *testing.T) {
+		ids, err := resolveLabelNames(svc, []string{"INBOX"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(ids) != 1 || ids[0] != "INBOX" {
+			t.Errorf("unexpected ids: %v", ids)
+		}
+	})
+
+	t.Run("resolve user label case-insensitive", func(t *testing.T) {
+		ids, err := resolveLabelNames(svc, []string{"actionneeded"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(ids) != 1 || ids[0] != "Label_1" {
+			t.Errorf("unexpected ids: %v", ids)
+		}
+	})
+
+	t.Run("resolve multiple labels", func(t *testing.T) {
+		ids, err := resolveLabelNames(svc, []string{"STARRED", "FollowUp"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(ids) != 2 {
+			t.Errorf("expected 2 ids, got %d", len(ids))
+		}
+	})
+
+	t.Run("unknown label returns error", func(t *testing.T) {
+		_, err := resolveLabelNames(svc, []string{"NonExistent"})
+		if err == nil {
+			t.Error("expected error for unknown label")
+		}
+	})
+
+	t.Run("empty names skipped", func(t *testing.T) {
+		ids, err := resolveLabelNames(svc, []string{"INBOX", "", "  "})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(ids) != 1 {
+			t.Errorf("expected 1 id, got %d", len(ids))
+		}
+	})
+}
+
+// TestGmailLabel_OutputFormat tests the label modify response format
+func TestGmailLabel_OutputFormat(t *testing.T) {
+	result := map[string]interface{}{
+		"status":     "modified",
+		"message_id": "msg-123",
+		"labels":     []string{"STARRED", "Label_1"},
+	}
+
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		t.Fatalf("failed to encode result: %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to decode result: %v", err)
+	}
+
+	if decoded["status"] != "modified" {
+		t.Errorf("unexpected status: %v", decoded["status"])
+	}
+
+	if decoded["message_id"] != "msg-123" {
+		t.Errorf("unexpected message_id: %v", decoded["message_id"])
+	}
+}

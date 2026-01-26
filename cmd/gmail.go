@@ -41,11 +41,60 @@ var gmailSendCmd = &cobra.Command{
 	RunE:  runGmailSend,
 }
 
+var gmailLabelsCmd = &cobra.Command{
+	Use:   "labels",
+	Short: "List all labels",
+	Long:  "Lists all Gmail labels in the account.",
+	RunE:  runGmailLabels,
+}
+
+var gmailLabelCmd = &cobra.Command{
+	Use:   "label <message-id>",
+	Short: "Add or remove labels",
+	Long: `Adds or removes labels from a Gmail message.
+
+Use --add and --remove to specify label names (comma-separated).
+Use "gws gmail labels" to see available labels.
+
+Examples:
+  gws gmail label 18abc123 --add "STARRED"
+  gws gmail label 18abc123 --add "ActionNeeded,IMPORTANT" --remove "INBOX"
+  gws gmail label 18abc123 --remove "UNREAD"`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGmailLabel,
+}
+
+var gmailArchiveCmd = &cobra.Command{
+	Use:   "archive <message-id>",
+	Short: "Archive a message",
+	Long: `Archives a Gmail message by removing the INBOX label.
+
+Examples:
+  gws gmail archive 18abc123`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGmailArchive,
+}
+
+var gmailTrashCmd = &cobra.Command{
+	Use:   "trash <message-id>",
+	Short: "Trash a message",
+	Long: `Moves a Gmail message to the trash.
+
+Examples:
+  gws gmail trash 18abc123`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGmailTrash,
+}
+
 func init() {
 	rootCmd.AddCommand(gmailCmd)
 	gmailCmd.AddCommand(gmailListCmd)
 	gmailCmd.AddCommand(gmailReadCmd)
 	gmailCmd.AddCommand(gmailSendCmd)
+	gmailCmd.AddCommand(gmailLabelsCmd)
+	gmailCmd.AddCommand(gmailLabelCmd)
+	gmailCmd.AddCommand(gmailArchiveCmd)
+	gmailCmd.AddCommand(gmailTrashCmd)
 
 	// List flags
 	gmailListCmd.Flags().Int64("max", 10, "Maximum number of results")
@@ -60,6 +109,10 @@ func init() {
 	gmailSendCmd.MarkFlagRequired("to")
 	gmailSendCmd.MarkFlagRequired("subject")
 	gmailSendCmd.MarkFlagRequired("body")
+
+	// Label flags
+	gmailLabelCmd.Flags().String("add", "", "Label names to add (comma-separated)")
+	gmailLabelCmd.Flags().String("remove", "", "Label names to remove (comma-separated)")
 }
 
 func runGmailList(cmd *cobra.Command, args []string) error {
@@ -223,6 +276,181 @@ func runGmailSend(cmd *cobra.Command, args []string) error {
 		"status":     "sent",
 		"message_id": sent.Id,
 		"thread_id":  sent.ThreadId,
+	})
+}
+
+func runGmailLabels(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	resp, err := svc.Users.Labels.List("me").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to list labels: %w", err))
+	}
+
+	results := make([]map[string]interface{}, 0, len(resp.Labels))
+	for _, label := range resp.Labels {
+		l := map[string]interface{}{
+			"id":   label.Id,
+			"name": label.Name,
+			"type": label.Type,
+		}
+		results = append(results, l)
+	}
+
+	return p.Print(map[string]interface{}{
+		"labels": results,
+		"count":  len(results),
+	})
+}
+
+// resolveLabelNames converts label names to label IDs.
+// Gmail API requires IDs for modify, but users think in names.
+func resolveLabelNames(svc *gmail.Service, names []string) ([]string, error) {
+	resp, err := svc.Users.Labels.List("me").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list labels: %w", err)
+	}
+
+	nameToID := make(map[string]string, len(resp.Labels))
+	for _, label := range resp.Labels {
+		nameToID[strings.ToUpper(label.Name)] = label.Id
+	}
+
+	ids := make([]string, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		id, ok := nameToID[strings.ToUpper(name)]
+		if !ok {
+			return nil, fmt.Errorf("label not found: %s", name)
+		}
+		ids = append(ids, id)
+	}
+
+	return ids, nil
+}
+
+func runGmailLabel(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	messageID := args[0]
+	addStr, _ := cmd.Flags().GetString("add")
+	removeStr, _ := cmd.Flags().GetString("remove")
+
+	if addStr == "" && removeStr == "" {
+		return p.PrintError(fmt.Errorf("at least one of --add or --remove is required"))
+	}
+
+	req := &gmail.ModifyMessageRequest{}
+
+	if addStr != "" {
+		ids, err := resolveLabelNames(svc, strings.Split(addStr, ","))
+		if err != nil {
+			return p.PrintError(err)
+		}
+		req.AddLabelIds = ids
+	}
+
+	if removeStr != "" {
+		ids, err := resolveLabelNames(svc, strings.Split(removeStr, ","))
+		if err != nil {
+			return p.PrintError(err)
+		}
+		req.RemoveLabelIds = ids
+	}
+
+	msg, err := svc.Users.Messages.Modify("me", messageID, req).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to modify labels: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":     "modified",
+		"message_id": msg.Id,
+		"labels":     msg.LabelIds,
+	})
+}
+
+func runGmailArchive(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	messageID := args[0]
+
+	req := &gmail.ModifyMessageRequest{
+		RemoveLabelIds: []string{"INBOX"},
+	}
+
+	msg, err := svc.Users.Messages.Modify("me", messageID, req).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to archive message: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":     "archived",
+		"message_id": msg.Id,
+		"labels":     msg.LabelIds,
+	})
+}
+
+func runGmailTrash(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	messageID := args[0]
+
+	msg, err := svc.Users.Messages.Trash("me", messageID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to trash message: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":     "trashed",
+		"message_id": msg.Id,
 	})
 }
 
