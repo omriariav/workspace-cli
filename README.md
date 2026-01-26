@@ -269,6 +269,17 @@ make tidy       # Tidy go modules
 gws auth logout && gws auth login
 ```
 
+## Claude Code Plugin
+
+`gws` ships with a Claude Code plugin that teaches Claude how to use every command. Install it to get context-aware help for all 10+ services:
+
+```bash
+# From Claude Code, run:
+/install-plugin omriariav/workspace-cli
+```
+
+The plugin includes 11 skills (one per Google service + auth setup), each with quick reference tables, detailed flag documentation, and AI agent tips.
+
 ## License
 
 `gws` is available under the [MIT License](LICENSE).
