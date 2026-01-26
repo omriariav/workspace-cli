@@ -1,0 +1,25 @@
+{
+  "name": "gws",
+  "description": "Google Workspace CLI - manage Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search from the terminal",
+  "author": {
+    "name": "Omri Ariav",
+    "url": "https://github.com/omriariav"
+  },
+  "repository": "https://github.com/omriariav/workspace-cli",
+  "license": "MIT",
+  "skills": "./skills/",
+  "keywords": [
+    "google",
+    "workspace",
+    "gmail",
+    "calendar",
+    "drive",
+    "docs",
+    "sheets",
+    "slides",
+    "tasks",
+    "chat",
+    "forms",
+    "gsuite"
+  ]
+}
