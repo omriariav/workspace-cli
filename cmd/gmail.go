@@ -314,9 +314,8 @@ func runGmailLabels(cmd *cobra.Command, args []string) error {
 	})
 }
 
-// resolveLabelNames converts label names to label IDs.
-// Gmail API requires IDs for modify, but users think in names.
-func resolveLabelNames(svc *gmail.Service, names []string) ([]string, error) {
+// fetchLabelMap fetches all Gmail labels and returns a case-insensitive name-to-ID map.
+func fetchLabelMap(svc *gmail.Service) (map[string]string, error) {
 	resp, err := svc.Users.Labels.List("me").Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list labels: %w", err)
@@ -327,20 +326,34 @@ func resolveLabelNames(svc *gmail.Service, names []string) ([]string, error) {
 		nameToID[strings.ToUpper(label.Name)] = label.Id
 	}
 
+	return nameToID, nil
+}
+
+// resolveFromMap converts label names to IDs using a pre-fetched label map.
+func resolveFromMap(labelMap map[string]string, names []string) ([]string, error) {
 	ids := make([]string, 0, len(names))
 	for _, name := range names {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		id, ok := nameToID[strings.ToUpper(name)]
+		id, ok := labelMap[strings.ToUpper(name)]
 		if !ok {
 			return nil, fmt.Errorf("label not found: %s", name)
 		}
 		ids = append(ids, id)
 	}
-
 	return ids, nil
+}
+
+// resolveLabelNames converts label names to label IDs.
+// Gmail API requires IDs for modify, but users think in names.
+func resolveLabelNames(svc *gmail.Service, names []string) ([]string, error) {
+	labelMap, err := fetchLabelMap(svc)
+	if err != nil {
+		return nil, err
+	}
+	return resolveFromMap(labelMap, names)
 }
 
 func runGmailLabel(cmd *cobra.Command, args []string) error {
@@ -365,10 +378,16 @@ func runGmailLabel(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("at least one of --add or --remove is required"))
 	}
 
+	// Fetch label map once for both add and remove
+	labelMap, err := fetchLabelMap(svc)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	req := &gmail.ModifyMessageRequest{}
 
 	if addStr != "" {
-		ids, err := resolveLabelNames(svc, strings.Split(addStr, ","))
+		ids, err := resolveFromMap(labelMap, strings.Split(addStr, ","))
 		if err != nil {
 			return p.PrintError(err)
 		}
@@ -376,7 +395,7 @@ func runGmailLabel(cmd *cobra.Command, args []string) error {
 	}
 
 	if removeStr != "" {
-		ids, err := resolveLabelNames(svc, strings.Split(removeStr, ","))
+		ids, err := resolveFromMap(labelMap, strings.Split(removeStr, ","))
 		if err != nil {
 			return p.PrintError(err)
 		}
