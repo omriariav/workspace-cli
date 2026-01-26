@@ -406,10 +406,18 @@ func TestSearchSkill_DocumentsCLI(t *testing.T) {
 	}
 
 	// Verify key flags are documented
-	requiredFlags := []string{"--max", "--site", "--type", "--start"}
+	requiredFlags := []string{"--max", "--site", "--type", "--start", "--api-key", "--engine-id"}
 	for _, flag := range requiredFlags {
 		if !strings.Contains(content, flag) {
 			t.Errorf("search SKILL.md missing flag documentation: %s", flag)
+		}
+	}
+
+	// Cross-reference: verify documented flags actually exist on the CLI command
+	for _, flag := range requiredFlags {
+		flagName := strings.TrimPrefix(flag, "--")
+		if searchCmd.Flags().Lookup(flagName) == nil {
+			t.Errorf("documented flag %s does not exist on CLI search command", flag)
 		}
 	}
 }

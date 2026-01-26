@@ -38,6 +38,7 @@ Requires separate API credentials beyond standard OAuth:
 | Search a site | `gws search "query" --site example.com` |
 | Image search | `gws search "query" --type image` |
 | Paginate results | `gws search "query" --start 11` |
+| Override API key | `gws search "query" --api-key <key> --engine-id <id>` |
 
 ## Detailed Usage
 
