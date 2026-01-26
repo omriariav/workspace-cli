@@ -208,6 +208,62 @@ gws tasks move <list-id> <task-id> --parent <parent-task-id>
 
 ---
 
+## CLI Infrastructure (Competitive Gaps)
+
+Identified from comparison with [jenkins-cli](https://github.com/avivsinai/jenkins-cli) and [bitbucket-cli](https://github.com/avivsinai/bitbucket-cli).
+
+### Add golangci-lint (P1, S)
+
+Replace basic `go vet` with golangci-lint for comprehensive static analysis. Both `jk` and `bkt` use it.
+
+```makefile
+lint:
+	golangci-lint run ./...
+```
+
+### Add YAML output format (P1, M)
+
+Add `--format yaml` alongside existing JSON and text. Both `jk` and `bkt` support YAML output.
+
+```bash
+gws gmail list --max 5 --format yaml
+```
+
+### OS keychain token storage (P2, M)
+
+Store OAuth tokens in OS keychain (macOS Keychain, Linux Secret Service) instead of plain JSON file at `~/.config/gws/token.json`. `bkt` uses [go-keyring](https://github.com/zalando/go-keyring) for this.
+
+### Multi-account support (P2, C)
+
+Support multiple Google accounts with context switching, similar to `jk context use` and `bkt context create`.
+
+```bash
+gws context add work --client-id=xxx
+gws context add personal --client-id=yyy
+gws context use work
+# or: GWS_CONTEXT=personal gws gmail list
+```
+
+### jq / Go template filtering (P3, M)
+
+Add `--jq` and `--template` flags for output filtering, matching `jk`'s approach.
+
+```bash
+gws gmail list --max 5 --jq '.[].subject'
+gws calendar events --template '{{range .}}{{.summary}} at {{.start}}{{end}}'
+```
+
+### Extension / plugin system (P3, C)
+
+Allow custom commands via git-cloned extensions, similar to `bkt`'s `bkt-<name>` convention.
+
+```bash
+gws extension install github.com/user/gws-morning
+gws morning  # runs extension
+```
+
+---
+
 ## Feature Ideas (P3)
 
 ### /morning Command
