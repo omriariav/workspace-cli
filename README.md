@@ -97,6 +97,10 @@ Add `--format text` to any command for human-readable output.
 | `gws gmail list` | List threads (`--max`, `--query`) |
 | `gws gmail read <id>` | Read message body and headers |
 | `gws gmail send` | Send email (`--to`, `--subject`, `--body`, `--cc`, `--bcc`) |
+| `gws gmail labels` | List all labels |
+| `gws gmail label <id>` | Add/remove labels (`--add`, `--remove`) |
+| `gws gmail archive <id>` | Archive message (remove from inbox) |
+| `gws gmail trash <id>` | Move message to trash |
 
 ### Calendar
 
