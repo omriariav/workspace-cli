@@ -2,7 +2,7 @@
   "name": "workspace-cli",
   "owner": {
     "name": "Omri Ariav",
-    "email": "omriariav@gmail.com"
+    "email": "omri.ariav@gmail.com"
   },
   "metadata": {
     "description": "Unofficial Google Workspace CLI skills — teach Claude how to use gws for Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search. Not affiliated with Google.",
