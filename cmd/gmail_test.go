@@ -376,6 +376,144 @@ func TestResolveLabelNames(t *testing.T) {
 	})
 }
 
+func TestGmailThreadCommand_Help(t *testing.T) {
+	cmd := gmailThreadCmd
+
+	if cmd.Use != "thread <thread-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+
+	if cmd.Long == "" {
+		t.Error("expected Long description to be set")
+	}
+
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// TestGmailThread_MockServer tests thread read API integration
+func TestGmailThread_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/gmail/v1/users/me/threads/thread-abc" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"id": "thread-abc",
+				"messages": []map[string]interface{}{
+					{
+						"id":       "msg-001",
+						"threadId": "thread-abc",
+						"labelIds": []string{"INBOX", "UNREAD"},
+						"payload": map[string]interface{}{
+							"headers": []map[string]string{
+								{"name": "Subject", "value": "Hello"},
+								{"name": "From", "value": "alice@example.com"},
+								{"name": "To", "value": "bob@example.com"},
+								{"name": "Date", "value": "Mon, 1 Jan 2024 10:00:00 +0000"},
+							},
+							"mimeType": "text/plain",
+							"body": map[string]interface{}{
+								"data": "SGVsbG8gQm9i", // "Hello Bob" base64url
+							},
+						},
+					},
+					{
+						"id":       "msg-002",
+						"threadId": "thread-abc",
+						"labelIds": []string{"INBOX"},
+						"payload": map[string]interface{}{
+							"headers": []map[string]string{
+								{"name": "Subject", "value": "Re: Hello"},
+								{"name": "From", "value": "bob@example.com"},
+								{"name": "To", "value": "alice@example.com"},
+								{"name": "Date", "value": "Mon, 1 Jan 2024 11:00:00 +0000"},
+							},
+							"mimeType": "text/plain",
+							"body": map[string]interface{}{
+								"data": "SGkgQWxpY2U=", // "Hi Alice" base64url
+							},
+						},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	thread, err := svc.Users.Threads.Get("me", "thread-abc").Format("full").Do()
+	if err != nil {
+		t.Fatalf("failed to get thread: %v", err)
+	}
+
+	if thread.Id != "thread-abc" {
+		t.Errorf("unexpected thread id: %s", thread.Id)
+	}
+
+	if len(thread.Messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(thread.Messages))
+	}
+
+	if thread.Messages[0].Id != "msg-001" {
+		t.Errorf("unexpected first message id: %s", thread.Messages[0].Id)
+	}
+
+	if thread.Messages[1].Id != "msg-002" {
+		t.Errorf("unexpected second message id: %s", thread.Messages[1].Id)
+	}
+}
+
+// TestGmailList_OutputFormat tests that list output includes both thread_id and message_id
+func TestGmailList_OutputFormat(t *testing.T) {
+	result := map[string]interface{}{
+		"thread_id":     "thread-abc",
+		"message_id":    "msg-002",
+		"message_count": 2,
+		"snippet":       "Hi Alice",
+		"subject":       "Hello",
+		"from":          "alice@example.com",
+		"date":          "Mon, 1 Jan 2024 10:00:00 +0000",
+	}
+
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		t.Fatalf("failed to encode result: %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to decode result: %v", err)
+	}
+
+	if decoded["thread_id"] != "thread-abc" {
+		t.Errorf("unexpected thread_id: %v", decoded["thread_id"])
+	}
+
+	if decoded["message_id"] != "msg-002" {
+		t.Errorf("unexpected message_id: %v", decoded["message_id"])
+	}
+
+	if decoded["message_count"] != float64(2) {
+		t.Errorf("unexpected message_count: %v", decoded["message_count"])
+	}
+}
+
 // TestGmailLabel_OutputFormat tests the label modify response format
 func TestGmailLabel_OutputFormat(t *testing.T) {
 	result := map[string]interface{}{
