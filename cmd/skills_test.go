@@ -345,7 +345,7 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 	services := map[string]serviceCommands{
 		"gmail": {
 			parentCmd:   gmailCmd,
-			subcommands: []string{"list", "read", "send", "labels", "label", "archive", "trash", "thread"},
+			subcommands: []string{"list", "read", "send", "labels", "label", "archive", "archive-thread", "trash", "thread"},
 		},
 		"calendar": {
 			parentCmd:   calendarCmd,

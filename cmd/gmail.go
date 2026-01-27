@@ -86,6 +86,18 @@ Examples:
 	RunE: runGmailTrash,
 }
 
+var gmailArchiveThreadCmd = &cobra.Command{
+	Use:   "archive-thread <thread-id>",
+	Short: "Archive all messages in a thread",
+	Long: `Archives all messages in a Gmail thread by removing the INBOX label
+and marking them as read.
+
+Examples:
+  gws gmail archive-thread 18abc123`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGmailArchiveThread,
+}
+
 var gmailThreadCmd = &cobra.Command{
 	Use:   "thread <thread-id>",
 	Short: "Read a full thread",
@@ -107,6 +119,7 @@ func init() {
 	gmailCmd.AddCommand(gmailLabelsCmd)
 	gmailCmd.AddCommand(gmailLabelCmd)
 	gmailCmd.AddCommand(gmailArchiveCmd)
+	gmailCmd.AddCommand(gmailArchiveThreadCmd)
 	gmailCmd.AddCommand(gmailTrashCmd)
 	gmailCmd.AddCommand(gmailThreadCmd)
 
@@ -463,6 +476,52 @@ func runGmailArchive(cmd *cobra.Command, args []string) error {
 		"status":     "archived",
 		"message_id": msg.Id,
 		"labels":     msg.LabelIds,
+	})
+}
+
+func runGmailArchiveThread(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	threadID := args[0]
+
+	// Fetch thread with minimal format to get message IDs
+	thread, err := svc.Users.Threads.Get("me", threadID).Format("minimal").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get thread: %w", err))
+	}
+
+	archived := 0
+	failed := 0
+	for _, msg := range thread.Messages {
+		// Remove INBOX and UNREAD labels
+		req := &gmail.ModifyMessageRequest{
+			RemoveLabelIds: []string{"INBOX", "UNREAD"},
+		}
+		_, err := svc.Users.Messages.Modify("me", msg.Id, req).Do()
+		if err != nil {
+			failed++
+			continue
+		}
+		archived++
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":    "archived",
+		"thread_id": threadID,
+		"archived":  archived,
+		"failed":    failed,
+		"total":     len(thread.Messages),
 	})
 }
 

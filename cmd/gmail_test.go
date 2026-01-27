@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"google.golang.org/api/gmail/v1"
@@ -67,6 +68,118 @@ func TestGmailArchiveCommand_Help(t *testing.T) {
 
 	if cmd.Args == nil {
 		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestGmailArchiveThreadCommand_Help(t *testing.T) {
+	cmd := gmailArchiveThreadCmd
+
+	if cmd.Use != "archive-thread <thread-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// TestGmailArchiveThread_MockServer tests archive-thread API integration
+func TestGmailArchiveThread_MockServer(t *testing.T) {
+	modifiedMsgs := make(map[string]bool)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Thread get (minimal format)
+		if r.URL.Path == "/gmail/v1/users/me/threads/thread-xyz" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"id": "thread-xyz",
+				"messages": []map[string]interface{}{
+					{"id": "msg-a", "threadId": "thread-xyz", "labelIds": []string{"INBOX", "UNREAD"}},
+					{"id": "msg-b", "threadId": "thread-xyz", "labelIds": []string{"INBOX"}},
+					{"id": "msg-c", "threadId": "thread-xyz", "labelIds": []string{"INBOX", "UNREAD"}},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Modify message (archive + mark read)
+		if r.Method == "POST" && (r.URL.Path == "/gmail/v1/users/me/messages/msg-a/modify" ||
+			r.URL.Path == "/gmail/v1/users/me/messages/msg-b/modify" ||
+			r.URL.Path == "/gmail/v1/users/me/messages/msg-c/modify") {
+
+			var req gmail.ModifyMessageRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			// Verify INBOX and UNREAD are being removed
+			hasInbox := false
+			hasUnread := false
+			for _, id := range req.RemoveLabelIds {
+				if id == "INBOX" {
+					hasInbox = true
+				}
+				if id == "UNREAD" {
+					hasUnread = true
+				}
+			}
+			if !hasInbox || !hasUnread {
+				t.Errorf("expected RemoveLabelIds to contain INBOX and UNREAD, got: %v", req.RemoveLabelIds)
+			}
+
+			// Extract message ID from path
+			parts := strings.Split(r.URL.Path, "/")
+			msgID := parts[len(parts)-2] // .../messages/<id>/modify
+			modifiedMsgs[msgID] = true
+
+			resp := &gmail.Message{
+				Id:       msgID,
+				LabelIds: []string{},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	// Fetch thread
+	thread, err := svc.Users.Threads.Get("me", "thread-xyz").Format("minimal").Do()
+	if err != nil {
+		t.Fatalf("failed to get thread: %v", err)
+	}
+
+	if len(thread.Messages) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(thread.Messages))
+	}
+
+	// Archive each message (remove INBOX + UNREAD)
+	for _, msg := range thread.Messages {
+		req := &gmail.ModifyMessageRequest{
+			RemoveLabelIds: []string{"INBOX", "UNREAD"},
+		}
+		_, err := svc.Users.Messages.Modify("me", msg.Id, req).Do()
+		if err != nil {
+			t.Errorf("failed to archive message %s: %v", msg.Id, err)
+		}
+	}
+
+	// Verify all messages were modified
+	for _, expectedID := range []string{"msg-a", "msg-b", "msg-c"} {
+		if !modifiedMsgs[expectedID] {
+			t.Errorf("message %s was not archived", expectedID)
+		}
 	}
 }
 

@@ -90,6 +90,7 @@ func TestGmailCommands(t *testing.T) {
 		{"label", "label <message-id>", true},
 		{"archive", "archive <message-id>", true},
 		{"trash", "trash <message-id>", true},
+		{"archive-thread", "archive-thread <thread-id>", true},
 		{"thread", "thread <thread-id>", true},
 	}
 

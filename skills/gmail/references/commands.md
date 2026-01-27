@@ -182,6 +182,26 @@ No additional flags. Equivalent to `gws gmail label <id> --remove "INBOX"`.
 
 ---
 
+## gws gmail archive-thread
+
+Archives all messages in a Gmail thread by removing the INBOX label and marking all messages as read.
+
+```
+Usage: gws gmail archive-thread <thread-id>
+```
+
+No additional flags. Use the `thread_id` from `gws gmail list` output. More efficient than archiving individual messages for multi-message threads.
+
+### Output Fields (JSON)
+
+- `status` — Always `"archived"`
+- `thread_id` — Thread ID
+- `archived` — Number of messages successfully archived
+- `failed` — Number of messages that failed to archive
+- `total` — Total messages in the thread
+
+---
+
 ## gws gmail trash
 
 Moves a Gmail message to the trash.
