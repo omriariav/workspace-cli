@@ -20,6 +20,14 @@ func TestRootCommand_Flags(t *testing.T) {
 	if configFlag == nil {
 		t.Error("expected --config flag to exist")
 	}
+
+	quietFlag := rootCmd.PersistentFlags().Lookup("quiet")
+	if quietFlag == nil {
+		t.Error("expected --quiet flag to exist")
+	}
+	if quietFlag.DefValue != "false" {
+		t.Errorf("expected --quiet default to be 'false', got '%s'", quietFlag.DefValue)
+	}
 }
 
 func TestRootCommand_HasSubcommands(t *testing.T) {
