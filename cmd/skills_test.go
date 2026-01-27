@@ -581,8 +581,137 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		count++
 	}
 
-	expectedTotal := 24 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md
+	// morning skill: prompts + scripts
+	morningExtras := []string{
+		"morning/prompts/batch-classifier.md",
+		"morning/prompts/deep-dive.md",
+		"morning/scripts/bulk-gmail.sh",
+	}
+	for _, f := range morningExtras {
+		if _, err := os.Stat(filepath.Join(base, f)); err == nil {
+			count++
+		}
+	}
+
+	expectedTotal := 27 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md + 3 morning extras
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
+	}
+}
+
+// --- Morning Workflow Skill Tests ---
+
+func TestMorningSkill_PromptFilesExist(t *testing.T) {
+	base := skillsDir(t)
+	prompts := []string{
+		"prompts/batch-classifier.md",
+		"prompts/deep-dive.md",
+	}
+	for _, p := range prompts {
+		path := filepath.Join(base, "morning", p)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Errorf("morning prompt file missing: %s", p)
+		}
+	}
+}
+
+func TestMorningSkill_PromptFilesSpecifyModel(t *testing.T) {
+	base := skillsDir(t)
+	prompts := map[string]string{
+		"prompts/batch-classifier.md": "sonnet",
+		"prompts/deep-dive.md":        "sonnet",
+	}
+	for file, expectedModel := range prompts {
+		t.Run(file, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(base, "morning", file))
+			if err != nil {
+				t.Fatalf("failed to read %s: %v", file, err)
+			}
+			content := string(data)
+
+			if !strings.Contains(content, "**Model:**") {
+				t.Error("prompt file missing **Model:** declaration")
+			}
+			if !strings.Contains(content, expectedModel) {
+				t.Errorf("expected model '%s' in prompt file", expectedModel)
+			}
+			if !strings.Contains(content, "**Agent type:**") {
+				t.Error("prompt file missing **Agent type:** declaration")
+			}
+		})
+	}
+}
+
+func TestMorningSkill_BulkScriptExists(t *testing.T) {
+	path := filepath.Join(skillsDir(t), "morning", "scripts", "bulk-gmail.sh")
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		t.Fatal("bulk-gmail.sh missing")
+	}
+	// Check executable bit
+	if info.Mode()&0111 == 0 {
+		t.Error("bulk-gmail.sh is not executable")
+	}
+}
+
+func TestMorningSkill_BulkScriptSyntax(t *testing.T) {
+	path := filepath.Join(skillsDir(t), "morning", "scripts", "bulk-gmail.sh")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read bulk-gmail.sh: %v", err)
+	}
+	content := string(data)
+
+	// Verify shebang
+	if !strings.HasPrefix(content, "#!/bin/bash") {
+		t.Error("bulk-gmail.sh missing #!/bin/bash shebang")
+	}
+
+	// Verify it handles the three expected actions
+	for _, action := range []string{"archive", "trash", "mark-read"} {
+		if !strings.Contains(content, action) {
+			t.Errorf("bulk-gmail.sh missing action: %s", action)
+		}
+	}
+
+	// Verify JSON output (script uses escaped quotes: \"action\")
+	if !strings.Contains(content, `\"action\"`) || !strings.Contains(content, `\"success\"`) {
+		t.Error("bulk-gmail.sh missing JSON output format")
+	}
+}
+
+func TestMorningSkill_SKILLmdReferencesPrompts(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(skillsDir(t), "morning", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("failed to read morning SKILL.md: %v", err)
+	}
+	content := string(data)
+
+	// SKILL.md must reference the prompt files it depends on
+	refs := []string{
+		"prompts/batch-classifier.md",
+		"prompts/deep-dive.md",
+		"scripts/bulk-gmail.sh",
+	}
+	for _, ref := range refs {
+		if !strings.Contains(content, ref) {
+			t.Errorf("morning SKILL.md missing reference to %s", ref)
+		}
+	}
+}
+
+func TestMorningSkill_HasBlockerDetection(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(skillsDir(t), "morning", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("failed to read morning SKILL.md: %v", err)
+	}
+	content := string(data)
+
+	// Blocker detection is the most critical classification rule
+	if !strings.Contains(content, "Blocker Detection") && !strings.Contains(content, "blocker") {
+		t.Error("morning SKILL.md missing blocker detection rules")
+	}
+	if !strings.Contains(content, "CC") {
+		t.Error("morning SKILL.md missing CC'd observer handling")
 	}
 }
