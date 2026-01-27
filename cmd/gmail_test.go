@@ -183,6 +183,141 @@ func TestGmailArchiveThread_MockServer(t *testing.T) {
 	}
 }
 
+// TestGmailArchiveThread_ThreadNotFound tests error when thread doesn't exist
+func TestGmailArchiveThread_ThreadNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/gmail/v1/users/me/threads/nonexistent" && r.Method == "GET" {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"code":    404,
+					"message": "Not Found",
+				},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	_, err = svc.Users.Threads.Get("me", "nonexistent").Format("minimal").Do()
+	if err == nil {
+		t.Error("expected error for nonexistent thread")
+	}
+}
+
+// TestGmailArchiveThread_PartialFailure tests when some messages fail to archive
+func TestGmailArchiveThread_PartialFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/gmail/v1/users/me/threads/thread-partial" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"id": "thread-partial",
+				"messages": []map[string]interface{}{
+					{"id": "msg-ok", "threadId": "thread-partial", "labelIds": []string{"INBOX"}},
+					{"id": "msg-fail", "threadId": "thread-partial", "labelIds": []string{"INBOX"}},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// msg-ok succeeds
+		if r.URL.Path == "/gmail/v1/users/me/messages/msg-ok/modify" && r.Method == "POST" {
+			json.NewEncoder(w).Encode(&gmail.Message{Id: "msg-ok", LabelIds: []string{}})
+			return
+		}
+
+		// msg-fail returns 500
+		if r.URL.Path == "/gmail/v1/users/me/messages/msg-fail/modify" && r.Method == "POST" {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{"code": 500, "message": "Internal Server Error"},
+			})
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	thread, err := svc.Users.Threads.Get("me", "thread-partial").Format("minimal").Do()
+	if err != nil {
+		t.Fatalf("failed to get thread: %v", err)
+	}
+
+	archived := 0
+	failed := 0
+	for _, msg := range thread.Messages {
+		req := &gmail.ModifyMessageRequest{
+			RemoveLabelIds: []string{"INBOX", "UNREAD"},
+		}
+		_, err := svc.Users.Messages.Modify("me", msg.Id, req).Do()
+		if err != nil {
+			failed++
+			continue
+		}
+		archived++
+	}
+
+	if archived != 1 {
+		t.Errorf("expected 1 archived, got %d", archived)
+	}
+	if failed != 1 {
+		t.Errorf("expected 1 failed, got %d", failed)
+	}
+}
+
+// TestGmailArchiveThread_OutputFormat tests the output JSON structure
+func TestGmailArchiveThread_OutputFormat(t *testing.T) {
+	result := map[string]interface{}{
+		"status":    "archived",
+		"thread_id": "thread-xyz",
+		"archived":  3,
+		"failed":    0,
+		"total":     3,
+	}
+
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		t.Fatalf("failed to encode result: %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to decode result: %v", err)
+	}
+
+	if decoded["status"] != "archived" {
+		t.Errorf("unexpected status: %v", decoded["status"])
+	}
+	if decoded["thread_id"] != "thread-xyz" {
+		t.Errorf("unexpected thread_id: %v", decoded["thread_id"])
+	}
+	if decoded["archived"] != float64(3) {
+		t.Errorf("unexpected archived count: %v", decoded["archived"])
+	}
+	if decoded["failed"] != float64(0) {
+		t.Errorf("unexpected failed count: %v", decoded["failed"])
+	}
+	if decoded["total"] != float64(3) {
+		t.Errorf("unexpected total: %v", decoded["total"])
+	}
+}
+
 func TestGmailTrashCommand_Help(t *testing.T) {
 	cmd := gmailTrashCmd
 
