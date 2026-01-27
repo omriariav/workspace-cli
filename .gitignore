@@ -10,9 +10,6 @@
 # OS
 .DS_Store
 
-# Claude auto-generated
-CLAUDE.md
-**/CLAUDE.md
 
 # Config (may contain secrets)
 config.yaml
