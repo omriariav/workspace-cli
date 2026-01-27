@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
+	"github.com/omriariav/workspace-cli/internal/markdown"
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/docs/v1"
@@ -105,16 +106,19 @@ func init() {
 	// Create flags
 	docsCreateCmd.Flags().String("title", "", "Document title (required)")
 	docsCreateCmd.Flags().String("text", "", "Initial text content")
+	docsCreateCmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat")
 	docsCreateCmd.MarkFlagRequired("title")
 
 	// Append flags
 	docsAppendCmd.Flags().String("text", "", "Text to append (required)")
 	docsAppendCmd.Flags().Bool("newline", true, "Add newline before appending")
+	docsAppendCmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat (--newline is ignored for richformat)")
 	docsAppendCmd.MarkFlagRequired("text")
 
 	// Insert flags
 	docsInsertCmd.Flags().String("text", "", "Text to insert (required)")
 	docsInsertCmd.Flags().Int64("at", 1, "Position to insert at (1-based index)")
+	docsInsertCmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat (--at is ignored for richformat)")
 	docsInsertCmd.MarkFlagRequired("text")
 
 	// Replace flags
@@ -296,6 +300,29 @@ func extractStructure(content []*docs.StructuralElement) []map[string]interface{
 	return structure
 }
 
+// buildTextRequests builds Google Docs API requests based on the content format.
+// For markdown and plaintext, it creates an InsertText request.
+// For richformat, it parses the text as JSON Google Docs API requests.
+func buildTextRequests(text, contentFormat string, insertIndex int64) ([]*docs.Request, error) {
+	switch contentFormat {
+	case "richformat":
+		return markdown.ParseRichFormat(text)
+	case "markdown", "plaintext":
+		return []*docs.Request{
+			{
+				InsertText: &docs.InsertTextRequest{
+					Location: &docs.Location{
+						Index: insertIndex,
+					},
+					Text: text,
+				},
+			},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unknown content format: %s (use markdown, plaintext, or richformat)", contentFormat)
+	}
+}
+
 func runDocsCreate(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
 	ctx := context.Background()
@@ -312,6 +339,7 @@ func runDocsCreate(cmd *cobra.Command, args []string) error {
 
 	title, _ := cmd.Flags().GetString("title")
 	text, _ := cmd.Flags().GetString("text")
+	contentFormat, _ := cmd.Flags().GetString("content-format")
 
 	// Create document with title
 	doc, err := svc.Documents.Create(&docs.Document{
@@ -323,15 +351,9 @@ func runDocsCreate(cmd *cobra.Command, args []string) error {
 
 	// If initial text provided, insert it
 	if text != "" {
-		requests := []*docs.Request{
-			{
-				InsertText: &docs.InsertTextRequest{
-					Location: &docs.Location{
-						Index: 1, // Insert at beginning (after document start)
-					},
-					Text: text,
-				},
-			},
+		requests, err := buildTextRequests(text, contentFormat, 1)
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to build text requests: %w", err))
 		}
 
 		_, err = svc.Documents.BatchUpdate(doc.DocumentId, &docs.BatchUpdateDocumentRequest{
@@ -367,6 +389,7 @@ func runDocsAppend(cmd *cobra.Command, args []string) error {
 	docID := args[0]
 	text, _ := cmd.Flags().GetString("text")
 	addNewline, _ := cmd.Flags().GetBool("newline")
+	contentFormat, _ := cmd.Flags().GetString("content-format")
 
 	// Get current document to find end index
 	doc, err := svc.Documents.Get(docID).Do()
@@ -382,21 +405,18 @@ func runDocsAppend(cmd *cobra.Command, args []string) error {
 	// Find the end index of the document body
 	endIndex := doc.Body.Content[len(doc.Body.Content)-1].EndIndex - 1
 
-	// Prepare text to insert
+	// Prepare text: add newline prefix unless richformat (which provides its own requests)
 	insertText := text
-	if addNewline {
+	if contentFormat != "richformat" && addNewline {
 		insertText = "\n" + text
 	}
+	if contentFormat == "richformat" && cmd.Flags().Changed("newline") {
+		fmt.Fprintln(os.Stderr, "warning: --newline is ignored when --content-format is richformat")
+	}
 
-	requests := []*docs.Request{
-		{
-			InsertText: &docs.InsertTextRequest{
-				Location: &docs.Location{
-					Index: endIndex,
-				},
-				Text: insertText,
-			},
-		},
+	requests, err := buildTextRequests(insertText, contentFormat, endIndex)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to build text requests: %w", err))
 	}
 
 	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
@@ -431,21 +451,19 @@ func runDocsInsert(cmd *cobra.Command, args []string) error {
 	docID := args[0]
 	text, _ := cmd.Flags().GetString("text")
 	position, _ := cmd.Flags().GetInt64("at")
+	contentFormat, _ := cmd.Flags().GetString("content-format")
 
-	// Validate position
-	if position < 1 {
+	// Validate position (skip for richformat which provides its own positions)
+	if contentFormat != "richformat" && position < 1 {
 		return p.PrintError(fmt.Errorf("position must be >= 1"))
 	}
+	if contentFormat == "richformat" && cmd.Flags().Changed("at") {
+		fmt.Fprintln(os.Stderr, "warning: --at is ignored when --content-format is richformat")
+	}
 
-	requests := []*docs.Request{
-		{
-			InsertText: &docs.InsertTextRequest{
-				Location: &docs.Location{
-					Index: position,
-				},
-				Text: text,
-			},
-		},
+	requests, err := buildTextRequests(text, contentFormat, position)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to build text requests: %w", err))
 	}
 
 	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{

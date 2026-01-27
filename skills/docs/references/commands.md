@@ -61,6 +61,7 @@ Usage: gws docs create [flags]
 |------|------|---------|----------|-------------|
 | `--title` | string | | Yes | Document title |
 | `--text` | string | | No | Initial text content |
+| `--content-format` | string | `markdown` | No | Content format: `markdown`, `plaintext`, or `richformat` |
 
 ---
 
@@ -76,6 +77,7 @@ Usage: gws docs append <document-id> [flags]
 |------|------|---------|----------|-------------|
 | `--text` | string | | Yes | Text to append |
 | `--newline` | bool | true | No | Add newline before appending |
+| `--content-format` | string | `markdown` | No | Content format: `markdown`, `plaintext`, or `richformat` |
 
 ---
 
@@ -91,6 +93,7 @@ Usage: gws docs insert <document-id> [flags]
 |------|------|---------|----------|-------------|
 | `--text` | string | | Yes | Text to insert |
 | `--at` | int | 1 | No | Position to insert at (1-based index) |
+| `--content-format` | string | `markdown` | No | Content format: `markdown`, `plaintext`, or `richformat` |
 
 ### Position System
 
@@ -150,3 +153,17 @@ Usage: gws docs add-table <document-id> [flags]
 | `--at` | int | 1 | Position to insert at (1-based index) |
 
 Use `gws docs read <id> --include-formatting` to determine correct positions.
+
+---
+
+## Content Formats
+
+The `--content-format` flag is available on `create`, `append`, and `insert` commands.
+
+| Format | Behavior |
+|--------|----------|
+| `markdown` | Default. Text inserted as-is with markdown syntax. Select in Google Docs and use "Paste from Markdown" to format. |
+| `plaintext` | Text inserted as-is. No markdown syntax expected. |
+| `richformat` | `--text` parsed as JSON array of Google Docs API `Request` objects, sent directly to `BatchUpdate`. |
+
+**Tip:** With `richformat`, the `--text` value must be a valid JSON array of [Google Docs API Request](https://developers.google.com/docs/api/reference/rest/v1/documents/request) objects. The `--newline` flag is ignored in `richformat` mode for `append`.

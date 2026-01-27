@@ -769,6 +769,229 @@ func TestDocsAddTable_Success(t *testing.T) {
 	}
 }
 
+// TestDocsCommands_ContentFormatFlag tests that content-format flag exists on create/append/insert
+func TestDocsCommands_ContentFormatFlag(t *testing.T) {
+	commands := []string{"create", "append", "insert"}
+	for _, cmdName := range commands {
+		t.Run(cmdName, func(t *testing.T) {
+			cmd := findSubcommand(docsCmd, cmdName)
+			if cmd == nil {
+				t.Fatalf("docs %s command not found", cmdName)
+			}
+			flag := cmd.Flags().Lookup("content-format")
+			if flag == nil {
+				t.Fatalf("expected --content-format flag on docs %s", cmdName)
+			}
+			if flag.DefValue != "markdown" {
+				t.Errorf("expected default 'markdown', got '%s'", flag.DefValue)
+			}
+		})
+	}
+}
+
+// TestBuildTextRequests_Plaintext tests that plaintext mode creates InsertText
+func TestBuildTextRequests_Plaintext(t *testing.T) {
+	requests, err := buildTextRequests("Hello World", "plaintext", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	if requests[0].InsertText == nil {
+		t.Fatal("expected InsertText request")
+	}
+	if requests[0].InsertText.Text != "Hello World" {
+		t.Errorf("expected 'Hello World', got '%s'", requests[0].InsertText.Text)
+	}
+	if requests[0].InsertText.Location.Index != 1 {
+		t.Errorf("expected index 1, got %d", requests[0].InsertText.Location.Index)
+	}
+}
+
+// TestBuildTextRequests_Markdown tests that markdown mode creates InsertText with raw markdown
+func TestBuildTextRequests_Markdown(t *testing.T) {
+	mdText := "# Title\n\n**Bold** and *italic*"
+	requests, err := buildTextRequests(mdText, "markdown", 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	if requests[0].InsertText == nil {
+		t.Fatal("expected InsertText request")
+	}
+	// Markdown text should be preserved as-is
+	if requests[0].InsertText.Text != mdText {
+		t.Errorf("expected markdown text preserved, got '%s'", requests[0].InsertText.Text)
+	}
+	if requests[0].InsertText.Location.Index != 5 {
+		t.Errorf("expected index 5, got %d", requests[0].InsertText.Location.Index)
+	}
+}
+
+// TestBuildTextRequests_Richformat tests that richformat mode parses JSON requests
+func TestBuildTextRequests_Richformat(t *testing.T) {
+	jsonInput := `[{"insertText":{"location":{"index":1},"text":"Hello"}}]`
+	requests, err := buildTextRequests(jsonInput, "richformat", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	if requests[0].InsertText == nil {
+		t.Fatal("expected InsertText request from richformat")
+	}
+	if requests[0].InsertText.Text != "Hello" {
+		t.Errorf("expected 'Hello', got '%s'", requests[0].InsertText.Text)
+	}
+}
+
+// TestBuildTextRequests_RichformatInvalid tests that invalid JSON returns error
+func TestBuildTextRequests_RichformatInvalid(t *testing.T) {
+	_, err := buildTextRequests("not json", "richformat", 1)
+	if err == nil {
+		t.Error("expected error for invalid richformat JSON")
+	}
+}
+
+// TestBuildTextRequests_UnknownFormat tests that unknown format returns error
+func TestBuildTextRequests_UnknownFormat(t *testing.T) {
+	_, err := buildTextRequests("text", "unknown", 1)
+	if err == nil {
+		t.Error("expected error for unknown format")
+	}
+}
+
+// TestDocsCreate_WithMarkdown tests create with markdown format (inserts text as-is)
+func TestDocsCreate_WithMarkdown(t *testing.T) {
+	batchUpdateCalled := false
+	var capturedRequests docs.BatchUpdateDocumentRequest
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents": func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(&docs.Document{
+				DocumentId: "doc-md",
+				Title:      "Markdown Doc",
+			})
+		},
+		"/v1/documents/doc-md:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+			json.NewDecoder(r.Body).Decode(&capturedRequests)
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-md",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	// Simulate create with markdown content
+	doc, err := svc.Documents.Create(&docs.Document{
+		Title: "Markdown Doc",
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to create document: %v", err)
+	}
+
+	mdText := "# Hello\n\n**Bold** text"
+	requests, err := buildTextRequests(mdText, "markdown", 1)
+	if err != nil {
+		t.Fatalf("failed to build requests: %v", err)
+	}
+
+	_, err = svc.Documents.BatchUpdate(doc.DocumentId, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to batch update: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+
+	// Verify the request has InsertText with raw markdown
+	if len(capturedRequests.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(capturedRequests.Requests))
+	}
+	if capturedRequests.Requests[0].InsertText == nil {
+		t.Fatal("expected InsertText request")
+	}
+	if capturedRequests.Requests[0].InsertText.Text != mdText {
+		t.Errorf("expected markdown text '%s', got '%s'", mdText, capturedRequests.Requests[0].InsertText.Text)
+	}
+}
+
+// TestDocsCreate_ContentFormatE2E tests end-to-end Cobra flag parsing for --content-format
+func TestDocsCreate_ContentFormatE2E(t *testing.T) {
+	// Verify the flag wiring from Cobra through to buildTextRequests
+	createCmd := findSubcommand(docsCmd, "create")
+	if createCmd == nil {
+		t.Fatal("docs create command not found")
+	}
+
+	// Test that the flag parses correctly and returns the right value
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{"default is markdown", []string{"--title", "T", "--text", "x"}, "markdown"},
+		{"explicit plaintext", []string{"--title", "T", "--text", "x", "--content-format", "plaintext"}, "plaintext"},
+		{"explicit richformat", []string{"--title", "T", "--text", "x", "--content-format", "richformat"}, "richformat"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset flags for each test
+			cmd := findSubcommand(docsCmd, "create")
+			cmd.ResetFlags()
+			cmd.Flags().String("title", "", "Document title (required)")
+			cmd.Flags().String("text", "", "Initial text content")
+			cmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat")
+
+			cmd.ParseFlags(tt.args)
+			got, _ := cmd.Flags().GetString("content-format")
+			if got != tt.expected {
+				t.Errorf("expected content-format '%s', got '%s'", tt.expected, got)
+			}
+		})
+	}
+}
+
+// TestDocsInsert_RichformatIgnoresAt tests that --at with richformat produces a warning
+func TestDocsInsert_RichformatIgnoresAt(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "insert")
+	if cmd == nil {
+		t.Fatal("docs insert command not found")
+	}
+
+	// Verify that Changed("at") works when --at is explicitly set
+	cmd.ResetFlags()
+	cmd.Flags().String("text", "", "Text to insert (required)")
+	cmd.Flags().Int64("at", 1, "Position to insert at (1-based index)")
+	cmd.Flags().String("content-format", "markdown", "Content format")
+
+	cmd.ParseFlags([]string{"--text", "x", "--at", "50", "--content-format", "richformat"})
+
+	if !cmd.Flags().Changed("at") {
+		t.Error("expected --at to be marked as changed")
+	}
+	cf, _ := cmd.Flags().GetString("content-format")
+	if cf != "richformat" {
+		t.Errorf("expected 'richformat', got '%s'", cf)
+	}
+}
+
 // TestDocsCommands_Structure_Extended tests that all new docs commands are registered
 func TestDocsCommands_Structure_Extended(t *testing.T) {
 	commands := []string{

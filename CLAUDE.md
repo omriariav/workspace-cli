@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.3.1** - Review fixes: SKILL.md self-gather consistency, `GetPrinter()` migration, `Flags().Changed()` for tasks update.
+**v1.4.0** - Docs content format: `--content-format` flag (markdown/plaintext/richformat) for create, append, insert commands.
 
 ## Roadmap
 
