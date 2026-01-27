@@ -1,6 +1,8 @@
 # Deep-Dive Email Summarizer Prompt
 
-**Model:** `sonnet` — fast, detailed analysis of individual emails.
+**Model:** Chosen by the main agent based on complexity:
+- `haiku` — single-message emails, FYI items, simple questions
+- `sonnet` — multi-message threads (3+), comment notifications, complex action items
 
 **Agent type:** `general-purpose`
 
