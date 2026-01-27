@@ -37,6 +37,7 @@ For initial setup, see the `gws-auth` skill.
 | List with completed | `gws tasks list <tasklist-id> --show-completed` |
 | Create a task | `gws tasks create --title "Buy groceries"` |
 | Create with due date | `gws tasks create --title "Report" --due "2024-02-01"` |
+| Update a task | `gws tasks update <tasklist-id> <task-id> --title "New title"` |
 | Complete a task | `gws tasks complete <tasklist-id> <task-id>` |
 
 ## Detailed Usage
@@ -85,6 +86,25 @@ gws tasks create --title "Finish report" --due "2024-02-01" --notes "Include Q4 
 gws tasks create --title "Team task" --tasklist MTIzNDU2
 ```
 
+### update — Update a task
+
+```bash
+gws tasks update <tasklist-id> <task-id> [flags]
+```
+
+Updates an existing task's title, notes, or due date. At least one of `--title`, `--notes`, or `--due` is required.
+
+**Flags:**
+- `--title string` — New task title
+- `--notes string` — New task notes/description
+- `--due string` — New due date in RFC3339 or `YYYY-MM-DD` format
+
+**Examples:**
+```bash
+gws tasks update @default dGFzay0x --title "Updated title"
+gws tasks update @default dGFzay0x --notes "Added notes" --due "2024-03-01"
+```
+
 ### complete — Mark a task as completed
 
 ```bash
@@ -109,7 +129,7 @@ gws tasks list @default --format text    # Human-readable text
 
 - Always use `--format json` (the default) for programmatic parsing
 - Use `gws tasks lists` first to get task list IDs
-- Use `gws tasks list <tasklist-id>` to get individual task IDs for the `complete` command
+- Use `gws tasks list <tasklist-id>` to get individual task IDs for the `update` and `complete` commands
 - The default task list ID is `@default` — use this when users don't specify a list
 - Due dates accept both RFC3339 (`2024-02-01T00:00:00Z`) and simple date (`2024-02-01`) formats
 - Completed tasks are hidden by default; use `--show-completed` to include them
