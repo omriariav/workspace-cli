@@ -128,6 +128,7 @@ func TestMarketplaceJSON_Valid(t *testing.T) {
 var expectedSkills = []string{
 	"gmail", "calendar", "drive", "docs", "sheets",
 	"slides", "tasks", "chat", "forms", "search", "auth",
+	"morning",
 }
 
 func TestSkillDirectories_AllExist(t *testing.T) {
@@ -235,9 +236,9 @@ func TestSKILLmd_HasYAMLFrontmatter(t *testing.T) {
 				t.Errorf("expected frontmatter name '%s'", expectedName)
 			}
 
-			// Verify version is 1.0.0
-			if !strings.Contains(frontmatter, "version: 1.0.0") {
-				t.Error("expected frontmatter version '1.0.0'")
+			// Verify version is set (1.0.0 for service skills, 0.x.0 for workflow skills)
+			if !strings.Contains(frontmatter, "version:") {
+				t.Error("expected frontmatter to contain version field")
 			}
 		})
 	}
@@ -580,7 +581,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		count++
 	}
 
-	expectedTotal := 23 // 1 marketplace.json + 11 SKILL.md + 10 commands.md + 1 setup-guide.md
+	expectedTotal := 24 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}

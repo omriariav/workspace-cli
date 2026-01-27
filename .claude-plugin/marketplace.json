@@ -25,7 +25,8 @@
         "./skills/chat",
         "./skills/forms",
         "./skills/search",
-        "./skills/auth"
+        "./skills/auth",
+        "./skills/morning"
       ]
     }
   ]
