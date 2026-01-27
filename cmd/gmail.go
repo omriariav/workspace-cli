@@ -390,7 +390,7 @@ func resolveLabelNames(svc *gmail.Service, names []string) ([]string, error) {
 }
 
 func runGmailLabel(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -448,7 +448,7 @@ func runGmailLabel(cmd *cobra.Command, args []string) error {
 }
 
 func runGmailArchive(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -480,7 +480,7 @@ func runGmailArchive(cmd *cobra.Command, args []string) error {
 }
 
 func runGmailArchiveThread(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -526,7 +526,7 @@ func runGmailArchiveThread(cmd *cobra.Command, args []string) error {
 }
 
 func runGmailTrash(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)

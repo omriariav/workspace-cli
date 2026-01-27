@@ -54,12 +54,10 @@ For each matched event:
 
 For ACCEPT items:
 gws calendar rsvp <event-id> --response accepted
-gws gmail archive <message-id> >/dev/null 2>&1
-gws gmail label <message-id> --remove UNREAD >/dev/null 2>&1
+gws gmail archive-thread <thread-id> --quiet >/dev/null 2>&1
 
 For CANCELED and PAST items:
-gws gmail archive <message-id> >/dev/null 2>&1
-gws gmail label <message-id> --remove UNREAD >/dev/null 2>&1
+gws gmail archive-thread <thread-id> --quiet >/dev/null 2>&1
 
 For CONFLICT and OUT_OF_RANGE items:
 Do NOT take action. Report them for user decision.
@@ -94,7 +92,7 @@ TOTAL PROCESSED: <N> | AUTO-ACCEPTED: <N> | NEEDS ATTENTION: <N> | ARCHIVED: <N>
 
 - Run gws commands to fetch calendar data and execute RSVPs/archives
 - Do NOT RSVP to conflicting events — the user must decide
-- Always archive + mark read for handled items (accepted, canceled, past)
+- Always archive + mark read for handled items (accepted, canceled, past) using `archive-thread --quiet`
 - Be conservative: if unsure about a match, classify as OUT_OF_RANGE
 - Return ONLY the structured summary, not raw API output
 ```

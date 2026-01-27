@@ -59,7 +59,7 @@ func TestNullPrinter_ImplementsPrinter(t *testing.T) {
 
 func TestNullPrinter_SuppressesOutput(t *testing.T) {
 	null := NewNullPrinter()
-	json := NewJSONPrinter(&bytes.Buffer{})
+	jsonPrinter := NewJSONPrinter(&bytes.Buffer{})
 
 	data := map[string]interface{}{
 		"thread_id": "abc-123",
@@ -68,8 +68,7 @@ func TestNullPrinter_SuppressesOutput(t *testing.T) {
 	}
 
 	// NullPrinter produces no output; JSONPrinter does
-	// We can't capture NullPrinter's stdout since it doesn't write anywhere,
-	// but we verify it handles all the same data types without error
+	// We verify both handle all data types without error
 	types := []interface{}{
 		data,
 		"simple string",
@@ -84,25 +83,24 @@ func TestNullPrinter_SuppressesOutput(t *testing.T) {
 			if printErr := null.PrintError(err); printErr != nil {
 				t.Errorf("NullPrinter.PrintError failed for %T: %v", v, printErr)
 			}
-			if printErr := json.PrintError(err); printErr != nil {
+			if printErr := jsonPrinter.PrintError(err); printErr != nil {
 				t.Errorf("JSONPrinter.PrintError failed for %T: %v", v, printErr)
 			}
 		} else {
 			if err := null.Print(v); err != nil {
 				t.Errorf("NullPrinter.Print failed for %T: %v", v, err)
 			}
-			if err := json.Print(v); err != nil {
+			if err := jsonPrinter.Print(v); err != nil {
 				t.Errorf("JSONPrinter.Print failed for %T: %v", v, err)
 			}
 		}
 	}
 }
 
-func TestNullPrinter_ProducesNoBytes(t *testing.T) {
-	// NullPrinter has no writer — verify it doesn't panic or write anywhere
+func TestNullPrinter_HandlesLargeData(t *testing.T) {
+	// Verify NullPrinter doesn't panic with large data
 	p := NewNullPrinter()
 
-	// Large data that would normally produce significant output
 	largeData := make(map[string]interface{})
 	for i := 0; i < 100; i++ {
 		largeData[strings.Repeat("key", i+1)] = strings.Repeat("value", i+1)

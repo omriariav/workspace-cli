@@ -19,8 +19,8 @@ Run these commands to collect all context. Run them in parallel where possible.
 
 ### Inbox
 
-gws gmail list --max <max_emails> --query "is:unread"
-gws gmail list --max <max_emails> --query "is:unread category:promotions"
+gws gmail list --max <max_emails> --query "<inbox_query>"
+gws gmail list --max <max_emails> --query "<inbox_query> category:promotions"
 
 Cross-reference the two lists by thread_id to separate PRIMARY (not in promotions) from NOISE (in promotions).
 
@@ -45,6 +45,11 @@ Using the gathered data, classify each PRIMARY email (not noise).
 ### Config
 
 <The main agent passes these values when spawning:>
+- max_emails: <number from config, default 50>
+- inbox_query: <query from config, default "is:unread">
+- Task list IDs: <list of IDs, or "all" — if "all", run `gws tasks lists` first to discover IDs>
+- OKR sheet ID: <sheet_id>
+- OKR sheet names: <list of sheet tab names>
 - VIP senders: <list with role annotations>
 - Priority signals: starred = <true/false>
 - Noise strategy: <promotions or custom>
@@ -112,6 +117,16 @@ At the end, include:
 - OVERDUE TASKS list (from task data)
 - TODAY'S MEETINGS list (from calendar data) with any email cross-references
 ```
+
+## Error Handling
+
+If a `gws` command fails:
+- **Inbox commands fail** — return an error; classification cannot proceed without inbox data
+- **Tasks command fails** — continue without task matching; note in output that task data was unavailable
+- **Calendar command fails** — continue without calendar matching; note in output
+- **OKR command fails** — continue without OKR matching; note in output
+
+Always attempt all data sources. Partial data is better than no classification.
 
 ## How the Main Agent Uses This
 
