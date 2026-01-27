@@ -145,88 +145,53 @@ When no config exists, the skill runs an interactive setup:
 3. **Noise senders** — suggests common patterns, user can add custom ones
 4. **Saves config** to `~/.config/gws/inbox-skill.yaml`
 
-## Output Format
+## Interaction Model
 
-### Terminal Briefing
+### Default: Guided Triage
+
+The default mode walks the user through items one at a time using AskUserQuestion, so they never lose context.
+
+**Flow:**
+
+1. **Summary header** — compact overview (inbox counts, today's meetings, overdue tasks). ~15 lines max.
+2. **Action items** — one at a time, each with options: Read it, Archive, Add task, Skip.
+   - If "Read it": fetch email, show content, then ask: Reply, Archive, Add task, Move on.
+3. **Transition** — "Action items done. Continue reviewing?" (Yes / Skip to noise / Done)
+4. **Review items** — same one-at-a-time pattern with lighter urgency.
+5. **Noise handling** — "N noise items. Archive all?" (Archive all / Let me pick / Leave them)
+6. **Triage complete** — summary of actions taken.
+
+### Alternative: Digest Mode
+
+User says "digest" at any point to get the full printout:
 
 ```
-/morning — Mon Jan 27, 2026
-
-Inbox: 23 unread | 3 action needed | 4 relevant | 16 noise
-OKR focus: Data Track H1-2026 | 3 Must Wins active
-
 ━━ ACT NOW ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-1. ★ Jenny Liu — Yahoo/Taboola Sync canceled
-   Meeting canceled (Corp Holiday). You own contextual signals.
-   TOP 5: Intent research
-   OKR: Improve cross-domain identity mapping
-   → Reschedule the sync. Reply or create new invite.
-   → gws gmail read 19bfd0a0fe192673
-
-2. Peter Cimring / Aneil Pai — Legal question (7 msgs)
-   Aneil replied yesterday. Thread active, may need your input.
-   → Read latest and decide if follow-up needed.
-   → gws gmail thread 19b4b3135a0732bb
-
-3. JIRA DEV-209634 — TMT incident (2 msgs)
-   Investigation thread, team may be waiting on direction.
-   → Review and comment.
-   → gws gmail thread 19b926796e7261a6
-
+1. ★ <Sender> — <Subject>
+   <context>
+   → gws gmail read <message_id>
+...
 ━━ REVIEW ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-4. Data Track all-hands — catering request (8 msgs)
-   Logistics for your team event. No action unless change needed.
-   → gws gmail read 19bfb267d937fa12
-
-━━ TODAY'S MEETINGS (4) ━━━━━━━━━━━━━━━━━━━━━━
- 9:00  Team standup
-10:00  1:1 with Tomer Tunitsky
-       ⚠ Related: annual review prep (overdue task)
-14:00  Data Track sync
-       📬 Prep: read JIRA DEV-209634 thread (item #3)
-16:00  Intent research deep-dive
-       📬 Prep: Yahoo/Taboola sync canceled (item #1)
-
-━━ TASKS DUE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ⚠ Tomer Tunitsky - annual review prep (due Jan 22 — overdue)
-   ⚠ Adi Oz - annual review prep (due Jan 22 — overdue)
-
-━━ NOISE (16) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   8 newsletters | 5 JIRA watchers | 3 calendar auto-updates
-   → Safe to bulk-archive
+...
+━━ NOISE (<N>) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-### Interactive Follow-Up
-
-After the briefing, the user stays in the Claude session:
-
-```
-User: "read item 2"
-→ Runs gws gmail thread 19b4b3135a0732bb
-
-User: "archive the noise"
-→ Runs gws gmail archive for each noise message_id
-
-User: "add task: follow up with Jenny on sync reschedule"
-→ Runs gws tasks create --title "..." --tasklist "Incoming"
-```
+After the digest, follow-up via free-form commands: "read item N", "archive noise", "add task: ...".
 
 ### Daily Log (Google Doc)
 
-Each briefing appends to a Google Doc:
+Each briefing appends a summary to a Google Doc:
 
 ```
 ## Mon Jan 27, 2026
 
-**Action items:** 3 | **Relevant:** 4 | **Noise:** 16
+**Action items:** 3 | **Reviewed:** 4 | **Noise:** 16 (archived: 16)
 **Overdue tasks:** 2
 
 ### Priority items:
-1. Yahoo/Taboola Sync — reschedule (Intent research)
-2. Legal question thread — review latest
-3. TMT incident — review and comment
+1. Yahoo/Taboola Sync — reschedule (Intent research) — read
+2. Legal question thread — review latest — skipped
+3. TMT incident — review and comment — added task
 
 ### Overdue:
 - Tomer Tunitsky - annual review prep (Jan 22)
@@ -235,36 +200,29 @@ Each briefing appends to a Google Doc:
 
 ## Implementation Phases
 
-### P0: Core Briefing (this PR)
+### P0: Core Skill (this PR)
 - [x] PLAN.md
-- [ ] `skills/morning/SKILL.md` — skill definition with full workflow instructions
+- [x] `skills/morning/SKILL.md` — skill definition with full workflow instructions
+- [x] Guided triage flow with AskUserQuestion
+- [x] Digest mode as alternative
+- [x] Register skill in marketplace.json
 - [ ] First-run config setup flow
-- [ ] Gather inbox (gmail list + thread for multi-message)
-- [ ] Gather tasks (all configured lists)
-- [ ] Gather calendar (today's events)
-- [ ] Gather OKRs (configured sheets)
-- [ ] AI classification and priority scoring
-- [ ] Terminal output format
-- [ ] Register skill in marketplace.json
+- [ ] Live testing and iteration
 
 ### P1: Daily Log
 - [ ] Create daily log Google Doc on first run
 - [ ] Append briefing summary after each run
 
-### P2: Interactive Follow-Up
-- [ ] "read item N" → fetch and display
-- [ ] "archive noise" → batch archive
-- [ ] "add task" → create task in Incoming list
-
-### P3: Generalize for Shipping
+### P2: Generalize for Shipping
 - [ ] Config-driven (no hardcoded sheet IDs)
 - [ ] Documentation for other users
-- [ ] Add to plugin marketplace
+- [ ] Plugin distribution
 
 ## Key Design Decisions
 
-1. **Advisory only** — no auto-labeling, no auto-archiving. User executes recommended actions.
-2. **OKR matching is semantic** — Claude reads the OKR sheet and uses judgment to match emails to objectives. No keyword lookup.
-3. **Calendar cross-reference** — meetings boost priority of related emails and surface prep context.
-4. **First-run setup** — interactive wizard creates config, so no manual YAML editing needed.
-5. **Personal first** — hardcode to user's sheet/lists initially. Generalize in P3.
+1. **Guided triage by default** — one item at a time with options. Digest mode available on demand.
+2. **User controls all actions** — Claude recommends, user executes via AskUserQuestion choices.
+3. **OKR matching is semantic** — Claude reads the OKR sheet and uses judgment to match emails to objectives. No keyword lookup.
+4. **Calendar cross-reference** — meetings boost priority of related emails and surface prep context.
+5. **First-run setup** — interactive wizard creates config, so no manual YAML editing needed.
+6. **Personal first** — hardcode to user's sheet/lists initially. Generalize in P2.

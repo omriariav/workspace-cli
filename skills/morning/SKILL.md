@@ -145,16 +145,97 @@ Each actionable email (not noise) gets scored. Use these signals:
 | **Thread momentum** | Low-Medium | Multi-message thread where others are actively discussing |
 | **Overdue task link** | High | Email relates to an overdue task |
 
-## Step 5: Produce the Briefing
+## Step 5: Summary Header
 
-Output the briefing in this exact format:
+Start with a compact summary header so the user sees the big picture before diving in:
 
 ```
 /morning — <Day>, <Date>
 
-Inbox: <N> unread | <N> action needed | <N> relevant | <N> noise
+Inbox: <N> unread | <N> action needed | <N> review | <N> noise
 OKR focus: <primary track name> | <N> Must Wins active
+Overdue tasks: <N>
 
+Today's meetings:
+  <time> <title> [⚠ overdue task / 📬 related email if applicable]
+  ...
+
+Starting guided triage (<N> action items, then <N> review items).
+Say "digest" for the full printout, or "skip" to jump to noise.
+```
+
+Keep this short — no more than 15-20 lines. The detail comes in the guided triage.
+
+## Step 6: Guided Triage (Default Mode)
+
+Walk through items one at a time, highest priority first. For each item, use the AskUserQuestion tool to present options.
+
+### Action Items (one by one)
+
+For each action-required email, present it as a question:
+
+```
+[1/<N>] ★ <Sender> — <Subject> (<N> msgs if thread)
+<1-2 line context: why this matters, what's being asked>
+[TOP 5: <task name>]
+[OKR: <objective>]
+```
+
+Then ask the user what to do using AskUserQuestion with these options:
+- **Read it** — Run `gws gmail read <message_id>` or `gws gmail thread <thread_id>`, show content, then ask again what to do next (Reply, Archive, Add task, Move on)
+- **Archive** — Run `gws gmail archive <message_id>`
+- **Add task** — Ask for task title, run `gws tasks create`
+- **Skip** — Move to next item
+
+After the user acts or skips, move to the next action item.
+
+### Transition to Review Items
+
+After all action items:
+
+```
+Action items done. <N> review items remaining.
+```
+
+Ask: "Continue reviewing?" with options:
+- **Yes, keep going** — continue guided triage through review items
+- **Skip to noise** — jump to noise handling
+- **Done for now** — end triage
+
+### Review Items (one by one, same pattern)
+
+Same flow as action items but with lighter urgency framing. Options:
+- **Read it** — fetch and display
+- **Archive** — remove from inbox
+- **Skip** — move on
+
+### Noise Handling
+
+After action and review items (or when user skips to noise):
+
+```
+<N> noise items:
+  <N> newsletters | <N> automated alerts | <N> scheduling | <N> other
+```
+
+Ask: "Archive all noise?" with options:
+- **Archive all** — Run `gws gmail archive` for each noise message_id
+- **Let me pick** — Show noise items one by one, user decides each
+- **Leave them** — Skip, do nothing
+
+### Triage Complete
+
+```
+Triage complete.
+  Acted on: <N> | Archived: <N> | Skipped: <N>
+  Remaining unread: <N>
+```
+
+## Step 7: Digest Mode (Alternative)
+
+If the user says "digest" at any point, switch to printing the full briefing without interaction:
+
+```
 ━━ ACT NOW ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 <numbered list of action-required emails, highest priority first>
@@ -170,23 +251,24 @@ Each item:
 
 <numbered list continuing from above, FYI-relevant items>
 
-━━ TODAY'S MEETINGS (<N>) ━━━━━━━━━━━━━━━━━━━━
-<each meeting with time, title>
-  [⚠ Related: <task> if overdue/active task matches attendee or topic]
-  [📬 Prep: <email summary> (item #N) if inbox item relates to meeting]
-
-━━ TASKS DUE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-<overdue tasks and tasks due today, even if no matching email>
-  ⚠ <task title> (due <date> — overdue)
-
 ━━ NOISE (<N>) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   <N> newsletters | <N> JIRA watchers | <N> calendar auto-updates
   → Safe to bulk-archive
 ```
 
-## Step 6: Daily Log (if configured)
+After the digest, remain ready for follow-up commands:
 
-If `daily_log_doc_id` is set in config, append the briefing summary:
+| User says | Action |
+|-----------|--------|
+| "read item N" | Run `gws gmail read <message_id>` or `gws gmail thread <thread_id>` for that item |
+| "archive the noise" | Run `gws gmail archive <message_id>` for each noise email |
+| "archive items N, M" | Run `gws gmail archive` for specified items |
+| "add task: <title>" | Run `gws tasks create --title "<title>" --tasklist "Incoming"` |
+| "triage" | Start guided triage from the beginning |
+
+## Step 8: Daily Log (if configured)
+
+If `daily_log_doc_id` is set in config, append the briefing summary after triage completes:
 
 ```bash
 gws docs append <daily_log_doc_id> --text "<summary>" --newline
@@ -196,11 +278,11 @@ Summary format:
 ```
 ## <Day>, <Date>
 
-**Action items:** <N> | **Relevant:** <N> | **Noise:** <N>
+**Action items:** <N> | **Reviewed:** <N> | **Noise:** <N> (archived: <N>)
 **Overdue tasks:** <N>
 
 ### Priority items:
-1. <item summary> (<OKR/task match>)
+1. <item summary> (<OKR/task match>) — <action taken>
 ...
 
 ### Overdue:
@@ -214,19 +296,6 @@ gws docs create --title "Morning Briefing Log"
 ```
 
 Save the returned doc ID back to the config file for future runs.
-
-## Step 7: Interactive Follow-Up
-
-After producing the briefing, remain ready for follow-up commands:
-
-| User says | Action |
-|-----------|--------|
-| "read item N" | Run `gws gmail read <message_id>` or `gws gmail thread <thread_id>` for that item |
-| "archive the noise" | Run `gws gmail archive <message_id>` for each noise email |
-| "archive items N, M" | Run `gws gmail archive` for specified items |
-| "add task: <title>" | Run `gws tasks create --title "<title>" --tasklist "Incoming"` |
-| "what about <topic>?" | Re-filter the briefing data for that topic |
-| "full briefing" | Re-run from Step 2 |
 
 ## First-Run Setup
 
@@ -269,10 +338,13 @@ Write the config to `~/.config/gws/inbox-skill.yaml` in YAML format.
 ## Tips for AI Agents
 
 - Always run all data-gathering commands (Step 2) before classification. You need the full picture.
+- **Guided triage is the default.** Use AskUserQuestion to present each item with options. Only switch to digest mode if the user explicitly asks.
 - The "Top five things" task list is the most important signal for priority scoring.
 - When matching emails to OKRs, use semantic understanding — don't rely on exact keyword matches. An email about "cross-device identifiers" matches the OKR "Improve cross-domain identity mapping".
 - For multi-message threads, mention the message count and latest sender to give the user context on thread activity.
-- Always include the `gws gmail read` or `gws gmail thread` command so the user can quickly act.
+- When the user picks "Read it", fetch the email/thread, display it, then immediately ask what to do next (Reply, Archive, Add task, Move on). Don't wait for a free-form prompt.
 - Noise classification should be generous — when in doubt, classify as noise. Users prefer to review a few false positives than miss important emails.
-- Overdue tasks should always appear in the briefing even if there's no matching email.
+- Overdue tasks should always appear in the summary header even if there's no matching email.
 - Calendar cross-referencing is valuable: "you have a 1:1 with X at 2pm, and X sent you an email" is actionable prep context.
+- Keep each triage step focused — show ONE item at a time. Never dump multiple items between questions.
+- Track actions taken (archived, read, tasks created) and report them at the end.
