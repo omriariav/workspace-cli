@@ -81,6 +81,32 @@ Usage: gws tasks create [flags]
 
 ---
 
+## gws tasks update
+
+Updates an existing task's title, notes, or due date.
+
+```
+Usage: gws tasks update <tasklist-id> <task-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--title` | string | | No | New task title |
+| `--notes` | string | | No | New task notes/description |
+| `--due` | string | | No | New due date (RFC3339 or `YYYY-MM-DD`) |
+
+At least one of `--title`, `--notes`, or `--due` is required.
+
+### Output Fields (JSON)
+
+- `status` — Always `"updated"`
+- `id` — Task ID
+- `title` — Task title (updated or existing)
+- `notes` — Task notes (if set)
+- `due` — Due date (if set)
+
+---
+
 ## gws tasks complete
 
 Marks a specific task as completed.

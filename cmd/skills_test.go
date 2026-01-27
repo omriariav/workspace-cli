@@ -379,7 +379,7 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 		},
 		"tasks": {
 			parentCmd:   tasksCmd,
-			subcommands: []string{"lists", "list", "create", "complete"},
+			subcommands: []string{"lists", "list", "create", "update", "complete"},
 		},
 		"chat": {
 			parentCmd:   chatCmd,

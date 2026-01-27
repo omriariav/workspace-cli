@@ -39,6 +39,20 @@ var tasksCreateCmd = &cobra.Command{
 	RunE:  runTasksCreate,
 }
 
+var tasksUpdateCmd = &cobra.Command{
+	Use:   "update <tasklist-id> <task-id>",
+	Short: "Update a task",
+	Long: `Updates an existing task's title, notes, or due date.
+
+At least one of --title, --notes, or --due is required.
+
+Examples:
+  gws tasks update @default dGFzay0x --title "Updated title"
+  gws tasks update @default dGFzay0x --notes "New notes" --due "2024-03-01"`,
+	Args: cobra.ExactArgs(2),
+	RunE: runTasksUpdate,
+}
+
 var tasksCompleteCmd = &cobra.Command{
 	Use:   "complete <tasklist-id> <task-id>",
 	Short: "Mark a task as completed",
@@ -52,7 +66,13 @@ func init() {
 	tasksCmd.AddCommand(tasksListsCmd)
 	tasksCmd.AddCommand(tasksListCmd)
 	tasksCmd.AddCommand(tasksCreateCmd)
+	tasksCmd.AddCommand(tasksUpdateCmd)
 	tasksCmd.AddCommand(tasksCompleteCmd)
+
+	// Update flags
+	tasksUpdateCmd.Flags().String("title", "", "New task title")
+	tasksUpdateCmd.Flags().String("notes", "", "New task notes/description")
+	tasksUpdateCmd.Flags().String("due", "", "New due date in RFC3339 or YYYY-MM-DD format")
 
 	// List flags
 	tasksListCmd.Flags().Bool("show-completed", false, "Include completed tasks")
@@ -191,6 +211,67 @@ func runTasksCreate(cmd *cobra.Command, args []string) error {
 		"id":     created.Id,
 		"title":  created.Title,
 	})
+}
+
+func runTasksUpdate(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Tasks()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	tasklistID := args[0]
+	taskID := args[1]
+	title, _ := cmd.Flags().GetString("title")
+	notes, _ := cmd.Flags().GetString("notes")
+	due, _ := cmd.Flags().GetString("due")
+
+	if title == "" && notes == "" && due == "" {
+		return p.PrintError(fmt.Errorf("at least one of --title, --notes, or --due is required"))
+	}
+
+	// Get existing task
+	task, err := svc.Tasks.Get(tasklistID, taskID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get task: %w", err))
+	}
+
+	// Apply updates
+	if title != "" {
+		task.Title = title
+	}
+	if notes != "" {
+		task.Notes = notes
+	}
+	if due != "" {
+		task.Due = due
+	}
+
+	updated, err := svc.Tasks.Update(tasklistID, taskID, task).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update task: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status": "updated",
+		"id":     updated.Id,
+		"title":  updated.Title,
+	}
+	if updated.Notes != "" {
+		result["notes"] = updated.Notes
+	}
+	if updated.Due != "" {
+		result["due"] = updated.Due
+	}
+
+	return p.Print(result)
 }
 
 func runTasksComplete(cmd *cobra.Command, args []string) error {
