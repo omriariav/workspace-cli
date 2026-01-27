@@ -18,38 +18,29 @@ var (
 )
 
 func init() {
-	if Version == "" {
-		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
-			Version = info.Main.Version
-		} else {
-			Version = "dev"
+	if Version == "" || Commit == "" || BuildDate == "" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			if Version == "" && info.Main.Version != "" {
+				Version = info.Main.Version
+			}
+			for _, s := range info.Settings {
+				if s.Key == "vcs.revision" && Commit == "" && len(s.Value) >= 7 {
+					Commit = s.Value[:7]
+				}
+				if s.Key == "vcs.time" && BuildDate == "" {
+					BuildDate = s.Value
+				}
+			}
 		}
+	}
+	if Version == "" {
+		Version = "dev"
 	}
 	if Commit == "" {
-		if info, ok := debug.ReadBuildInfo(); ok {
-			for _, s := range info.Settings {
-				if s.Key == "vcs.revision" && len(s.Value) >= 7 {
-					Commit = s.Value[:7]
-					break
-				}
-			}
-		}
-		if Commit == "" {
-			Commit = "unknown"
-		}
+		Commit = "unknown"
 	}
 	if BuildDate == "" {
-		if info, ok := debug.ReadBuildInfo(); ok {
-			for _, s := range info.Settings {
-				if s.Key == "vcs.time" {
-					BuildDate = s.Value
-					break
-				}
-			}
-		}
-		if BuildDate == "" {
-			BuildDate = "unknown"
-		}
+		BuildDate = "unknown"
 	}
 
 	rootCmd.AddCommand(versionCmd)
