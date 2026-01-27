@@ -28,6 +28,17 @@ Usage: gws gmail list [flags]
 | `--max` | int | 10 | Maximum number of results |
 | `--query` | string | | Gmail search query |
 
+### Output Fields (JSON)
+
+Each thread includes:
+- `thread_id` — Thread ID (use with `gws gmail thread`)
+- `message_id` — Latest message ID (use with `read`, `label`, `archive`, `trash`)
+- `message_count` — Number of messages in the thread
+- `subject` — Thread subject
+- `from` — Original sender
+- `date` — Date of first message
+- `snippet` — Preview text
+
 ### Gmail Search Query Syntax
 
 The `--query` flag supports Gmail's full search syntax:
@@ -57,18 +68,36 @@ Reads and displays the content of a specific email message.
 Usage: gws gmail read <message-id>
 ```
 
-No additional flags. The message ID is obtained from `gws gmail list` output.
+No additional flags. Use the `message_id` from `gws gmail list` output.
 
 ### Output Fields (JSON)
 
 - `id` — Message ID
-- `threadId` — Thread ID
-- `from` — Sender
-- `to` — Recipients
-- `subject` — Subject line
-- `date` — Date sent
+- `headers` — Object with `subject`, `from`, `to`, `date`, `cc`, `bcc`
 - `body` — Message body text
 - `labels` — Applied label IDs
+
+---
+
+## gws gmail thread
+
+Reads and displays all messages in a Gmail thread (conversation).
+
+```
+Usage: gws gmail thread <thread-id>
+```
+
+No additional flags. Use the `thread_id` from `gws gmail list` output.
+
+### Output Fields (JSON)
+
+- `thread_id` — Thread ID
+- `message_count` — Number of messages in thread
+- `messages` — Array of messages, each with:
+  - `id` — Message ID
+  - `headers` — Object with `subject`, `from`, `to`, `date`, `cc`, `bcc`
+  - `body` — Message body text
+  - `labels` — Applied label IDs
 
 ---
 
