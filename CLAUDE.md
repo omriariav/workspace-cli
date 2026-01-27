@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.2.2** - Fix `go install` version detection via debug.ReadBuildInfo(). Full CRUD for all services.
+**v1.3.0** - Morning skill v0.2.0 improvements, `archive-thread`, `tasks update`, `--quiet` flag.
 
 ## Roadmap
 
