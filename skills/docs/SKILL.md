@@ -1,6 +1,6 @@
 ---
 name: gws-docs
-version: 1.0.0
+version: 1.1.0
 description: "Google Docs CLI operations via gws. Use when users need to read, create, or edit Google Docs documents. Triggers: google docs, document, gdoc, word processing."
 metadata:
   short-description: Google Docs CLI operations
@@ -36,7 +36,8 @@ For initial setup, see the `gws-auth` skill.
 | Read with formatting | `gws docs read <doc-id> --include-formatting` |
 | Get document info | `gws docs info <doc-id>` |
 | Create a document | `gws docs create --title "My Doc"` |
-| Create with content | `gws docs create --title "My Doc" --text "Initial content"` |
+| Create with markdown | `gws docs create --title "My Doc" --text "# Heading\n\n**Bold**"` |
+| Create with plain text | `gws docs create --title "My Doc" --text "Plain" --content-format plaintext` |
 | Append text | `gws docs append <doc-id> --text "New paragraph"` |
 | Insert text at position | `gws docs insert <doc-id> --text "Hello" --at 1` |
 | Find and replace | `gws docs replace <doc-id> --find "old" --replace "new"` |
@@ -73,11 +74,13 @@ gws docs create --title <title> [flags]
 **Flags:**
 - `--title string` — Document title (required)
 - `--text string` — Initial text content
+- `--content-format string` — Content format: `markdown` (default), `plaintext`, or `richformat`
 
 **Examples:**
 ```bash
 gws docs create --title "Meeting Notes"
-gws docs create --title "Report" --text "Q4 Summary\n\nOverview..."
+gws docs create --title "Report" --text "# Q4 Summary\n\n**Revenue** grew 15%"
+gws docs create --title "Plain" --text "No formatting" --content-format plaintext
 ```
 
 ### append — Append text
@@ -89,6 +92,7 @@ gws docs append <document-id> --text <text> [flags]
 **Flags:**
 - `--text string` — Text to append (required)
 - `--newline` — Add newline before appending (default: true)
+- `--content-format string` — Content format: `markdown` (default), `plaintext`, or `richformat`
 
 ### insert — Insert text at position
 
@@ -99,6 +103,7 @@ gws docs insert <document-id> --text <text> [flags]
 **Flags:**
 - `--text string` — Text to insert (required)
 - `--at int` — Position to insert at (1-based index, default: 1)
+- `--content-format string` — Content format: `markdown` (default), `plaintext`, or `richformat`
 
 Position 1 is the start of the document content. Use `gws docs read <id> --include-formatting` to see element positions.
 
@@ -135,6 +140,26 @@ gws docs add-table <document-id> [flags]
 - `--rows int` — Number of rows (default: 3)
 - `--cols int` — Number of columns (default: 3)
 - `--at int` — Position to insert at (1-based index, default: 1)
+
+## Content Formats
+
+The `--content-format` flag controls how `--text` input is handled for `create`, `append`, and `insert`.
+
+| Format | Description |
+|--------|-------------|
+| `markdown` (default) | Text is inserted as-is with markdown syntax preserved. Select the text in Google Docs and use "Paste from Markdown" to apply formatting. |
+| `plaintext` | Text is inserted as-is with no markdown syntax expected. |
+| `richformat` | `--text` is parsed as a JSON array of Google Docs API `Request` objects, passed directly to `BatchUpdate`. |
+
+**Markdown example:**
+```bash
+gws docs create --title "Report" --text "# Summary\n\n- Item **one**\n- Item *two*"
+```
+
+**Richformat example:**
+```bash
+gws docs create --title "Styled" --text '[{"insertText":{"location":{"index":1},"text":"Hello World"}},{"updateTextStyle":{"range":{"startIndex":1,"endIndex":6},"textStyle":{"bold":true},"fields":"bold"}}]' --content-format richformat
+```
 
 ## Output Modes
 
