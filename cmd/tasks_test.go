@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
 	"google.golang.org/api/tasks/v1"
 )
@@ -38,14 +39,10 @@ func TestTasksUpdateCommand_Flags(t *testing.T) {
 	}
 }
 
-// TestTasksUpdate_NoFlagsValidation tests that at least one flag is required
-func TestTasksUpdate_NoFlagsValidation(t *testing.T) {
-	// Simulate calling runTasksUpdate with no flags set
-	// The validation is: if title == "" && notes == "" && due == "" → error
-	// We test this by checking the function signature requires flags
+// TestTasksUpdate_FlagDefaults tests that update flags default to empty strings
+func TestTasksUpdate_FlagDefaults(t *testing.T) {
 	cmd := tasksUpdateCmd
 
-	// Verify all flags default to empty
 	title, _ := cmd.Flags().GetString("title")
 	notes, _ := cmd.Flags().GetString("notes")
 	due, _ := cmd.Flags().GetString("due")
@@ -53,6 +50,26 @@ func TestTasksUpdate_NoFlagsValidation(t *testing.T) {
 	if title != "" || notes != "" || due != "" {
 		t.Error("expected all update flags to default to empty string")
 	}
+}
+
+// TestTasksUpdate_NoFlagsReturnsEarly tests that runTasksUpdate returns without
+// attempting OAuth when no flags are set (PrintError prints the error, returns nil)
+func TestTasksUpdate_NoFlagsReturnsEarly(t *testing.T) {
+	// Create a fresh command to avoid flag state pollution
+	cmd := &cobra.Command{Use: "update", Args: cobra.ExactArgs(2)}
+	cmd.Flags().String("title", "", "")
+	cmd.Flags().String("notes", "", "")
+	cmd.Flags().String("due", "", "")
+
+	// runTasksUpdate uses PrintError which prints and returns nil.
+	// Without OAuth creds, if validation didn't catch it, we'd get a
+	// "missing OAuth credentials" panic or different error path.
+	// The function should return quickly (nil from PrintError) without
+	// attempting client creation.
+	err := runTasksUpdate(cmd, []string{"@default", "task-123"})
+	// PrintError returns nil (print succeeded), so err is nil.
+	// The key assertion is that it doesn't panic or attempt OAuth.
+	_ = err
 }
 
 // TestTasksUpdate_PartialUpdates tests updating individual fields

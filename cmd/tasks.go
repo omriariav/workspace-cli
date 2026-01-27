@@ -215,6 +215,16 @@ func runTasksCreate(cmd *cobra.Command, args []string) error {
 
 func runTasksUpdate(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
+
+	// Validate flags before creating client
+	titleChanged := cmd.Flags().Changed("title")
+	notesChanged := cmd.Flags().Changed("notes")
+	dueChanged := cmd.Flags().Changed("due")
+
+	if !titleChanged && !notesChanged && !dueChanged {
+		return p.PrintError(fmt.Errorf("at least one of --title, --notes, or --due is required"))
+	}
+
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -229,13 +239,6 @@ func runTasksUpdate(cmd *cobra.Command, args []string) error {
 
 	tasklistID := args[0]
 	taskID := args[1]
-	title, _ := cmd.Flags().GetString("title")
-	notes, _ := cmd.Flags().GetString("notes")
-	due, _ := cmd.Flags().GetString("due")
-
-	if title == "" && notes == "" && due == "" {
-		return p.PrintError(fmt.Errorf("at least one of --title, --notes, or --due is required"))
-	}
 
 	// Get existing task
 	task, err := svc.Tasks.Get(tasklistID, taskID).Do()
@@ -243,14 +246,17 @@ func runTasksUpdate(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to get task: %w", err))
 	}
 
-	// Apply updates
-	if title != "" {
+	// Apply updates (only for flags that were explicitly set)
+	if titleChanged {
+		title, _ := cmd.Flags().GetString("title")
 		task.Title = title
 	}
-	if notes != "" {
+	if notesChanged {
+		notes, _ := cmd.Flags().GetString("notes")
 		task.Notes = notes
 	}
-	if due != "" {
+	if dueChanged {
+		due, _ := cmd.Flags().GetString("due")
 		task.Due = due
 	}
 

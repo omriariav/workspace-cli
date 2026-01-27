@@ -55,76 +55,39 @@ The config contains:
 - `max_emails` — How many unread emails to analyze (default 50)
 - `daily_log_doc_id` — Google Doc ID for the daily log (empty = skip logging)
 
-## Step 2: Gather Data
+## Step 2: Gather Context for Summary Header
 
-Run these `gws` commands to collect all context. Run them in parallel where possible.
+The main agent gathers **only calendar data** for the summary header. All other data (inbox, tasks, OKRs) is gathered by the batch classifier sub-agent in Step 3 to keep raw JSON out of the main context.
 
-### 2a. Inbox (Primary + Noise)
-
-Run two queries in parallel — one for all unread, one for noise:
-
-```bash
-# All unread emails
-gws gmail list --max <max_emails> --query "is:unread"
-
-# Noise emails (if noise_strategy is "promotions")
-gws gmail list --max <max_emails> --query "is:unread category:promotions"
-```
-
-The first query returns threads with `thread_id`, `message_id`, `message_count`, `subject`, `from`, `date`, `snippet`.
-
-Cross-reference the two lists by ID to separate **primary** (not in promotions) from **noise** (in promotions). This avoids manual sender-based noise detection — Gmail's built-in categorization is more accurate.
-
-**Do NOT** fetch full threads at this stage. Thread content is only fetched on-demand when the user picks "Read it" during triage (see Step 6).
-
-### 2b. Tasks
-
-For each task list in the config:
-
-```bash
-gws tasks list <task-list-id>
-```
-
-Pay special attention to:
-- Tasks in "Top five things" — these are the user's current highest priorities
-- Tasks with due dates that are past or today — flag as overdue
-- Subtasks (tasks with `parent` field) — group under their parent
-
-### 2c. Calendar
+### Calendar
 
 ```bash
 gws calendar events --days 2
 ```
 
 Fetch **2 days** (today + tomorrow) for meeting prep context. Extract: event title, start time, attendees, description. These are used to:
-- Cross-reference with inbox items (emails from attendees, about meeting topics)
+- Populate the summary header with today's meetings
 - Surface prep context ("you have a meeting about X, review email Y first")
 - Tomorrow's meetings provide early prep opportunities
 
-### 2d. OKRs
-
-For each sheet in `okr_sheets`:
-
-```bash
-gws sheets read <okr_sheet_id> "<sheet_name>!A1:Q100"
-```
-
-Extract the OKR hierarchy:
-- **Must Wins** — the top-level strategic bets
-- **Objectives** — quarterly goals under each Must Win
-- **Key Results** — measurable milestones
-- **Initiatives** — current work items
-- **Status** — On Track, At Risk, Not Started
-- **Recent updates** — the latest bi-weekly update column with content
+**Do NOT** gather inbox, tasks, or OKRs here. The batch classifier sub-agent handles all data gathering and classification in a single call (Step 3).
 
 ## Step 3: Classify Emails (Batch Sub-Agent)
 
-**Do not classify emails inline.** Spawn a sub-agent to classify all primary emails in a single batch. This saves context and produces consistent scoring.
+**Do not classify emails inline.** Spawn a sub-agent to gather all data and classify all primary emails in a single batch. The sub-agent runs `gws` commands itself, keeping raw JSON out of the main conversation context.
 
 **Prompt file:** `skills/morning/prompts/batch-classifier.md`
 **Model:** `sonnet` | **Agent type:** `general-purpose`
 
-Follow the prompt template in the file. Pass it all gathered data (emails, OKRs, tasks, calendar, VIP senders) and the classification rules.
+Follow the prompt template in the file. Pass config values only:
+- `max_emails` — from config
+- Task list IDs — from config (`task_lists`)
+- OKR sheet ID and sheet names — from config
+- VIP senders — from config (`priority_signals.vip_senders`)
+- Noise strategy — from config
+- `inbox_query` — from config (default: `"is:unread"`)
+
+The sub-agent fetches inbox, tasks, and OKRs itself. **Do NOT pass raw data.**
 
 ### Sub-Agent Output
 
@@ -404,8 +367,8 @@ After the digest, remain ready for follow-up commands:
 | User says | Action |
 |-----------|--------|
 | "read item N" | Run `gws gmail read <message_id>` or `gws gmail thread <thread_id>` for that item |
-| "archive the noise" | Run `skills/morning/scripts/bulk-gmail.sh archive <noise_ids>` |
-| "archive items N, M" | Run `skills/morning/scripts/bulk-gmail.sh archive <selected_ids>` |
+| "archive the noise" | Run `skills/morning/scripts/bulk-gmail.sh archive-thread <noise_thread_ids>` |
+| "archive items N, M" | Run `skills/morning/scripts/bulk-gmail.sh archive-thread <selected_thread_ids>` |
 | "delete the noise" | Run `skills/morning/scripts/bulk-gmail.sh trash <noise_ids>` |
 | "add task: <title>" | Run `gws tasks create --title "<title>" --tasklist "Incoming"` |
 | "triage" | Start guided triage from the beginning |
@@ -557,7 +520,8 @@ Common `gws` commands used during triage:
 | Update task | `gws tasks update <tasklist-id> <task-id> --title "<title>"` |
 | Calendar events | `gws calendar events --days 2` |
 | RSVP accept | `gws calendar rsvp <event-id> --response accepted` |
-| Bulk archive | `skills/morning/scripts/bulk-gmail.sh archive <id1> <id2> ...` |
+| Bulk archive (thread) | `skills/morning/scripts/bulk-gmail.sh archive-thread <thread_id1> <thread_id2> ...` |
+| Bulk archive (message) | `skills/morning/scripts/bulk-gmail.sh archive <id1> <id2> ...` |
 | Bulk trash | `skills/morning/scripts/bulk-gmail.sh trash <id1> <id2> ...` |
 | Bulk mark-read | `skills/morning/scripts/bulk-gmail.sh mark-read <id1> <id2> ...` |
 
@@ -573,10 +537,11 @@ Common `gws` commands used during triage:
   - **Label resolver** (Step 6, "Label & archive") — fetches label list, fuzzy-matches, applies labels
   - This keeps the main conversation lean and prevents context overflow on large inboxes.
 - **Use bash scripts for bulk operations.** Archive/trash/mark-read across multiple emails is mechanical work — no AI reasoning needed. Use `skills/morning/scripts/bulk-gmail.sh` instead of spawning a sub-agent or running sequential commands:
-  - `bulk-gmail.sh archive <ids>` — archive + mark read
+  - `bulk-gmail.sh archive-thread <thread_ids>` — archive all messages in threads + mark read (preferred)
+  - `bulk-gmail.sh archive <message_ids>` — archive individual messages + mark read
   - `bulk-gmail.sh trash <ids>` — delete + mark read
   - `bulk-gmail.sh mark-read <ids>` — mark read only
-- Always run all data-gathering commands (Step 2) in parallel before spawning the classification sub-agent. It needs the full picture.
+- The batch classifier sub-agent gathers its own data (inbox, tasks, OKRs). The main agent only gathers calendar data (Step 2) for the summary header. Pass config values — not raw data — when spawning the sub-agent.
 
 ### Classification
 - **Blocker detection is the most important classification rule.** An email where the user is CC'd and someone else owns the action is REVIEW, not ACT NOW — even if the thread is 5 weeks old and high-priority.
