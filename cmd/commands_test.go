@@ -3,6 +3,7 @@ package cmd
 import (
 	"testing"
 
+	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 )
 
@@ -27,6 +28,30 @@ func TestRootCommand_Flags(t *testing.T) {
 	}
 	if quietFlag.DefValue != "false" {
 		t.Errorf("expected --quiet default to be 'false', got '%s'", quietFlag.DefValue)
+	}
+}
+
+func TestGetPrinter_QuietMode(t *testing.T) {
+	// Save and restore quiet state
+	origQuiet := quiet
+	defer func() { quiet = origQuiet }()
+
+	quiet = true
+	p := GetPrinter()
+	if _, ok := p.(*printer.NullPrinter); !ok {
+		t.Errorf("expected NullPrinter when quiet=true, got %T", p)
+	}
+}
+
+func TestGetPrinter_NormalMode(t *testing.T) {
+	// Save and restore quiet state
+	origQuiet := quiet
+	defer func() { quiet = origQuiet }()
+
+	quiet = false
+	p := GetPrinter()
+	if _, ok := p.(*printer.NullPrinter); ok {
+		t.Error("expected non-NullPrinter when quiet=false")
 	}
 }
 

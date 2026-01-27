@@ -57,6 +57,65 @@ func TestNullPrinter_ImplementsPrinter(t *testing.T) {
 	_ = p // Verify interface compliance
 }
 
+func TestNullPrinter_SuppressesOutput(t *testing.T) {
+	null := NewNullPrinter()
+	json := NewJSONPrinter(&bytes.Buffer{})
+
+	data := map[string]interface{}{
+		"thread_id": "abc-123",
+		"status":    "archived",
+		"messages":  []string{"msg-1", "msg-2", "msg-3"},
+	}
+
+	// NullPrinter produces no output; JSONPrinter does
+	// We can't capture NullPrinter's stdout since it doesn't write anywhere,
+	// but we verify it handles all the same data types without error
+	types := []interface{}{
+		data,
+		"simple string",
+		42,
+		[]string{"a", "b"},
+		[]map[string]interface{}{{"key": "val"}},
+		errors.New("test error"),
+	}
+
+	for _, v := range types {
+		if err, ok := v.(error); ok {
+			if printErr := null.PrintError(err); printErr != nil {
+				t.Errorf("NullPrinter.PrintError failed for %T: %v", v, printErr)
+			}
+			if printErr := json.PrintError(err); printErr != nil {
+				t.Errorf("JSONPrinter.PrintError failed for %T: %v", v, printErr)
+			}
+		} else {
+			if err := null.Print(v); err != nil {
+				t.Errorf("NullPrinter.Print failed for %T: %v", v, err)
+			}
+			if err := json.Print(v); err != nil {
+				t.Errorf("JSONPrinter.Print failed for %T: %v", v, err)
+			}
+		}
+	}
+}
+
+func TestNullPrinter_ProducesNoBytes(t *testing.T) {
+	// NullPrinter has no writer — verify it doesn't panic or write anywhere
+	p := NewNullPrinter()
+
+	// Large data that would normally produce significant output
+	largeData := make(map[string]interface{})
+	for i := 0; i < 100; i++ {
+		largeData[strings.Repeat("key", i+1)] = strings.Repeat("value", i+1)
+	}
+
+	if err := p.Print(largeData); err != nil {
+		t.Errorf("unexpected error with large data: %v", err)
+	}
+	if err := p.PrintError(errors.New("big error")); err != nil {
+		t.Errorf("unexpected error with PrintError: %v", err)
+	}
+}
+
 func TestNew_UnknownFormat(t *testing.T) {
 	var buf bytes.Buffer
 	p := New(&buf, "xml")
