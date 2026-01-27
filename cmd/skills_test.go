@@ -584,6 +584,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 	// morning skill: prompts + scripts
 	morningExtras := []string{
 		"morning/prompts/batch-classifier.md",
+		"morning/prompts/calendar-coordinator.md",
 		"morning/prompts/deep-dive.md",
 		"morning/scripts/bulk-gmail.sh",
 	}
@@ -593,7 +594,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		}
 	}
 
-	expectedTotal := 27 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md + 3 morning extras
+	expectedTotal := 28 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md + 4 morning extras
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}
@@ -605,6 +606,7 @@ func TestMorningSkill_PromptFilesExist(t *testing.T) {
 	base := skillsDir(t)
 	prompts := []string{
 		"prompts/batch-classifier.md",
+		"prompts/calendar-coordinator.md",
 		"prompts/deep-dive.md",
 	}
 	for _, p := range prompts {
@@ -618,8 +620,9 @@ func TestMorningSkill_PromptFilesExist(t *testing.T) {
 func TestMorningSkill_PromptFilesSpecifyModel(t *testing.T) {
 	base := skillsDir(t)
 	prompts := map[string]string{
-		"prompts/batch-classifier.md": "sonnet",
-		"prompts/deep-dive.md":        "sonnet",
+		"prompts/batch-classifier.md":      "sonnet",
+		"prompts/calendar-coordinator.md":  "sonnet",
+		"prompts/deep-dive.md":             "sonnet",
 	}
 	for file, expectedModel := range prompts {
 		t.Run(file, func(t *testing.T) {
