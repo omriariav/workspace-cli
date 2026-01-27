@@ -50,9 +50,9 @@ for id in "$@"; do
   fi
 
   if $ok; then
-    ((success++))
+    success=$((success + 1))
   else
-    ((failed++))
+    failed=$((failed + 1))
   fi
 done
 

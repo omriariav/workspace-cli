@@ -113,9 +113,9 @@ Plus: Start Date, Due Date, Due Q, Status, KPIs, bi-weekly update columns.
 
 ```yaml
 # ~/.config/gws/inbox-skill.yaml
-okr_sheet_id: "14qwO-5DxkVT1GfzxB6DLuwmS_tJ113g-fnYL5yMjhMA"
+okr_sheet_id: "<google-sheet-id>"
 okr_sheets:
-  - "Data Track (2026)"
+  - "<sheet-tab-name>"
 
 task_lists: "all"   # or list of specific names
 
@@ -141,7 +141,7 @@ When no config exists, the skill runs an interactive setup:
 1. **OKR source** — reads sheet names from the configured spreadsheet, user picks which to monitor
 2. **Task lists** — shows all task lists, user picks which to monitor (or "all")
 3. **Noise strategy** — recommend Gmail Promotions category over manual sender lists
-4. **Priority signals** — starred emails, VIP senders (populate via `/taboolar` org lookup if available)
+4. **Priority signals** — starred emails, VIP senders (populate via org directory lookup if available)
 5. **Saves config** to `~/.config/gws/inbox-skill.yaml`
 
 ## Interaction Model
@@ -189,13 +189,13 @@ Each briefing appends a summary to a Google Doc:
 **Overdue tasks:** 2
 
 ### Priority items:
-1. Yahoo/Taboola Sync — reschedule (Intent research) — read
+1. Partner Sync — reschedule (Research project) — read
 2. Legal question thread — review latest — skipped
-3. TMT incident — review and comment — added task
+3. Production incident — review and comment — added task
 
 ### Overdue:
-- Tomer Tunitsky - annual review prep (Jan 22)
-- Adi Oz - annual review prep (Jan 22)
+- Alice Smith - annual review prep (Jan 22)
+- Bob Jones - annual review prep (Jan 22)
 ```
 
 ## Implementation Phases
@@ -233,5 +233,5 @@ Each briefing appends a summary to a Google Doc:
 7. **Sub-agent architecture** — batch classifier for initial scoring, per-item deep-dive on "Read it". Keeps main conversation lean and prevents context overflow.
 8. **Blocker detection** — the most important classification rule. Emails where the user is CC'd and someone else owns the action are REVIEW, not ACT NOW.
 9. **Gmail Promotions as noise** — replaces manual sender-based lists. Gmail's ML categorization is more accurate and requires no maintenance.
-10. **VIP senders from org data** — `/taboolar` integration populates manager, reports, dept heads as priority signals during setup.
+10. **VIP senders from org data** — org directory integration populates manager, reports, dept heads as priority signals during setup.
 11. **Pause-and-resume** — user can stop triage to work on something (prep for a meeting, open a doc), then resume later.
