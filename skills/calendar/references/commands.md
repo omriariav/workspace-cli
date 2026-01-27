@@ -46,7 +46,7 @@ Usage: gws calendar events [flags]
 | `--calendar-id` | string | `primary` | Calendar ID |
 | `--days` | int | 7 | Number of days to look ahead |
 | `--max` | int | 50 | Maximum number of events |
-| `--pending` | bool | false | Only show events with pending RSVP (needsAction) |
+| `--pending` | bool | false | Only show events with pending RSVP (needsAction). Tip: increase `--max` for long date ranges — `--max` limits API fetch before client-side filtering. |
 
 ### Output Fields (JSON)
 
