@@ -295,7 +295,13 @@ skills/morning/scripts/bulk-gmail.sh mark-read <id1> <id2> ...
 Spawn a sub-agent to fetch, summarize, and cross-reference the email.
 
 **Prompt file:** `skills/morning/prompts/deep-dive.md`
-**Model:** `sonnet` | **Agent type:** `general-purpose`
+**Agent type:** `general-purpose`
+
+**Model selection by complexity:**
+- **`haiku`** — Single-message emails, FYI items, newsletters, simple questions (fast + cheap)
+- **`sonnet`** — Multi-message threads (3+ messages), comment notifications with resolution context, action items with cross-references
+
+Choose the model when spawning the deep-dive agent based on the email's message count and classification category.
 
 Follow the prompt template in the file. Pass it the email ID, message count (to decide `read` vs `thread`), and the OKR/task/calendar context for cross-referencing.
 
@@ -342,18 +348,23 @@ Ask: "Handle scheduling items?" with options:
 
 ### Noise Handling
 
-After action and review items (or when user skips to noise):
+After action and review items (or when user skips to noise), present a **numbered list** so the user can select by number:
 
 ```
 <N> noise items:
-  <N> newsletters | <N> automated alerts | <N> scheduling | <N> other
+  1. <Sender> — <Subject> (newsletter)
+  2. <Sender> — <Subject> (automated alert)
+  3. <Sender> — <Subject> (JIRA watcher)
+  ...
 ```
 
-Ask: "Archive all noise?" with options:
-- **Archive all** — Run the bulk script: `skills/morning/scripts/bulk-gmail.sh archive <id1> <id2> ...` (archives + marks read in one pass, no sub-agent needed)
+Ask: "Archive all noise, or select by number?" with options:
+- **Archive all** — Run: `skills/morning/scripts/bulk-gmail.sh archive-thread <thread_id1> <thread_id2> ...` (archives + marks read in one pass)
 - **Delete all** — Run: `skills/morning/scripts/bulk-gmail.sh trash <id1> <id2> ...`
-- **Let me pick** — Show noise items one by one, user decides each
+- **Let me pick** — User can type "archive 1,3,5" or "keep 2,4" to selectively handle items
 - **Leave them** — Skip, do nothing
+
+When the user selects by number (e.g., "archive 2,5,8"), archive only those items and leave the rest unread.
 
 ### Triage Complete
 
@@ -588,3 +599,12 @@ Common `gws` commands used during triage:
 ### VIP Senders
 - VIP sender lists can be populated during first-run setup using an employee directory lookup if available.
 - During triage, if the user mentions wanting to track a new person, offer to add them to `vip_senders` in the config.
+
+### Task Management
+- `gws tasks update` modifies title, notes, or due date — it does NOT support moving tasks between lists or reordering. To move a task to a different list, create a new task in the target list and complete the old one.
+- When creating follow-up tasks from triage, always ask the user which task list to use. Default to `@default` if they don't specify.
+
+### Label Operations
+- Gmail labels are resolved by **display name** (case-insensitive), not by internal ID. Use `gws gmail labels` to see all available label names.
+- For label operations during triage, use the **label-resolver sub-agent** (`skills/morning/prompts/label-resolver.md`) to avoid loading the full label list (4000+ labels) into the main context.
+- Common label patterns: `gws gmail label <id> --add "STARRED"`, `gws gmail label <id> --remove "UNREAD"`
