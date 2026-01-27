@@ -450,12 +450,9 @@ Ask: "Which signals should boost email priority?"
 - **Starred emails** — treat starred emails as high priority
 - **VIP senders** — specify email addresses of key people (manager, direct reports, department heads, key partners)
 
-For VIP senders, if the `/taboolar` skill is available, offer to look up the user's org structure:
-```
-Use /taboolar <your name> to find your manager, reports, and department heads.
-```
+For VIP senders, if an employee directory or org-chart lookup skill is available, offer to look up the user's org structure (manager, direct reports, department heads). The user can add VIP senders from the lookup results. This can also be done later during triage sessions.
 
-The user can add VIP senders from the org lookup results. This can also be done later during triage sessions.
+<!-- Internal: when ported to taboola-pm-marketplace, use the employee lookup skill here to auto-populate org structure -->
 
 ### 5. Save Config
 
@@ -518,5 +515,5 @@ daily_log_doc_id: ""
 - Calendar cross-referencing is valuable: "you have a 1:1 with X at 2pm, and X sent you an email" is actionable prep context.
 
 ### VIP Senders
-- VIP sender lists can be populated during first-run setup using the `/taboolar` skill to look up org structure.
+- VIP sender lists can be populated during first-run setup using an employee directory lookup if available.
 - During triage, if the user mentions wanting to track a new person, offer to add them to `vip_senders` in the config.
