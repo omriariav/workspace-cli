@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/omriariav/workspace-cli/internal/config"
+	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -12,6 +13,7 @@ import (
 var (
 	cfgFile string
 	format  string
+	quiet   bool
 )
 
 var rootCmd = &cobra.Command{
@@ -32,6 +34,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ~/.config/gws/config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&format, "format", "json", "output format: json or text")
+	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress output (useful for scripted actions)")
 
 	viper.BindPFlag("format", rootCmd.PersistentFlags().Lookup("format"))
 }
@@ -60,4 +63,13 @@ func initConfig() {
 
 func GetFormat() string {
 	return viper.GetString("format")
+}
+
+// GetPrinter returns a Printer based on current flags.
+// Returns NullPrinter when --quiet is set, otherwise the format-appropriate printer.
+func GetPrinter() printer.Printer {
+	if quiet {
+		return printer.NewNullPrinter()
+	}
+	return printer.New(os.Stdout, GetFormat())
 }

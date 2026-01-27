@@ -34,6 +34,29 @@ func TestNew_Default(t *testing.T) {
 	}
 }
 
+func TestNullPrinter_Print(t *testing.T) {
+	p := NewNullPrinter()
+
+	data := map[string]interface{}{"key": "value"}
+	if err := p.Print(data); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestNullPrinter_PrintError(t *testing.T) {
+	p := NewNullPrinter()
+
+	err := errors.New("test error")
+	if printErr := p.PrintError(err); printErr != nil {
+		t.Errorf("unexpected error: %v", printErr)
+	}
+}
+
+func TestNullPrinter_ImplementsPrinter(t *testing.T) {
+	var p Printer = NewNullPrinter()
+	_ = p // Verify interface compliance
+}
+
 func TestNew_UnknownFormat(t *testing.T) {
 	var buf bytes.Buffer
 	p := New(&buf, "xml")
