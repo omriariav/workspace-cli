@@ -583,6 +583,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 
 	// morning skill: prompts + scripts
 	morningExtras := []string{
+		"morning/compact-prompt.md",
 		"morning/prompts/batch-classifier.md",
 		"morning/prompts/calendar-coordinator.md",
 		"morning/prompts/deep-dive.md",
@@ -595,7 +596,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		}
 	}
 
-	expectedTotal := 29 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md + 5 morning extras
+	expectedTotal := 30 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md + 6 morning extras
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}
