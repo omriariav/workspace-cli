@@ -1,6 +1,6 @@
 ---
 name: gws-morning
-version: 0.1.0
+version: 0.2.0
 description: "AI-powered morning inbox briefing. Reads Gmail, Google Tasks, Calendar, and OKR sheets to produce a prioritized daily briefing with actionable recommendations. Triggers: /morning, morning briefing, inbox triage, email priorities, daily digest."
 metadata:
   short-description: AI inbox briefing with OKR/task matching
