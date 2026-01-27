@@ -93,12 +93,13 @@ Pay special attention to:
 ### 2c. Calendar
 
 ```bash
-gws calendar events --days 1
+gws calendar events --days 2
 ```
 
-Extract: event title, start time, attendees, description. These are used to:
+Fetch **2 days** (today + tomorrow) for meeting prep context. Extract: event title, start time, attendees, description. These are used to:
 - Cross-reference with inbox items (emails from attendees, about meeting topics)
 - Surface prep context ("you have a meeting about X, review email Y first")
+- Tomorrow's meetings provide early prep opportunities
 
 ### 2d. OKRs
 
@@ -247,18 +248,25 @@ Then ask the user what to do using AskUserQuestion (max 4 options). Rotate optio
 **For action/review items:**
 - **Dig Deeper** — Spawn deep-dive sub-agent (see below)
 - **Open in browser** — Run `open "https://mail.google.com/mail/u/0/#inbox/<thread_id>"`
-- **Archive** — Run `gws gmail archive <message_id>`
+- **Archive** — Run `gws gmail archive-thread <thread_id> --quiet` (archives all messages in thread + marks read)
 - **Skip** — Move to next item (keeps email **unread**)
 
+**Compound options** (rotate based on context):
+- **Label & archive** — Spawn label-resolver sub-agent (`skills/morning/prompts/label-resolver.md`) with `action=archive`
+- **Add task & archive** — Ask for title, run `gws tasks create`, then archive the thread
+- **Accept & archive** — For scheduling items, RSVP accept + archive (via calendar-coordinator)
+
 **For noise/peripheral items:**
-- **Archive** — Run `gws gmail archive <message_id>`
-- **Delete** — Run `gws gmail trash <message_id>`
+- **Archive** — Run `gws gmail archive-thread <thread_id> --quiet`
+- **Delete** — Run `gws gmail trash <message_id> --quiet`
 - **Open in browser** — Run `open "https://mail.google.com/mail/u/0/#inbox/<thread_id>"`
 - **Skip** — Move to next item (keeps email **unread**)
 
 The user can always type a free-form response (e.g., "delete", "add task", "star this") via the "Other" option. Handle these naturally:
-- "delete" / "trash" → `gws gmail trash <message_id>`
+- "delete" / "trash" → `gws gmail trash <message_id> --quiet`
 - "add task" → ask for title, run `gws tasks create`
+- "add task & archive" → create task, then `gws gmail archive-thread <thread_id> --quiet`
+- "label X" / "label & archive" → spawn label-resolver sub-agent
 - "star" → `gws gmail label <message_id> --add STARRED`
 - "open" → open in browser
 
@@ -266,10 +274,12 @@ The user can always type a free-form response (e.g., "delete", "add task", "star
 
 After any action **except Skip**, mark the email as read:
 ```bash
-gws gmail label <message_id> --remove UNREAD
+gws gmail label <message_id> --remove UNREAD --quiet
 ```
 
 **Skip is the only action that preserves unread status.** This ensures triaged emails don't reappear as unread in the next run.
+
+**Note:** `archive-thread` already marks all messages as read, so no separate mark-read step is needed when archiving threads.
 
 For bulk mark-as-read (e.g., after archiving multiple items), use the bulk script:
 ```bash
@@ -316,6 +326,19 @@ Ask: "Continue reviewing?" with options:
 ### Review Items (one by one, same pattern)
 
 Same flow as action items but with lighter urgency framing. Same option rotation and free-form handling applies. Mark-as-read rule: any action except Skip marks the email as read.
+
+### Scheduling Step
+
+After review items, handle all SCHEDULING category emails together:
+
+```
+<N> scheduling items (calendar invites, meeting updates).
+```
+
+Ask: "Handle scheduling items?" with options:
+- **Auto-accept all** — Spawn calendar-coordinator sub-agent (`skills/morning/prompts/calendar-coordinator.md`) with all scheduling items. It RSVPs, checks conflicts, and archives handled items. Returns a structured summary.
+- **One by one** — Walk through scheduling items individually with options: Accept & archive, Decline, Open in browser, Skip
+- **Skip** — Leave all scheduling items unread
 
 ### Noise Handling
 
@@ -407,6 +430,26 @@ gws docs create --title "Morning Briefing Log"
 
 Save the returned doc ID back to the config file for future runs.
 
+## Step 9: Post-Triage Cleanup
+
+After triage completes (and daily log is written), check for new arrivals:
+
+```bash
+gws gmail list --max 10 --query "is:unread in:inbox"
+```
+
+If new unread emails arrived during triage:
+```
+<N> new emails arrived during triage.
+```
+
+Ask: "Handle new arrivals?" with options:
+- **Quick classify** — Run the batch classifier on just the new items (lighter pass)
+- **Ignore** — Leave for next session
+- **Done** — End session
+
+This prevents the "endless inbox" problem where emails arrive faster than they're triaged.
+
 ## First-Run Setup
 
 When `~/.config/gws/inbox-skill.yaml` does not exist, guide the user through setup:
@@ -483,12 +526,40 @@ max_emails: 50
 daily_log_doc_id: ""
 ```
 
+## CLI Quick Reference
+
+Common `gws` commands used during triage:
+
+| Action | Command |
+|--------|---------|
+| List unread | `gws gmail list --max 50 --query "is:unread"` |
+| Read message | `gws gmail read <message-id>` |
+| Read thread | `gws gmail thread <thread-id>` |
+| Archive thread | `gws gmail archive-thread <thread-id> --quiet` |
+| Archive message | `gws gmail archive <message-id> --quiet` |
+| Trash message | `gws gmail trash <message-id> --quiet` |
+| Mark read | `gws gmail label <message-id> --remove UNREAD --quiet` |
+| Star message | `gws gmail label <message-id> --add STARRED` |
+| Add label | `gws gmail label <message-id> --add "<label>"` |
+| List labels | `gws gmail labels` |
+| Create task | `gws tasks create --title "<title>" --tasklist "<list>"` |
+| Update task | `gws tasks update <tasklist-id> <task-id> --title "<title>"` |
+| Calendar events | `gws calendar events --days 2` |
+| RSVP accept | `gws calendar rsvp <event-id> --response accepted` |
+| Bulk archive | `skills/morning/scripts/bulk-gmail.sh archive <id1> <id2> ...` |
+| Bulk trash | `skills/morning/scripts/bulk-gmail.sh trash <id1> <id2> ...` |
+| Bulk mark-read | `skills/morning/scripts/bulk-gmail.sh mark-read <id1> <id2> ...` |
+
+**Use `--quiet` on archive/trash/label actions** to suppress JSON output and save context tokens.
+
 ## Tips for AI Agents
 
 ### Architecture
 - **Use sub-agents to manage context.** The main agent orchestrates; sub-agents do the heavy lifting:
   - **Batch classifier** (Step 3) — classifies all emails in one call, returns structured data
   - **Deep-dive agent** (Step 6, "Dig Deeper") — fetches and summarizes a single email/thread
+  - **Calendar coordinator** (Step 6, "Scheduling") — matches invites to events, checks conflicts, RSVPs
+  - **Label resolver** (Step 6, "Label & archive") — fetches label list, fuzzy-matches, applies labels
   - This keeps the main conversation lean and prevents context overflow on large inboxes.
 - **Use bash scripts for bulk operations.** Archive/trash/mark-read across multiple emails is mechanical work — no AI reasoning needed. Use `skills/morning/scripts/bulk-gmail.sh` instead of spawning a sub-agent or running sequential commands:
   - `bulk-gmail.sh archive <ids>` — archive + mark read

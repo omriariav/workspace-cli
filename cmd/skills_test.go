@@ -697,7 +697,9 @@ func TestMorningSkill_SKILLmdReferencesPrompts(t *testing.T) {
 	// SKILL.md must reference the prompt files it depends on
 	refs := []string{
 		"prompts/batch-classifier.md",
+		"prompts/calendar-coordinator.md",
 		"prompts/deep-dive.md",
+		"prompts/label-resolver.md",
 		"scripts/bulk-gmail.sh",
 	}
 	for _, ref := range refs {
