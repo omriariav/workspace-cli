@@ -7,6 +7,11 @@
 .vscode/
 *.swp
 
+# Claude Code (local session/settings — root CLAUDE.md is tracked)
+.claude/
+**/CLAUDE.md
+!/CLAUDE.md
+
 # OS
 .DS_Store
 
