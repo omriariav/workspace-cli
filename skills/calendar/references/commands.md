@@ -46,6 +46,7 @@ Usage: gws calendar events [flags]
 | `--calendar-id` | string | `primary` | Calendar ID |
 | `--days` | int | 7 | Number of days to look ahead |
 | `--max` | int | 50 | Maximum number of events |
+| `--pending` | bool | false | Only show events with pending RSVP (needsAction). Tip: increase `--max` for long date ranges — `--max` limits API fetch before client-side filtering. |
 
 ### Output Fields (JSON)
 
@@ -54,10 +55,12 @@ Each event includes:
 - `summary` — Event title
 - `start` — Start time (dateTime or date for all-day events)
 - `end` — End time
-- `location` — Event location
-- `description` — Event description
-- `attendees` — List of attendees with response status
-- `htmlLink` — Link to event in Google Calendar
+- `status` — Event status (confirmed, tentative, cancelled)
+- `location` — Event location (if set)
+- `hangout_link` — Google Meet link (if set)
+- `organizer` — Organizer email address (if set)
+- `response_status` — User's RSVP status: `accepted`, `declined`, `tentative`, `needsAction` (if user is an attendee)
+- `all_day` — `true` for all-day events (omitted for timed events)
 
 ---
 

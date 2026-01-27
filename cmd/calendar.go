@@ -99,6 +99,7 @@ func init() {
 	calendarEventsCmd.Flags().Int("days", 7, "Number of days to look ahead")
 	calendarEventsCmd.Flags().String("calendar-id", "primary", "Calendar ID (default: primary)")
 	calendarEventsCmd.Flags().Int64("max", 50, "Maximum number of events")
+	calendarEventsCmd.Flags().Bool("pending", false, "Only show events with pending RSVP (needsAction)")
 
 	// Create flags
 	calendarCreateCmd.Flags().String("title", "", "Event title (required)")
@@ -185,6 +186,7 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	days, _ := cmd.Flags().GetInt("days")
 	calendarID, _ := cmd.Flags().GetString("calendar-id")
 	maxResults, _ := cmd.Flags().GetInt64("max")
+	pending, _ := cmd.Flags().GetBool("pending")
 
 	now := time.Now()
 	timeMin := now.Format(time.RFC3339)
@@ -231,6 +233,24 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 		}
 		if event.HangoutLink != "" {
 			eventInfo["hangout_link"] = event.HangoutLink
+		}
+
+		if event.Organizer != nil && event.Organizer.Email != "" {
+			eventInfo["organizer"] = event.Organizer.Email
+		}
+
+		for _, attendee := range event.Attendees {
+			if attendee.Self {
+				eventInfo["response_status"] = attendee.ResponseStatus
+				break
+			}
+		}
+
+		if pending {
+			rs, _ := eventInfo["response_status"].(string)
+			if rs != "needsAction" {
+				continue
+			}
 		}
 
 		results = append(results, eventInfo)

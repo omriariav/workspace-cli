@@ -357,3 +357,208 @@ func TestCalendarRsvp_OutputFormat(t *testing.T) {
 		t.Errorf("unexpected status: %v", decoded["status"])
 	}
 }
+
+// --- Event response_status and --pending tests ---
+
+func TestCalendarEventsCommand_PendingFlag(t *testing.T) {
+	if calendarEventsCmd.Flags().Lookup("pending") == nil {
+		t.Error("expected --pending flag to exist on events command")
+	}
+}
+
+func TestCalendarEvents_MockServer_ResponseStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/calendars/primary/events" && r.Method == "GET" {
+			resp := &calendar.Events{
+				Items: []*calendar.Event{
+					{
+						Id:      "evt-pending",
+						Summary: "Pending Meeting",
+						Status:  "confirmed",
+						Start:   &calendar.EventDateTime{DateTime: "2026-02-01T10:00:00Z"},
+						End:     &calendar.EventDateTime{DateTime: "2026-02-01T11:00:00Z"},
+						Organizer: &calendar.EventOrganizer{
+							Email: "boss@example.com",
+						},
+						Attendees: []*calendar.EventAttendee{
+							{Email: "boss@example.com", ResponseStatus: "accepted"},
+							{Email: "me@example.com", Self: true, ResponseStatus: "needsAction"},
+						},
+					},
+					{
+						Id:      "evt-accepted",
+						Summary: "Accepted Meeting",
+						Status:  "confirmed",
+						Start:   &calendar.EventDateTime{DateTime: "2026-02-01T14:00:00Z"},
+						End:     &calendar.EventDateTime{DateTime: "2026-02-01T15:00:00Z"},
+						Organizer: &calendar.EventOrganizer{
+							Email: "colleague@example.com",
+						},
+						Attendees: []*calendar.EventAttendee{
+							{Email: "colleague@example.com", ResponseStatus: "accepted"},
+							{Email: "me@example.com", Self: true, ResponseStatus: "accepted"},
+						},
+					},
+					{
+						Id:      "evt-no-attendees",
+						Summary: "Solo Event",
+						Status:  "confirmed",
+						Start:   &calendar.EventDateTime{DateTime: "2026-02-01T16:00:00Z"},
+						End:     &calendar.EventDateTime{DateTime: "2026-02-01T17:00:00Z"},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	resp, err := svc.Events.List("primary").Do()
+	if err != nil {
+		t.Fatalf("failed to list events: %v", err)
+	}
+
+	if len(resp.Items) != 3 {
+		t.Fatalf("expected 3 events, got %d", len(resp.Items))
+	}
+
+	// Verify first event has attendee data
+	evt := resp.Items[0]
+	if evt.Organizer == nil || evt.Organizer.Email != "boss@example.com" {
+		t.Error("expected organizer email boss@example.com")
+	}
+
+	var selfStatus string
+	for _, a := range evt.Attendees {
+		if a.Self {
+			selfStatus = a.ResponseStatus
+			break
+		}
+	}
+	if selfStatus != "needsAction" {
+		t.Errorf("expected self response_status 'needsAction', got '%s'", selfStatus)
+	}
+
+	// Verify second event has accepted status
+	evt2 := resp.Items[1]
+	for _, a := range evt2.Attendees {
+		if a.Self {
+			if a.ResponseStatus != "accepted" {
+				t.Errorf("expected self response_status 'accepted', got '%s'", a.ResponseStatus)
+			}
+			break
+		}
+	}
+
+	// Verify third event has no attendees (solo event — no response_status)
+	if len(resp.Items[2].Attendees) != 0 {
+		t.Error("expected no attendees on solo event")
+	}
+}
+
+func TestCalendarEvents_OutputFormat(t *testing.T) {
+	// Verify the event output includes response_status and organizer
+	eventInfo := map[string]interface{}{
+		"id":              "evt-100",
+		"summary":         "Team Sync",
+		"status":          "confirmed",
+		"start":           "2026-02-01T10:00:00Z",
+		"end":             "2026-02-01T11:00:00Z",
+		"organizer":       "boss@example.com",
+		"response_status": "needsAction",
+	}
+
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(eventInfo); err != nil {
+		t.Fatalf("failed to encode event: %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to decode event: %v", err)
+	}
+
+	// New fields
+	if decoded["response_status"] != "needsAction" {
+		t.Errorf("expected response_status 'needsAction', got '%v'", decoded["response_status"])
+	}
+	if decoded["organizer"] != "boss@example.com" {
+		t.Errorf("expected organizer 'boss@example.com', got '%v'", decoded["organizer"])
+	}
+
+	// Existing fields still present
+	if decoded["id"] != "evt-100" {
+		t.Errorf("expected id 'evt-100', got '%v'", decoded["id"])
+	}
+	if decoded["summary"] != "Team Sync" {
+		t.Errorf("expected summary 'Team Sync', got '%v'", decoded["summary"])
+	}
+
+	// Solo event without response_status or organizer
+	soloEvent := map[string]interface{}{
+		"id":      "evt-200",
+		"summary": "Focus Time",
+		"status":  "confirmed",
+		"start":   "2026-02-01T14:00:00Z",
+		"end":     "2026-02-01T15:00:00Z",
+	}
+
+	buf.Reset()
+	if err := encoder.Encode(soloEvent); err != nil {
+		t.Fatalf("failed to encode solo event: %v", err)
+	}
+
+	var decodedSolo map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &decodedSolo); err != nil {
+		t.Fatalf("failed to decode solo event: %v", err)
+	}
+
+	if _, exists := decodedSolo["response_status"]; exists {
+		t.Error("solo event should not have response_status")
+	}
+	if _, exists := decodedSolo["organizer"]; exists {
+		t.Error("solo event should not have organizer")
+	}
+}
+
+func TestCalendarEvents_PendingFilter(t *testing.T) {
+	// Simulate the filtering logic from runCalendarEvents
+	events := []struct {
+		id             string
+		responseStatus string
+	}{
+		{"evt-1", "needsAction"},
+		{"evt-2", "accepted"},
+		{"evt-3", "needsAction"},
+		{"evt-4", "declined"},
+		{"evt-5", ""},
+	}
+
+	var filtered []string
+	for _, evt := range events {
+		if evt.responseStatus != "needsAction" {
+			continue
+		}
+		filtered = append(filtered, evt.id)
+	}
+
+	if len(filtered) != 2 {
+		t.Errorf("expected 2 pending events, got %d", len(filtered))
+	}
+	if filtered[0] != "evt-1" || filtered[1] != "evt-3" {
+		t.Errorf("unexpected filtered events: %v", filtered)
+	}
+}

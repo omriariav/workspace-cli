@@ -35,6 +35,7 @@ For initial setup, see the `gws-auth` skill.
 | List calendars | `gws calendar list` |
 | View upcoming events | `gws calendar events` |
 | View next 14 days | `gws calendar events --days 14` |
+| View pending invites | `gws calendar events --days 30 --pending` |
 | Create an event | `gws calendar create --title "Meeting" --start "2024-02-01 14:00" --end "2024-02-01 15:00"` |
 | Update an event | `gws calendar update <event-id> --title "New Title"` |
 | Delete an event | `gws calendar delete <event-id>` |
@@ -62,12 +63,18 @@ Lists upcoming events from a calendar.
 - `--calendar-id string` — Calendar ID (default: "primary")
 - `--days int` — Number of days to look ahead (default 7)
 - `--max int` — Maximum number of events (default 50)
+- `--pending` — Only show events with pending RSVP (needsAction). Tip: increase `--max` when using `--pending` over long date ranges, since `--max` limits the API fetch before client-side filtering.
+
+**Output includes:**
+- `response_status` — User's RSVP status (`accepted`, `declined`, `tentative`, `needsAction`) when user is an attendee
+- `organizer` — Organizer's email address
 
 **Examples:**
 ```bash
 gws calendar events
 gws calendar events --days 14 --max 20
 gws calendar events --calendar-id work@group.calendar.google.com
+gws calendar events --days 30 --pending    # Pending invites only
 ```
 
 ### create — Create an event
