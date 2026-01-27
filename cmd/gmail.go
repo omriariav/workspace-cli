@@ -86,6 +86,19 @@ Examples:
 	RunE: runGmailTrash,
 }
 
+var gmailThreadCmd = &cobra.Command{
+	Use:   "thread <thread-id>",
+	Short: "Read a full thread",
+	Long: `Reads and displays all messages in a Gmail thread (conversation).
+
+Use the thread_id from "gws gmail list" to view the full conversation.
+
+Examples:
+  gws gmail thread 18abc123`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGmailThread,
+}
+
 func init() {
 	rootCmd.AddCommand(gmailCmd)
 	gmailCmd.AddCommand(gmailListCmd)
@@ -95,6 +108,7 @@ func init() {
 	gmailCmd.AddCommand(gmailLabelCmd)
 	gmailCmd.AddCommand(gmailArchiveCmd)
 	gmailCmd.AddCommand(gmailTrashCmd)
+	gmailCmd.AddCommand(gmailThreadCmd)
 
 	// List flags
 	gmailListCmd.Flags().Int64("max", 10, "Maximum number of results")
@@ -153,12 +167,18 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 		}
 
 		threadInfo := map[string]interface{}{
-			"id":      thread.Id,
-			"snippet": thread.Snippet,
+			"thread_id":     thread.Id,
+			"snippet":       thread.Snippet,
+			"message_count": len(threadDetail.Messages),
 		}
 
-		// Extract headers from first message
+		// Extract latest message ID and headers from first message
 		if len(threadDetail.Messages) > 0 {
+			// Latest message ID (for use with read, label, archive, trash)
+			latestMsg := threadDetail.Messages[len(threadDetail.Messages)-1]
+			threadInfo["message_id"] = latestMsg.Id
+
+			// Headers from first message (thread subject/sender)
 			msg := threadDetail.Messages[0]
 			for _, header := range msg.Payload.Headers {
 				switch header.Name {
@@ -470,6 +490,59 @@ func runGmailTrash(cmd *cobra.Command, args []string) error {
 	return p.Print(map[string]interface{}{
 		"status":     "trashed",
 		"message_id": msg.Id,
+	})
+}
+
+func runGmailThread(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	threadID := args[0]
+
+	thread, err := svc.Users.Threads.Get("me", threadID).Format("full").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get thread: %w", err))
+	}
+
+	messages := make([]map[string]interface{}, 0, len(thread.Messages))
+	for _, msg := range thread.Messages {
+		msgInfo := map[string]interface{}{
+			"id": msg.Id,
+		}
+
+		// Extract headers
+		headers := make(map[string]string)
+		for _, header := range msg.Payload.Headers {
+			switch header.Name {
+			case "Subject", "From", "To", "Date", "Cc", "Bcc":
+				headers[strings.ToLower(header.Name)] = header.Value
+			}
+		}
+		msgInfo["headers"] = headers
+
+		// Extract body
+		msgInfo["body"] = extractBody(msg.Payload)
+
+		// Labels
+		msgInfo["labels"] = msg.LabelIds
+
+		messages = append(messages, msgInfo)
+	}
+
+	return p.Print(map[string]interface{}{
+		"thread_id":     threadID,
+		"message_count": len(messages),
+		"messages":      messages,
 	})
 }
 

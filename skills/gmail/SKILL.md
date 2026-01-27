@@ -36,6 +36,7 @@ For initial setup, see the `gws-auth` skill.
 | List unread emails | `gws gmail list --query "is:unread"` |
 | Search emails | `gws gmail list --query "from:user@example.com"` |
 | Read a message | `gws gmail read <message-id>` |
+| Read full thread | `gws gmail thread <thread-id>` |
 | Send an email | `gws gmail send --to user@example.com --subject "Hi" --body "Hello"` |
 | List all labels | `gws gmail labels` |
 | Add labels | `gws gmail label <message-id> --add "STARRED"` |
@@ -51,7 +52,10 @@ For initial setup, see the `gws-auth` skill.
 gws gmail list [flags]
 ```
 
-Lists recent email threads from your inbox.
+Lists recent email threads from your inbox. Each result includes:
+- `thread_id` — Thread ID (use with `gws gmail thread`)
+- `message_id` — Latest message ID (use with `read`, `label`, `archive`, `trash`)
+- `message_count` — Number of messages in the thread
 
 **Flags:**
 - `--max int` — Maximum number of results (default 10)
@@ -65,13 +69,21 @@ gws gmail list --query "from:boss@company.com subject:urgent"
 gws gmail list --query "after:2024/01/01 has:attachment"
 ```
 
+### thread — Read a full thread
+
+```bash
+gws gmail thread <thread-id>
+```
+
+Reads and displays all messages in a Gmail thread (conversation). Use the `thread_id` from `gws gmail list` output. Returns all messages with headers, body, and labels.
+
 ### read — Read a message
 
 ```bash
 gws gmail read <message-id>
 ```
 
-Reads and displays the content of a specific email message. The message ID comes from the `list` command output.
+Reads and displays the content of a specific email message. Use the `message_id` from `gws gmail list` output.
 
 ### send — Send an email
 
@@ -145,7 +157,8 @@ gws gmail list --format text    # Human-readable text
 ## Tips for AI Agents
 
 - Always use `--format json` (the default) for programmatic parsing
-- Use `gws gmail list` first to get message IDs, then `gws gmail read <id>` for content
+- Use `gws gmail list` to get IDs: `message_id` for `read`/`label`/`archive`/`trash`, `thread_id` for `thread`
+- Use `gws gmail thread <thread-id>` to view full conversations with all messages
 - Gmail search query syntax supports operators like `is:`, `from:`, `to:`, `subject:`, `after:`, `before:`, `has:`, `label:`
 - When managing labels, run `gws gmail labels` first to see available label names and IDs
 - Archive is a shortcut for `gws gmail label <id> --remove "INBOX"`
