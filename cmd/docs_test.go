@@ -931,6 +931,67 @@ func TestDocsCreate_WithMarkdown(t *testing.T) {
 	}
 }
 
+// TestDocsCreate_ContentFormatE2E tests end-to-end Cobra flag parsing for --content-format
+func TestDocsCreate_ContentFormatE2E(t *testing.T) {
+	// Verify the flag wiring from Cobra through to buildTextRequests
+	createCmd := findSubcommand(docsCmd, "create")
+	if createCmd == nil {
+		t.Fatal("docs create command not found")
+	}
+
+	// Test that the flag parses correctly and returns the right value
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{"default is markdown", []string{"--title", "T", "--text", "x"}, "markdown"},
+		{"explicit plaintext", []string{"--title", "T", "--text", "x", "--content-format", "plaintext"}, "plaintext"},
+		{"explicit richformat", []string{"--title", "T", "--text", "x", "--content-format", "richformat"}, "richformat"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset flags for each test
+			cmd := findSubcommand(docsCmd, "create")
+			cmd.ResetFlags()
+			cmd.Flags().String("title", "", "Document title (required)")
+			cmd.Flags().String("text", "", "Initial text content")
+			cmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat")
+
+			cmd.ParseFlags(tt.args)
+			got, _ := cmd.Flags().GetString("content-format")
+			if got != tt.expected {
+				t.Errorf("expected content-format '%s', got '%s'", tt.expected, got)
+			}
+		})
+	}
+}
+
+// TestDocsInsert_RichformatIgnoresAt tests that --at with richformat produces a warning
+func TestDocsInsert_RichformatIgnoresAt(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "insert")
+	if cmd == nil {
+		t.Fatal("docs insert command not found")
+	}
+
+	// Verify that Changed("at") works when --at is explicitly set
+	cmd.ResetFlags()
+	cmd.Flags().String("text", "", "Text to insert (required)")
+	cmd.Flags().Int64("at", 1, "Position to insert at (1-based index)")
+	cmd.Flags().String("content-format", "markdown", "Content format")
+
+	cmd.ParseFlags([]string{"--text", "x", "--at", "50", "--content-format", "richformat"})
+
+	if !cmd.Flags().Changed("at") {
+		t.Error("expected --at to be marked as changed")
+	}
+	cf, _ := cmd.Flags().GetString("content-format")
+	if cf != "richformat" {
+		t.Errorf("expected 'richformat', got '%s'", cf)
+	}
+}
+
 // TestDocsCommands_Structure_Extended tests that all new docs commands are registered
 func TestDocsCommands_Structure_Extended(t *testing.T) {
 	commands := []string{

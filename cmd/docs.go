@@ -112,13 +112,13 @@ func init() {
 	// Append flags
 	docsAppendCmd.Flags().String("text", "", "Text to append (required)")
 	docsAppendCmd.Flags().Bool("newline", true, "Add newline before appending")
-	docsAppendCmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat")
+	docsAppendCmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat (--newline is ignored for richformat)")
 	docsAppendCmd.MarkFlagRequired("text")
 
 	// Insert flags
 	docsInsertCmd.Flags().String("text", "", "Text to insert (required)")
 	docsInsertCmd.Flags().Int64("at", 1, "Position to insert at (1-based index)")
-	docsInsertCmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat")
+	docsInsertCmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat (--at is ignored for richformat)")
 	docsInsertCmd.MarkFlagRequired("text")
 
 	// Replace flags
@@ -405,23 +405,18 @@ func runDocsAppend(cmd *cobra.Command, args []string) error {
 	// Find the end index of the document body
 	endIndex := doc.Body.Content[len(doc.Body.Content)-1].EndIndex - 1
 
-	var requests []*docs.Request
-	if contentFormat == "richformat" {
-		// Richformat provides its own requests, skip newline handling
-		requests, err = buildTextRequests(text, contentFormat, endIndex)
-		if err != nil {
-			return p.PrintError(fmt.Errorf("failed to build text requests: %w", err))
-		}
-	} else {
-		// Prepare text to insert
-		insertText := text
-		if addNewline {
-			insertText = "\n" + text
-		}
-		requests, err = buildTextRequests(insertText, contentFormat, endIndex)
-		if err != nil {
-			return p.PrintError(fmt.Errorf("failed to build text requests: %w", err))
-		}
+	// Prepare text: add newline prefix unless richformat (which provides its own requests)
+	insertText := text
+	if contentFormat != "richformat" && addNewline {
+		insertText = "\n" + text
+	}
+	if contentFormat == "richformat" && cmd.Flags().Changed("newline") {
+		fmt.Fprintln(os.Stderr, "warning: --newline is ignored when --content-format is richformat")
+	}
+
+	requests, err := buildTextRequests(insertText, contentFormat, endIndex)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to build text requests: %w", err))
 	}
 
 	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
@@ -458,9 +453,12 @@ func runDocsInsert(cmd *cobra.Command, args []string) error {
 	position, _ := cmd.Flags().GetInt64("at")
 	contentFormat, _ := cmd.Flags().GetString("content-format")
 
-	// Validate position
-	if position < 1 {
+	// Validate position (skip for richformat which provides its own positions)
+	if contentFormat != "richformat" && position < 1 {
 		return p.PrintError(fmt.Errorf("position must be >= 1"))
+	}
+	if contentFormat == "richformat" && cmd.Flags().Changed("at") {
+		fmt.Fprintln(os.Stderr, "warning: --at is ignored when --content-format is richformat")
 	}
 
 	requests, err := buildTextRequests(text, contentFormat, position)
