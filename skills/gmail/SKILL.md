@@ -42,6 +42,7 @@ For initial setup, see the `gws-auth` skill.
 | Add labels | `gws gmail label <message-id> --add "STARRED"` |
 | Remove labels | `gws gmail label <message-id> --remove "UNREAD"` |
 | Archive a message | `gws gmail archive <message-id>` |
+| Archive a thread | `gws gmail archive-thread <thread-id>` |
 | Trash a message | `gws gmail trash <message-id>` |
 
 ## Detailed Usage
@@ -139,6 +140,14 @@ gws gmail archive <message-id>
 
 Archives a Gmail message by removing the INBOX label. The message remains accessible via search and labels.
 
+### archive-thread — Archive all messages in a thread
+
+```bash
+gws gmail archive-thread <thread-id>
+```
+
+Archives all messages in a Gmail thread by removing the INBOX label and marking all messages as read. Use the `thread_id` from `gws gmail list` output. More efficient than archiving individual messages for multi-message threads.
+
 ### trash — Trash a message
 
 ```bash
@@ -162,5 +171,6 @@ gws gmail list --format text    # Human-readable text
 - Gmail search query syntax supports operators like `is:`, `from:`, `to:`, `subject:`, `after:`, `before:`, `has:`, `label:`
 - When managing labels, run `gws gmail labels` first to see available label names and IDs
 - Archive is a shortcut for `gws gmail label <id> --remove "INBOX"`
+- Use `gws gmail archive-thread <thread-id>` to archive all messages in a conversation at once (archives + marks read)
 - To mark as read: `gws gmail label <id> --remove "UNREAD"`
 - To star a message: `gws gmail label <id> --add "STARRED"`
