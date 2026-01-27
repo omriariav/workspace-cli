@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.1.0** - Gmail thread/message ID fix, thread command. Full CRUD for all services.
+**v1.2.0** - `/morning` inbox skill with sub-agent architecture, bulk operations script. Full CRUD for all services.
 
 ## Roadmap
 
