@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.3.0** - Morning skill v0.2.0 improvements, `archive-thread`, `tasks update`, `--quiet` flag.
+**v1.3.1** - Review fixes: SKILL.md self-gather consistency, `GetPrinter()` migration, `Flags().Changed()` for tasks update.
 
 ## Roadmap
 
