@@ -709,6 +709,29 @@ func TestMorningSkill_SKILLmdReferencesPrompts(t *testing.T) {
 	}
 }
 
+func TestMorningSkill_InboxQueryUsesInInbox(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(skillsDir(t), "morning", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("failed to read morning SKILL.md: %v", err)
+	}
+	content := string(data)
+
+	// The default inbox query MUST include "in:inbox" to avoid surfacing archived emails
+	if !strings.Contains(content, `"is:unread in:inbox"`) {
+		t.Error("morning SKILL.md inbox_query default must include 'in:inbox'")
+	}
+
+	// Config template should also use in:inbox
+	if !strings.Contains(content, `inbox_query: "is:unread in:inbox"`) {
+		t.Error("morning SKILL.md config template inbox_query must include 'in:inbox'")
+	}
+
+	// max_unread config must be documented
+	if !strings.Contains(content, "max_unread") {
+		t.Error("morning SKILL.md missing max_unread config documentation")
+	}
+}
+
 func TestMorningSkill_HasBlockerDetection(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(skillsDir(t), "morning", "SKILL.md"))
 	if err != nil {

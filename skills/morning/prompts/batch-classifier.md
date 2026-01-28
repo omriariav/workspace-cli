@@ -19,8 +19,8 @@ Run these commands to collect all context. Run them in parallel where possible.
 
 ### Inbox
 
-gws gmail list --max <max_emails> --query "<inbox_query>"
-gws gmail list --max <max_emails> --query "<inbox_query> category:promotions"
+gws gmail list --max <max_unread> --query "<inbox_query>"
+gws gmail list --max <max_unread> --query "<inbox_query> category:promotions"
 
 Cross-reference the two lists by thread_id to separate PRIMARY (not in promotions) from NOISE (in promotions).
 
@@ -45,8 +45,8 @@ Using the gathered data, classify each PRIMARY email (not noise).
 ### Config
 
 <The main agent passes these values when spawning:>
-- max_emails: <number from config, default 50>
-- inbox_query: <query from config, default "is:unread">
+- max_unread: <number from config, default 50>
+- inbox_query: <query from config, default "is:unread in:inbox">
 - Task list IDs: <list of IDs, or "all" — if "all", run `gws tasks lists` first to discover IDs>
 - OKR sheet ID: <sheet_id>
 - OKR sheet names: <list of sheet tab names>
@@ -131,7 +131,7 @@ Always attempt all data sources. Partial data is better than no classification.
 ## How the Main Agent Uses This
 
 The main agent spawns this sub-agent with:
-1. Config values: max_emails, task list IDs, OKR sheet ID/names, VIP senders, noise strategy
+1. Config values: max_unread, task list IDs, OKR sheet ID/names, VIP senders, noise strategy
 2. No raw data — the sub-agent fetches everything itself
 
 The sub-agent returns structured classification. The main agent never sees the raw JSON from gws commands — only the classified output enters the main conversation context. This saves ~20-30k tokens per session.
