@@ -15,10 +15,17 @@ Resume a /morning inbox triage session. Run /gws:morning to load the skill, then
 - OKR sheet: <sheet_id> — <sheet_names>
 - VIP senders: <list>
 - Noise strategy: promotions
+- max_unread: <N>
 
-## Batch Classification Results
+## Triage Agent Results
 
-The batch classifier already ran. Here are the results (do NOT re-fetch or re-classify):
+Parallel triage agents already ran. Here are the merged results (do NOT re-fetch or re-classify):
+
+### Auto-Handled (<N> items)
+- Noise archived: <N>
+- Stale scheduling archived: <N>
+- Invites accepted (no conflict): <N>
+- Past events archived: <N>
 
 ### ACT NOW (<N> items)
 | # | ID | From | Subject | Priority | OKR/Task Match | Status |
@@ -30,20 +37,6 @@ The batch classifier already ran. Here are the results (do NOT re-fetch or re-cl
 | # | ID | From | Subject | Priority | OKR/Task Match | Status |
 |---|-----|------|---------|----------|----------------|--------|
 ...
-
-### SCHEDULING (<N> items)
-| # | ID | From | Subject | Status |
-|---|-----|------|---------|--------|
-...
-
-### PERIPHERAL (<N> items)
-| # | ID | From | Subject | Status |
-|---|-----|------|---------|--------|
-...
-
-### NOISE (<N> items)
-<N> promotions, <N> non-promo noise. IDs: <comma-separated message_ids>
-Status: <NOT HANDLED / Archived all / Partially handled>
 
 ## Actions Taken So Far
 
@@ -75,7 +68,7 @@ Continue from: **<CATEGORY> item [<N>/<TOTAL>]** — <sender — subject>
 
 ## How to Fill This In
 
-1. **Batch classification**: Copy the structured output from the batch classifier sub-agent. Mark each item as DONE (with action) or PENDING.
+1. **Triage results**: Copy the merged output from parallel triage agents. The auto-handled section shows what was archived/accepted automatically. Mark ACT NOW / REVIEW items as DONE (with action) or PENDING.
 2. **Actions taken**: List every email you acted on — archive, star, task, open, delete. Note if marked read.
 3. **Resume point**: Identify exactly where triage stopped — category, item number, and whether the user was mid-decision.
 4. **Corrections**: Any time the user corrected a classification (e.g., "that's not ACT NOW, I'm CC'd"), note it so the resumed session doesn't repeat the mistake.

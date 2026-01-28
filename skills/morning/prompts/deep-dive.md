@@ -1,8 +1,6 @@
 # Deep-Dive Email Summarizer Prompt
 
-**Model:** Chosen by the main agent based on complexity:
-- `haiku` — single-message emails, FYI items, simple questions
-- `sonnet` — multi-message threads (3+), comment notifications, complex action items
+**Model:** `sonnet` — always use sonnet. Haiku is unreliable for email reading (fails to fetch content in practice).
 
 **Agent type:** `general-purpose`
 

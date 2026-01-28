@@ -588,6 +588,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		"morning/prompts/calendar-coordinator.md",
 		"morning/prompts/deep-dive.md",
 		"morning/prompts/label-resolver.md",
+		"morning/prompts/triage-agent.md",
 		"morning/scripts/bulk-gmail.sh",
 	}
 	for _, f := range morningExtras {
@@ -596,7 +597,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		}
 	}
 
-	expectedTotal := 30 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md + 6 morning extras
+	expectedTotal := 31 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md + 7 morning extras
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}
@@ -607,10 +608,12 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 func TestMorningSkill_PromptFilesExist(t *testing.T) {
 	base := skillsDir(t)
 	prompts := []string{
-		"prompts/batch-classifier.md",
-		"prompts/calendar-coordinator.md",
+		"prompts/triage-agent.md",
 		"prompts/deep-dive.md",
 		"prompts/label-resolver.md",
+		// Deprecated but kept for reference:
+		"prompts/batch-classifier.md",
+		"prompts/calendar-coordinator.md",
 	}
 	for _, p := range prompts {
 		path := filepath.Join(base, "morning", p)
@@ -623,10 +626,12 @@ func TestMorningSkill_PromptFilesExist(t *testing.T) {
 func TestMorningSkill_PromptFilesSpecifyModel(t *testing.T) {
 	base := skillsDir(t)
 	prompts := map[string]string{
-		"prompts/batch-classifier.md":      "sonnet",
-		"prompts/calendar-coordinator.md":  "sonnet",
+		"prompts/triage-agent.md":          "sonnet",
 		"prompts/deep-dive.md":             "sonnet",
 		"prompts/label-resolver.md":        "haiku",
+		// Deprecated prompts still checked for consistency:
+		"prompts/batch-classifier.md":      "sonnet",
+		"prompts/calendar-coordinator.md":  "sonnet",
 	}
 	for file, expectedModel := range prompts {
 		t.Run(file, func(t *testing.T) {
@@ -696,8 +701,7 @@ func TestMorningSkill_SKILLmdReferencesPrompts(t *testing.T) {
 
 	// SKILL.md must reference the prompt files it depends on
 	refs := []string{
-		"prompts/batch-classifier.md",
-		"prompts/calendar-coordinator.md",
+		"prompts/triage-agent.md",
 		"prompts/deep-dive.md",
 		"prompts/label-resolver.md",
 		"scripts/bulk-gmail.sh",

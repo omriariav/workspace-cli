@@ -55,66 +55,106 @@ The config contains:
 - `inbox_query` — Gmail search query (default: `"is:unread in:inbox"`)
 - `daily_log_doc_id` — Google Doc ID for the daily log (empty = skip logging)
 
-## Step 2: Gather Context for Summary Header
+## Step 2: Quick Scan (Parallel Data Gathering)
 
-The main agent gathers **only calendar data** for the summary header. All other data (inbox, tasks, OKRs) is gathered by the batch classifier sub-agent in Step 3 to keep raw JSON out of the main context.
+Gather ALL context data in parallel. Run these commands simultaneously:
 
-### Calendar
+### 2a. Inbox
+
+```bash
+gws gmail list --max <max_unread> --query "is:unread in:inbox"
+```
+
+**MUST use `in:inbox`** — without this, archived emails from months ago will surface.
+
+### 2b. Calendar
 
 ```bash
 gws calendar events --days 2
 ```
 
-Fetch **2 days** (today + tomorrow) for meeting prep context. Extract: event title, start time, attendees, description. These are used to:
-- Populate the summary header with today's meetings
-- Surface prep context ("you have a meeting about X, review email Y first")
-- Tomorrow's meetings provide early prep opportunities
+Fetch 2 days (today + tomorrow) for meeting prep context and scheduling conflict detection.
 
-**Do NOT** gather inbox, tasks, or OKRs here. The batch classifier sub-agent handles all data gathering and classification in a single call (Step 3).
+### 2c. Tasks
 
-## Step 3: Classify Emails (Batch Sub-Agent)
+```bash
+gws tasks lists
+```
 
-**Do not classify emails inline.** Spawn a sub-agent to gather all data and classify all primary emails in a single batch. The sub-agent runs `gws` commands itself, keeping raw JSON out of the main conversation context.
+Then for each monitored task list (from config `task_lists`):
+```bash
+gws tasks list <task-list-id>
+```
 
-**Prompt file:** `skills/morning/prompts/batch-classifier.md`
+### 2d. OKRs
+
+For each sheet in config `okr_sheets`:
+```bash
+gws sheets read <okr_sheet_id> "<sheet_name>!A1:Q100"
+```
+
+All four data sources are fetched in parallel (~10 seconds total). The main agent holds the structured results briefly for the header and triage agent input.
+
+## Step 3: Show Header Immediately
+
+**The user sees content within 10 seconds of starting.** Present the summary header as soon as the parallel data gathering completes — before classification begins.
+
+```
+/morning — <Day>, <Date>
+
+Inbox: <N> unread
+Overdue tasks: <N>
+
+Today's meetings:
+  <time> <title>
+  ...
+
+Launching triage agents... (classifying <N> emails in parallel)
+```
+
+This gives the user immediate context while triage agents work in the background.
+
+## Step 4: Spawn Parallel Triage Agents
+
+Split the inbox emails into batches of 5-10 and spawn one triage sub-agent per batch. All agents run simultaneously.
+
+**Prompt file:** `skills/morning/prompts/triage-agent.md`
 **Model:** `sonnet` | **Agent type:** `general-purpose`
 
-Follow the prompt template in the file. Pass config values only:
-- `max_unread` — from config (default 50)
-- Task list IDs — from config (`task_lists`)
-- OKR sheet ID and sheet names — from config
-- VIP senders — from config (`priority_signals.vip_senders`)
-- Noise strategy — from config
-- `inbox_query` — from config (default: `"is:unread in:inbox"`)
+### What to pass each triage agent:
 
-The sub-agent fetches inbox, tasks, and OKRs itself. **Do NOT pass raw data.**
+1. **Email batch** — 5-10 email summaries (message_id, thread_id, subject, sender, snippet, labels, message_count, date)
+2. **Calendar events** — the full 2-day calendar data (pass to ALL agents to avoid re-fetching)
+3. **Task data** — active tasks from monitored lists
+4. **OKR context** — relevant OKR data
+5. **VIP senders list** — from config
+6. **Config** — noise_strategy, priority signals
 
-### Sub-Agent Output
+### What each triage agent does autonomously:
 
-The sub-agent returns a structured classification for each email:
-
-```
-ID | CATEGORY | PRIORITY (1-5) | SUMMARY (2-3 lines) | OKR_MATCH | TASK_MATCH | CALENDAR_MATCH | SUGGESTED_ACTION
-```
-
-Grouped into: **ACT NOW**, **REVIEW**, **SCHEDULING**, **PERIPHERAL**, **NOISE**.
+For each email in its batch:
+1. **Classify:** ACT_NOW / REVIEW / SCHEDULING / NOISE
+2. **If NOISE** → auto-archive via `gws gmail archive-thread <thread_id> --quiet`
+3. **If SCHEDULING + past event** → auto-archive
+4. **If SCHEDULING + future event, no conflict** → RSVP accept + archive
+5. **If SCHEDULING + conflict** → return as REVIEW with conflict details
+6. **If ACT_NOW or REVIEW** → return to main agent with summary + recommended action
 
 ### Classification Categories
 
 | Category | Criteria |
 |----------|----------|
-| **Action Required** | Direct question to the user, approval/review request, explicit ask. **The user must be the blocker** — not just CC'd on a thread where someone else owns the action. |
-| **Decision Needed** | Options presented, deadline mentioned, waiting for user's call |
-| **FYI — Relevant** | Relates to an OKR objective, active task, or today's meeting |
-| **FYI — Peripheral** | Org-wide, tangentially related, informational |
-| **Scheduling** | Calendar invites, meeting updates, reschedules |
-| **Noise** | Gmail Promotions category, newsletters, automated alerts, digests |
-| **Personal** | Non-work personal emails (payments, account notifications) |
+| **ACT_NOW** | Direct question to the user, approval/review request. **User MUST be the blocker** — not just CC'd. |
+| **REVIEW** | FYI-relevant, decision context, CC'd on active thread, relates to OKR/task/meeting |
+| **SCHEDULING** | Calendar invites, meeting updates, reschedules |
+| **NOISE** | Gmail Promotions category, newsletters, automated alerts, digests, resolved comments |
+
+**Flat classification — no promo/non-promo split.** All noise is treated the same regardless of source (fixes Issue #31).
 
 ### Blocker Detection (Critical Rule)
 
 When classifying multi-message threads or CC'd emails, determine **who owns the next action**:
-- **User is the blocker** → ACTION_REQUIRED (someone is waiting on the user)
+- **User is the blocker** → ACT_NOW (someone is waiting on the user)
 - **User is CC'd, someone else is the blocker** → REVIEW (user should be aware, but no action needed now)
 - **User is TO'd but the ask is to a group** → REVIEW (unless user is explicitly named)
 
@@ -122,116 +162,119 @@ This prevents over-scoring threads where the user is just an observer.
 
 ### Google Docs/Slides/Sheets Comment Notifications
 
-When the email is a Google Workspace comment notification (from `comments-noreply@docs.google.com` or `drive-shares-dm-noreply@google.com`), the deep-dive sub-agent must parse the email body for:
-
-1. **Comment resolution status** — look for "N resolved" in the email body. If the comment is resolved, it's NOT an action item.
-2. **Who replied** — check if someone already answered the question. If a direct report or colleague already responded, the user may not need to act.
-3. **Open vs. resolved** — only classify as ACTION_REQUIRED if the comment is still open AND the user is expected to respond.
-4. **Suggest opening the comment link** — the email contains a direct link to the comment in the document. Offer to open that link (not just the email).
-5. **Propose an answer** — if the comment is still open and asks a question the user can answer, draft a suggested response using available OKR/task context.
-
-Example classification:
-- Comment resolved by someone else → **FYI — Peripheral** ("Tomer already answered, Vib resolved it")
-- Comment open, user is asked a question → **Action Required** ("Yaniv asks about geo availability, here's a suggested answer based on your OKR data...")
+Triage agents parse comment notification emails for:
+1. **Resolution status** — "N resolved" → NOISE (auto-archive)
+2. **Who replied** — if someone already answered → REVIEW
+3. **Open + user expected to respond** → ACT_NOW
+4. **Include comment link** — for "Open doc/comment" option in triage
 
 ### Noise Detection
 
 When `noise_strategy` is `"promotions"`:
 - Emails in Gmail's Promotions category are automatically classified as noise
-- No manual sender-based filtering needed — Gmail's ML categorization handles this
+- Gmail's ML categorization handles this — no manual sender lists needed
 
-Additional noise signals (regardless of strategy):
+Additional noise signals:
 - Duplicate invitations (same event, multiple notifications)
 - Duplicate alert emails (same error, repeated)
-- Auto-generated meeting notes where user was just an attendee (Gemini notes)
-- Google Docs/Slides/Sheets comment notifications where the comment is already resolved
+- Auto-generated meeting notes where user was just an attendee
+- Resolved comment notifications
 
-## Step 4: Score Priority
+### Priority Scoring (1-5)
 
-Priority scoring is done by the batch sub-agent as part of Step 3. Pass these rules to the sub-agent.
-
-Each actionable email (not noise) gets scored 1-5. Use these signals:
+Each triage agent scores its batch using the HIGHEST signal (not additive):
 
 | Signal | Score | How to detect |
 |--------|-------|---------------|
-| **Top 5 match** | 5 | Email subject/content relates to a task in "Top five things" |
+| **Top 5 match** | 5 | Email relates to a task in "Top five things" |
 | **Overdue task link** | 5 | Email relates to an overdue task |
-| **Must Win match** | 4 | Email topic maps to an OKR Must Win or Objective |
-| **VIP sender + action** | 4 | Email is from a `vip_senders` address AND requires action |
-| **Meeting prep (today)** | 4 | Email relates to a meeting happening today |
-| **Starred** | 4 | Email has the STARRED label (if `priority_signals.starred` is true) |
-| **Task match** | 3 | Email relates to an active task in any monitored list |
-| **VIP sender (FYI)** | 3 | Email is from a `vip_senders` address, informational |
-| **Action required** | 3 | Email explicitly asks the user to do something |
-| **Time sensitivity** | 3 | Deadline mentioned, or thread has been waiting |
-| **Thread momentum** | 2 | Multi-message thread where others are actively discussing |
+| **Must Win match** | 4 | Email maps to an OKR Must Win or Objective |
+| **VIP sender + action** | 4 | From `vip_senders` AND requires action |
+| **Meeting prep (today)** | 4 | Relates to a meeting happening today |
+| **Starred** | 4 | Has STARRED label (if `priority_signals.starred` is true) |
+| **Task match** | 3 | Relates to an active task |
+| **VIP sender (FYI)** | 3 | From `vip_senders`, informational |
+| **Action required** | 3 | Explicitly asks the user to do something |
+| **Time sensitivity** | 3 | Deadline mentioned, thread waiting |
+| **Thread momentum** | 2 | Active multi-message thread |
 | **FYI peripheral** | 1 | Org-wide, tangentially related |
-| **Noise / personal** | 0 | Newsletters, alerts, personal account notifications |
+| **Noise** | 0 | Newsletters, alerts, personal |
 
-**Score aggregation:** When multiple signals apply, use the highest signal score (not additive). A Top 5 match with VIP sender is still priority 5, not 9.
+### Determinism Rules (MUST, not "should")
 
-## Step 5: Summary Header
+- **MUST** use `in:inbox` in all Gmail queries
+- **MUST** spawn parallel triage agents — never classify sequentially in main context
+- **MUST** auto-archive noise without asking the user
+- **MUST** auto-archive stale scheduling (past events) without asking
+- **MUST** auto-accept future invites with no conflicts (then archive)
+- **MUST** use a single flat ID list — no promo/non-promo separation
+- **MUST** run post-triage cleanup (Step 8)
 
-Start with a compact summary header so the user sees the big picture before diving in:
+## Step 5: Collect Results and Present Auto-Action Summary
+
+Merge all triage agent outputs. Present a summary of autonomous actions:
+
+```
+Auto-handled: <N> emails
+  Archived noise: <N>
+  Archived stale scheduling: <N>
+  Accepted invites (no conflicts): <N>
+  Archived past events: <N>
+
+Needs your input: <N> items (<N> action, <N> review)
+```
+
+Update the header with final counts:
 
 ```
 /morning — <Day>, <Date>
 
-Inbox: <N> unread | <N> action needed | <N> review | <N> noise
+Inbox: <N> unread | <N> auto-handled | <N> need input
 OKR focus: <primary track name> | <N> Must Wins active
 Overdue tasks: <N>
 
 Today's meetings:
-  <time> <title> [⚠ overdue task / 📬 related email if applicable]
+  <time> <title> [related email if applicable]
   ...
 
 Starting guided triage (<N> action items, then <N> review items).
-Say "digest" for the full printout, or "skip" to jump to noise.
+Say "digest" for the full printout.
 ```
-
-Keep this short — no more than 15-20 lines. The detail comes in the guided triage.
 
 ## Step 6: Guided Triage (Default Mode)
 
-Walk through items one at a time, highest priority first. For each item, use the AskUserQuestion tool to present options.
+Walk through **only ACT_NOW + REVIEW items** one at a time, highest priority first. Noise and stale scheduling were already auto-handled by triage agents.
 
 ### Action Items (one by one)
 
-For each action-required email, present it as a question:
+For each action-required email, present:
 
 ```
-[1/<N>] ★ <Sender> — <Subject> (<N> msgs if thread)
+[1/<N>] <Sender> — <Subject> (<N> msgs if thread)
 <1-2 line context: why this matters, what's being asked>
 [TOP 5: <task name>]
 [OKR: <objective>]
 ```
 
-Then ask the user what to do using AskUserQuestion (max 4 options). Rotate options based on context:
+Use AskUserQuestion with **compound options** (max 4). Rotate based on context:
 
-**For action/review items:**
-- **Dig Deeper** — Spawn deep-dive sub-agent (see below)
-- **Open in browser** — Run `open "https://mail.google.com/mail/u/0/#inbox/<thread_id>"`
-- **Archive** — Run `gws gmail archive-thread <thread_id> --quiet` (archives all messages in thread + marks read)
-- **Skip** — Move to next item (keeps email **unread**)
-
-**Compound options** (rotate based on context):
-- **Label & archive** — Spawn label-resolver sub-agent (`skills/morning/prompts/label-resolver.md`) with `action=archive`
-- **Add task & archive** — Ask for title, run `gws tasks create`, then archive the thread
-- **Accept & archive** — For scheduling items, RSVP accept + archive (via calendar-coordinator)
-
-**For noise/peripheral items:**
+**Standard options:**
+- **Dig Deeper** — Spawn deep-dive sub-agent
 - **Archive** — Run `gws gmail archive-thread <thread_id> --quiet`
-- **Delete** — Run `gws gmail trash <message_id> --quiet`
 - **Open in browser** — Run `open "https://mail.google.com/mail/u/0/#inbox/<thread_id>"`
 - **Skip** — Move to next item (keeps email **unread**)
 
-The user can always type a free-form response (e.g., "delete", "add task", "star this") via the "Other" option. Handle these naturally:
+**Context-aware compound options** (substitute when relevant):
+- **Label & archive** — Spawn label-resolver sub-agent (`skills/morning/prompts/label-resolver.md`) with `action=archive`
+- **Add task & archive** — Ask for title, run `gws tasks create`, then archive
+- **Accept & archive** — For scheduling items with conflicts, RSVP accept + archive
+
+Free-form responses via "Other":
 - "delete" / "trash" → `gws gmail trash <message_id> --quiet`
 - "add task" → ask for title, run `gws tasks create`
-- "add task & archive" → create task, then `gws gmail archive-thread <thread_id> --quiet`
+- "add task & archive" → create task, then archive thread
 - "label X" / "label & archive" → spawn label-resolver sub-agent
 - "star" → `gws gmail label <message_id> --add STARRED`
-- "open" → open in browser
 
 ### Mark-as-Read Rule
 
@@ -240,44 +283,37 @@ After any action **except Skip**, mark the email as read:
 gws gmail label <message_id> --remove UNREAD --quiet
 ```
 
-**Skip is the only action that preserves unread status.** This ensures triaged emails don't reappear as unread in the next run.
+**Skip is the only action that preserves unread status.**
 
-**Note:** `archive-thread` already marks all messages as read, so no separate mark-read step is needed when archiving threads.
+**Note:** `archive-thread` already marks all messages as read.
 
-For bulk mark-as-read (e.g., after archiving multiple items), use the bulk script:
+For bulk mark-as-read:
 ```bash
 skills/morning/scripts/bulk-gmail.sh mark-read <id1> <id2> ...
 ```
 
 ### Pacing Rule
 
-**Do NOT auto-advance to the next email.** After the user takes an action (or the deep-dive brief is presented and acted on), wait for the user to say "next" or otherwise indicate they're ready. The user controls the pace — they may want to discuss, take a side action, or pause before continuing.
+**Do NOT auto-advance to the next email.** Wait for the user to say "next" or indicate readiness. The user controls the pace.
 
 ### Deep-Dive Sub-Agent (on "Dig Deeper")
 
 Spawn a sub-agent to fetch, summarize, and cross-reference the email.
 
 **Prompt file:** `skills/morning/prompts/deep-dive.md`
+**Model:** `sonnet` — **always use sonnet** (haiku is unreliable for email reading)
 **Agent type:** `general-purpose`
 
-**Model selection by complexity:**
-- **`haiku`** — Single-message emails, FYI items, newsletters, simple questions (fast + cheap)
-- **`sonnet`** — Multi-message threads (3+ messages), comment notifications with resolution context, action items with cross-references
+Pass: email ID, message count (for `read` vs `thread`), OKR/task/calendar context.
 
-Choose the model when spawning the deep-dive agent based on the email's message count and classification category.
-
-Follow the prompt template in the file. Pass it the email ID, message count (to decide `read` vs `thread`), and the OKR/task/calendar context for cross-referencing.
-
-The sub-agent returns a structured brief. **The main agent presents the brief** and asks what to do next:
-- **Open comment/doc** — open the direct link to the document or comment (if available)
-- **Reply** — compose a reply (or post the suggested answer)
-- **Open in browser** — open in Gmail for manual handling
+The sub-agent returns a structured brief. Present it and ask what to do next:
+- **Open comment/doc** — open direct link (if available)
+- **Reply** — compose a reply
+- **Open in browser** — open in Gmail
 - **Archive** — remove from inbox
 - **Add task** — create a Google Task
 - **Delete** — trash the email
 - **Move on** — go to the next item
-
-This keeps the main conversation lean — only the structured brief enters the main context, not the raw email content.
 
 ### Transition to Review Items
 
@@ -288,94 +324,75 @@ Action items done. <N> review items remaining.
 ```
 
 Ask: "Continue reviewing?" with options:
-- **Yes, keep going** — continue guided triage through review items
-- **Skip to noise** — jump to noise handling
+- **Yes, keep going** — continue through review items
 - **Done for now** — end triage
 
 ### Review Items (one by one, same pattern)
 
-Same flow as action items but with lighter urgency framing. Same option rotation and free-form handling applies. Mark-as-read rule: any action except Skip marks the email as read.
-
-### Scheduling Step
-
-After review items, handle all SCHEDULING category emails together:
-
-```
-<N> scheduling items (calendar invites, meeting updates).
-```
-
-Ask: "Handle scheduling items?" with options:
-- **Auto-accept all** — Spawn calendar-coordinator sub-agent (`skills/morning/prompts/calendar-coordinator.md`) with all scheduling items. It RSVPs, checks conflicts, and archives handled items. Returns a structured summary.
-- **One by one** — Walk through scheduling items individually with options: Accept & archive, Decline, Open in browser, Skip
-- **Skip** — Leave all scheduling items unread
-
-### Noise Handling
-
-After action and review items (or when user skips to noise), present a **numbered list** so the user can select by number:
-
-```
-<N> noise items:
-  1. <Sender> — <Subject> (newsletter)
-  2. <Sender> — <Subject> (automated alert)
-  3. <Sender> — <Subject> (JIRA watcher)
-  ...
-```
-
-Ask: "Archive all noise, or select by number?" with options:
-- **Archive all** — Run: `skills/morning/scripts/bulk-gmail.sh archive-thread <thread_id1> <thread_id2> ...` (archives + marks read in one pass)
-- **Delete all** — Run: `skills/morning/scripts/bulk-gmail.sh trash <id1> <id2> ...`
-- **Let me pick** — User can type "archive 1,3,5" or "keep 2,4" to selectively handle items
-- **Leave them** — Skip, do nothing
-
-When the user selects by number (e.g., "archive 2,5,8"), archive only those items and leave the rest unread.
+Same flow as action items but with lighter urgency framing.
 
 ### Triage Complete
 
 ```
 Triage complete.
-  Acted on: <N> | Archived: <N> | Skipped: <N>
+  Auto-handled: <N> | User acted on: <N> | Archived: <N> | Skipped: <N>
   Remaining unread: <N>
 ```
 
 ## Step 7: Digest Mode (Alternative)
 
-If the user says "digest" at any point, switch to printing the full briefing without interaction:
+If the user says "digest" at any point, print the full briefing without interaction:
 
 ```
 ━━ ACT NOW ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-<numbered list of action-required emails, highest priority first>
-Each item:
-  <N>. [★ if Top 5 match] <Sender> — <Subject> (<message_count> msgs if thread)
-      <1-line context: why this matters>
-      [TOP 5: <task name> if matched]
-      [OKR: <objective name> if matched]
+<numbered list, highest priority first>
+  <N>. <Sender> — <Subject> (<message_count> msgs)
+      <1-line context>
+      [TOP 5: <task name>] [OKR: <objective>]
       → <Suggested action>
       → gws gmail read <message_id>  OR  gws gmail thread <thread_id>
 
 ━━ REVIEW ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-<numbered list continuing from above, FYI-relevant items>
+<numbered list continuing from above>
 
-━━ NOISE (<N>) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  <N> newsletters | <N> JIRA watchers | <N> calendar auto-updates
-  → Safe to bulk-archive
+━━ AUTO-HANDLED (<N>) ━━━━━━━━━━━━━━━━━━━━━━━
+  Noise archived: <N> | Scheduling handled: <N> | Invites accepted: <N>
 ```
 
 After the digest, remain ready for follow-up commands:
 
 | User says | Action |
 |-----------|--------|
-| "read item N" | Run `gws gmail read <message_id>` or `gws gmail thread <thread_id>` for that item |
-| "archive the noise" | Run `skills/morning/scripts/bulk-gmail.sh archive-thread <noise_thread_ids>` |
-| "archive items N, M" | Run `skills/morning/scripts/bulk-gmail.sh archive-thread <selected_thread_ids>` |
-| "delete the noise" | Run `skills/morning/scripts/bulk-gmail.sh trash <noise_ids>` |
+| "read item N" | Run `gws gmail read <message_id>` or `gws gmail thread <thread_id>` |
+| "archive items N, M" | Run `skills/morning/scripts/bulk-gmail.sh archive-thread <thread_ids>` |
 | "add task: <title>" | Run `gws tasks create --title "<title>" --tasklist "Incoming"` |
 | "triage" | Start guided triage from the beginning |
 
-## Step 8: Daily Log (if configured)
+## Step 8: Post-Triage Cleanup (MANDATORY)
 
-If `daily_log_doc_id` is set in config, append the briefing summary after triage completes:
+**MUST run after triage completes.** This step is not optional.
+
+After triage (and daily log if configured), check for new arrivals:
+
+```bash
+gws gmail list --max 10 --query "is:unread in:inbox"
+```
+
+If new unread emails arrived during triage:
+```
+<N> new emails arrived during triage.
+```
+
+Ask: "Handle new arrivals?" with options:
+- **Quick triage** — Spawn a single triage agent on just the new items
+- **Ignore** — Leave for next session
+- **Done** — End session
+
+### Daily Log (if configured)
+
+If `daily_log_doc_id` is set in config, append the briefing summary before the cleanup check:
 
 ```bash
 gws docs append <daily_log_doc_id> --text "<summary>" --newline
@@ -385,7 +402,7 @@ Summary format:
 ```
 ## <Day>, <Date>
 
-**Action items:** <N> | **Reviewed:** <N> | **Noise:** <N> (archived: <N>)
+**Auto-handled:** <N> | **Action items:** <N> | **Reviewed:** <N>
 **Overdue tasks:** <N>
 
 ### Priority items:
@@ -403,26 +420,6 @@ gws docs create --title "Morning Briefing Log"
 ```
 
 Save the returned doc ID back to the config file for future runs.
-
-## Step 9: Post-Triage Cleanup
-
-After triage completes (and daily log is written), check for new arrivals:
-
-```bash
-gws gmail list --max 10 --query "is:unread in:inbox"
-```
-
-If new unread emails arrived during triage:
-```
-<N> new emails arrived during triage.
-```
-
-Ask: "Handle new arrivals?" with options:
-- **Quick classify** — Run the batch classifier on just the new items (lighter pass)
-- **Ignore** — Leave for next session
-- **Done** — End session
-
-This prevents the "endless inbox" problem where emails arrive faster than they're triaged.
 
 ## First-Run Setup
 
@@ -529,37 +526,39 @@ Common `gws` commands used during triage:
 
 ## Tips for AI Agents
 
-### Architecture
-- **Use sub-agents to manage context.** The main agent orchestrates; sub-agents do the heavy lifting:
-  - **Batch classifier** (Step 3) — classifies all emails in one call, returns structured data
-  - **Deep-dive agent** (Step 6, "Dig Deeper") — fetches and summarizes a single email/thread
-  - **Calendar coordinator** (Step 6, "Scheduling") — matches invites to events, checks conflicts, RSVPs
+### Architecture (v0.3.0 — Parallel Triage)
+- **Parallel triage agents replace the single batch classifier.** Instead of one agent classifying all emails sequentially, spawn one triage agent per 5-10 email batch. They classify AND act autonomously. Sub-agent tokens don't consume main context.
+- **Sub-agent types:**
+  - **Triage agent** (Step 4) — classifies batch + auto-archives noise/stale scheduling + auto-accepts invites. Returns only items needing user input.
+  - **Deep-dive agent** (Step 6, "Dig Deeper") — fetches and summarizes a single email/thread. **Always use sonnet** (haiku failed in QA).
   - **Label resolver** (Step 6, "Label & archive") — fetches label list, fuzzy-matches, applies labels
-  - This keeps the main conversation lean and prevents context overflow on large inboxes.
-- **Use bash scripts for bulk operations.** Archive/trash/mark-read across multiple emails is mechanical work — no AI reasoning needed. Use `skills/morning/scripts/bulk-gmail.sh` instead of spawning a sub-agent or running sequential commands:
-  - `bulk-gmail.sh archive-thread <thread_ids>` — archive all messages in threads + mark read (preferred)
-  - `bulk-gmail.sh archive <message_ids>` — archive individual messages + mark read
+- **Use bash scripts for bulk operations.** Archive/trash/mark-read across multiple emails is mechanical work — no AI reasoning needed. Use `skills/morning/scripts/bulk-gmail.sh`:
+  - `bulk-gmail.sh archive-thread <thread_ids>` — archive threads + mark read (preferred)
+  - `bulk-gmail.sh archive <message_ids>` — archive messages + mark read
   - `bulk-gmail.sh trash <ids>` — delete + mark read
   - `bulk-gmail.sh mark-read <ids>` — mark read only
-- The batch classifier sub-agent gathers its own data (inbox, tasks, OKRs). The main agent only gathers calendar data (Step 2) for the summary header. Pass config values — not raw data — when spawning the sub-agent.
+- **Main agent gathers all data in Step 2** (parallel), then passes it to triage agents. This avoids multiple agents re-fetching the same calendar/task/OKR data.
+- **Deprecated sub-agents:** `batch-classifier.md` and `calendar-coordinator.md` are superseded by `triage-agent.md`. The triage agent handles both classification and calendar coordination.
 
 ### Classification
 - **Blocker detection is the most important classification rule.** An email where the user is CC'd and someone else owns the action is REVIEW, not ACT NOW — even if the thread is 5 weeks old and high-priority.
 - When matching emails to OKRs, use semantic understanding — don't rely on exact keyword matches. An email about "cross-device identifiers" matches the OKR "Improve cross-domain identity mapping".
 - Noise classification via Gmail Promotions is preferred over sender-based lists. Gmail's ML is more accurate and requires no maintenance.
 - Duplicate detection matters: multiple invitations for the same event, repeated alert emails, and auto-generated notes should be deduplicated or grouped.
+- **Single flat ID list** — no promo vs non-promo separation. All noise is treated equally to prevent missed archives.
 
 ### Guided Triage
-- **Guided triage is the default.** Use AskUserQuestion to present each item with options. Only switch to digest mode if the user explicitly asks.
+- **Guided triage is the default.** Only ACT_NOW + REVIEW items reach the user — noise and stale scheduling are auto-handled.
+- Use AskUserQuestion with **compound options** (Label & archive, Add task & archive). Never present single-action-only choices.
 - The "Top five things" task list is the most important signal for priority scoring.
-- For multi-message threads, mention the message count and latest sender to give the user context on thread activity.
+- For multi-message threads, mention the message count and latest sender.
 - When the user picks "Dig Deeper", spawn a deep-dive sub-agent — do NOT dump raw email content into the main conversation.
-- After the deep-dive returns, immediately ask what to do next (Reply, Archive, Add task, Open in browser, Move on). Don't wait for a free-form prompt.
-- **Support "pause and work on this" flow.** If the user says they want to look into something now (e.g., prep for an upcoming meeting), help them open relevant docs/emails in the browser and offer to resume triage later.
-- Keep each triage step focused — show ONE item at a time. Never dump multiple items between questions.
-- Track actions taken (archived, read, tasks created) and report them at the end.
-- Overdue tasks should always appear in the summary header even if there's no matching email.
-- Calendar cross-referencing is valuable: "you have a 1:1 with X at 2pm, and X sent you an email" is actionable prep context.
+- After the deep-dive returns, immediately ask what to do next. Don't wait for a free-form prompt.
+- **Support "pause and work on this" flow.** Help open relevant docs/emails and offer to resume triage later.
+- Keep each triage step focused — show ONE item at a time.
+- Track actions taken (auto-handled + user actions) and report them at the end.
+- Overdue tasks should always appear in the summary header.
+- Calendar cross-referencing: "you have a 1:1 with X at 2pm, and X sent you an email" is actionable prep context.
 
 ### VIP Senders
 - VIP sender lists can be populated during first-run setup using an employee directory lookup if available.
@@ -570,6 +569,6 @@ Common `gws` commands used during triage:
 - When creating follow-up tasks from triage, always ask the user which task list to use. Default to `@default` if they don't specify.
 
 ### Label Operations
-- Gmail labels are resolved by **display name** (case-insensitive), not by internal ID. Use `gws gmail labels` to see all available label names.
+- Gmail labels are resolved by **display name** (case-insensitive), not by internal ID.
 - For label operations during triage, use the **label-resolver sub-agent** (`skills/morning/prompts/label-resolver.md`) to avoid loading the full label list (4000+ labels) into the main context.
 - Common label patterns: `gws gmail label <id> --add "STARRED"`, `gws gmail label <id> --remove "UNREAD"`
