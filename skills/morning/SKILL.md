@@ -1,6 +1,6 @@
 ---
 name: gws-morning
-version: 0.3.0
+version: 0.4.0
 description: "AI-powered morning inbox briefing. Reads Gmail, Google Tasks, Calendar, and OKR sheets to produce a prioritized daily briefing with actionable recommendations. Triggers: /morning, morning briefing, inbox triage, email priorities, daily digest."
 metadata:
   short-description: AI inbox briefing with OKR/task matching
@@ -55,111 +55,106 @@ The config contains:
 - `inbox_query` — Gmail search query (default: `"is:unread in:inbox"`)
 - `daily_log_doc_id` — Google Doc ID for the daily log (empty = skip logging)
 
-## Step 2: Quick Scan (Parallel Data Gathering)
+## Step 2: Launch Background Data Gathering
 
-Run the prefetch script to gather ALL context data in parallel:
+Launch a **background agent** to run prefetch + pre-filter while the main agent shows the user immediate context.
+
+### 2a. Start background agent
+
+Spawn a background agent (using `run_in_background: true`) that runs:
 
 ```bash
 skills/morning/scripts/morning-prefetch.sh "$SCRATCHPAD_DIR/morning"
+skills/morning/scripts/morning-prefilter.sh "$SCRATCHPAD_DIR/morning"
 ```
 
-The script reads config from `~/.config/gws/inbox-skill.yaml` and fetches all data sources in two phases. Results are saved as JSON files in the output directory. Read the script's stdout for a summary of what was fetched.
+The background agent:
+1. Runs prefetch (fetches inbox, calendar, tasks, OKRs in parallel)
+2. Runs pre-filter (archives OOO replies and calendar invite emails)
+3. Reads `prefiltered.json` and all context files
+4. Classifies all remaining emails inline using rules from `skills/morning/prompts/triage-agent.md`
+5. Writes classification results to `$SCRATCHPAD_DIR/morning/classified.json`
 
-**OKR caching:** OKR sheets are cached for 24 hours at `~/.cache/gws/morning/`. The summary JSON includes `"source":"cache"` or `"source":"fresh"` so you know which was used. If the user says their OKRs changed or asks to refresh, re-run with `--refresh-okr`:
+**OKR caching:** OKR sheets are cached for 24 hours at `~/.cache/gws/morning/`. If the user says their OKRs changed, re-run with `--refresh-okr`.
 
-```bash
-skills/morning/scripts/morning-prefetch.sh "$SCRATCHPAD_DIR/morning" --refresh-okr
-```
+### 2b. Show header immediately (main agent, while background works)
 
-Then read results from the output directory:
-- `inbox.json` — unread inbox emails
-- `calendar.json` — 2-day calendar events
-- `tasks.json` — task list metadata
-- `tasks_<list_id>.json` — tasks per list
-- `okr_0.json` (etc.) — OKR sheet data
-
-### What the prefetch script does internally
-
-#### 2a. Inbox
-
-```bash
-gws gmail list --max <max_unread> --query "is:unread in:inbox"
-```
-
-**MUST use `in:inbox`** — without this, archived emails from months ago will surface.
-
-#### 2b. Calendar
-
-```bash
-gws calendar events --days 2
-```
-
-Fetch 2 days (today + tomorrow) for meeting prep context and scheduling conflict detection.
-
-#### 2c. Tasks
-
-```bash
-gws tasks lists
-```
-
-Then for each task list ID from the results:
-```bash
-gws tasks list <task-list-id>
-```
-
-#### 2d. OKRs
-
-For each sheet in config `okr_sheets`:
-```bash
-gws sheets read <okr_sheet_id> "<sheet_name>!A1:Q100"
-```
-
-All four data sources are fetched in parallel via the prefetch script. The main agent reads the resulting JSON files for the header and triage agent input.
-
-## Step 3: Show Header Immediately
-
-**The user sees content within 10 seconds of starting.** Present the summary header as soon as the parallel data gathering completes — before classification begins.
+**Do not wait for the background agent.** While it runs, show the user what you already know from config:
 
 ```
 /morning — <Day>, <Date>
 
-Inbox: <N> unread
-Overdue tasks: <N>
+Gathering inbox, calendar, tasks, and OKRs...
 
+VIP senders: <names from config>
+Noise strategy: <from config>
+```
+
+### 2c. Poll and narrate
+
+Check the background agent's output file periodically. As data becomes available, update the user:
+
+**After prefetch completes** (calendar.json exists):
+```
 Today's meetings:
   <time> <title>
   ...
 
-Launching triage agents... (classifying <N> emails in parallel)
+Pre-filtering inbox... (removing OOO replies and calendar invites)
 ```
 
-This gives the user immediate context while triage agents work in the background.
+**After pre-filter completes** (prefiltered.json exists):
+```
+Inbox: <N> unread | <N> auto-archived (OOO/invites)
+Classifying <N> remaining emails...
+```
 
-## Step 4: Spawn Parallel Triage Agents
+**After classification completes** (background agent done):
+```
+Classification done. <N> action | <N> review | <N> noise
+Starting triage.
+```
 
-Split the inbox emails into batches of 5-10 and spawn one triage sub-agent per batch. All agents run simultaneously.
+### What the scripts do internally
 
-**Prompt file:** `skills/morning/prompts/triage-agent.md`
-**Model:** `sonnet` | **Agent type:** `general-purpose`
+**Prefetch** (`morning-prefetch.sh`):
+- `gws gmail list --max <max_unread> --query "is:unread in:inbox"` — **MUST use `in:inbox`**
+- `gws calendar events --days 2` — today + tomorrow
+- `gws tasks lists` → `gws tasks list <id>` for each list
+- `gws sheets read <okr_sheet_id> "<sheet_name>!A1:Q100"` — OKR data (cached 24h)
+- All fetched in parallel, results as JSON files in output directory
 
-### What to pass each triage agent:
+**Pre-filter** (`morning-prefilter.sh`):
+- Archives OOO replies (Out of Office, OOO Re:, Automatic reply:)
+- Archives calendar invite emails (Invitation:, Updated Invitation:, Canceled: from calendar-notification@google.com)
+- Writes `prefiltered.json` (remaining) and `auto_handled.json` (archived with reasons)
 
-1. **Email batch** — 5-10 email summaries (message_id, thread_id, subject, sender, snippet, labels, message_count, date)
-2. **Calendar events** — the full 2-day calendar data (pass to ALL agents to avoid re-fetching)
-3. **Task data** — active tasks from monitored lists
-4. **OKR context** — relevant OKR data
-5. **VIP senders list** — from config
-6. **Config** — noise_strategy, priority signals
+### Output files
 
-### What each triage agent does autonomously:
+- `prefiltered.json` — remaining emails for AI classification (OOO/invites removed)
+- `auto_handled.json` — items archived by pre-filter with reasons
+- `classified.json` — classification results from background agent
+- `inbox.json` — original unread inbox emails
+- `calendar.json` — 2-day calendar events
+- `tasks.json` / `tasks_<list_id>.json` — task data
+- `okr_0.json` (etc.) — OKR sheet data
 
-For each email in its batch:
-1. **Classify:** ACT_NOW / REVIEW / SCHEDULING / NOISE
-2. **If NOISE** → auto-archive via `gws gmail archive-thread <thread_id> --quiet`
-3. **If SCHEDULING + past event** → auto-archive
-4. **If SCHEDULING + future event, no conflict** → RSVP accept + archive
-5. **If SCHEDULING + conflict** → return as REVIEW with conflict details
-6. **If ACT_NOW or REVIEW** → return to main agent with summary + recommended action
+## Step 3: Classify (Background Agent)
+
+The background agent classifies all remaining emails using the rules from `skills/morning/prompts/triage-agent.md`. This happens as part of the background agent launched in Step 2 — the main agent does NOT classify.
+
+For each email, the background agent determines:
+- **Classification:** ACT_NOW / REVIEW / NOISE
+- **Priority score:** 1-5 (highest signal, not additive)
+- **Summary:** 1-2 lines
+- **Matches:** OKR, task, or calendar match if any
+- **Recommended action**
+
+The background agent writes results to `classified.json` and archives all NOISE items via `gws gmail archive-thread <thread_id> --quiet`.
+
+## Step 4: Collect Results
+
+When the background agent completes, the main agent reads `classified.json` and presents the auto-action summary.
 
 ### Classification Categories
 
@@ -167,8 +162,9 @@ For each email in its batch:
 |----------|----------|
 | **ACT_NOW** | Direct question to the user, approval/review request. **User MUST be the blocker** — not just CC'd. |
 | **REVIEW** | FYI-relevant, decision context, CC'd on active thread, relates to OKR/task/meeting |
-| **SCHEDULING** | Calendar invites, meeting updates, reschedules |
 | **NOISE** | Gmail Promotions category, newsletters, automated alerts, digests, resolved comments |
+
+**No SCHEDULING category.** Calendar invites and OOO replies are handled by the pre-filter script (`scripts/morning-prefilter.sh`). Any remaining scheduling-related emails should be classified as REVIEW.
 
 **Flat classification — no promo/non-promo split.** All noise is treated the same regardless of source (fixes Issue #31).
 
@@ -224,23 +220,28 @@ Each triage agent scores its batch using the HIGHEST signal (not additive):
 ### Determinism Rules (MUST, not "should")
 
 - **MUST** use `in:inbox` in all Gmail queries
-- **MUST** spawn parallel triage agents — never classify sequentially in main context
-- **MUST** auto-archive noise without asking the user
-- **MUST** auto-archive stale scheduling (past events) without asking
-- **MUST** auto-accept future invites with no conflicts (then archive)
+- **MUST** run pre-filter script before AI classification — OOO/invites are handled deterministically
+- **MUST** use haiku for classification — sonnet is reserved for deep-dive only
+- **MUST** auto-archive noise without asking the user (noise items from AI classification are archived by main agent)
 - **MUST** use a single flat ID list — no promo/non-promo separation
 - **MUST** run post-triage cleanup (Step 8)
 
 ## Step 5: Collect Results and Present Auto-Action Summary
 
-Merge all triage agent outputs. Present a summary of autonomous actions:
+Combine pre-filter results (from `auto_handled.json`) with AI classification. Archive any NOISE items from the AI classifier:
+
+```bash
+# For each NOISE-classified email from the haiku agent:
+gws gmail archive-thread <thread_id> --quiet
+```
+
+Present a summary of all autonomous actions:
 
 ```
 Auto-handled: <N> emails
-  Archived noise: <N>
-  Archived stale scheduling: <N>
-  Accepted invites (no conflicts): <N>
-  Archived past events: <N>
+  Pre-filter (OOO replies): <N>
+  Pre-filter (calendar invites): <N>
+  AI-classified noise: <N>
 
 Needs your input: <N> items (<N> action, <N> review)
 ```
@@ -277,18 +278,18 @@ For each action-required email, present:
 [OKR: <objective>]
 ```
 
-Use AskUserQuestion with **compound options** (max 4). Rotate based on context:
+Use AskUserQuestion with **4 options**. Pick the best 4 from the pool based on context:
 
-**Standard options:**
-- **Dig Deeper** — Spawn deep-dive sub-agent
-- **Archive** — Run `gws gmail archive-thread <thread_id> --quiet`
-- **Open in browser** — Run `open "https://mail.google.com/mail/u/0/#inbox/<thread_id>"`
+**Standard options (always include):**
+- **Mark as read** — Mark read, keep in inbox: `gws gmail label <message_id> --remove UNREAD --quiet`
+- **Archive** — Remove from inbox: `gws gmail archive-thread <thread_id> --quiet`
 - **Skip** — Move to next item (keeps email **unread**)
 
-**Context-aware compound options** (substitute when relevant):
+**Rotate the 4th slot based on context:**
+- **Dig Deeper** — Spawn deep-dive sub-agent (for complex threads, action items)
 - **Label & archive** — Spawn label-resolver sub-agent (`skills/morning/prompts/label-resolver.md`) with `action=archive`
 - **Add task & archive** — Ask for title, run `gws tasks create`, then archive
-- **Accept & archive** — For scheduling items with conflicts, RSVP accept + archive
+- **Open in browser** — Run `open "https://mail.google.com/mail/u/0/#inbox/<thread_id>"`
 
 Free-form responses via "Other":
 - "delete" / "trash" → `gws gmail trash <message_id> --quiet`
@@ -547,11 +548,12 @@ Common `gws` commands used during triage:
 
 ## Tips for AI Agents
 
-### Architecture (v0.3.0 — Parallel Triage)
-- **Prefetch script handles deterministic data gathering.** Run `skills/morning/scripts/morning-prefetch.sh` in Step 2 instead of individual `gws` commands. The script fetches inbox, calendar, tasks, and OKR data in parallel and writes JSON files to a scratchpad directory. Principle: whatever can be not-AI should be not-AI.
-- **Parallel triage agents replace the single batch classifier.** Instead of one agent classifying all emails sequentially, spawn one triage agent per 5-10 email batch. They classify AND act autonomously. Sub-agent tokens don't consume main context.
+### Architecture (v0.4.0 — Script Pre-filter + Lean AI Classification)
+- **Pipeline: prefetch → pre-filter → AI classify.** Two bash scripts handle deterministic work (data gathering + OOO/invite archiving). Only semantic classification uses AI. Principle: whatever can be not-AI should be not-AI.
+- **Pre-filter script** (`scripts/morning-prefilter.sh`) archives OOO replies and calendar invite emails deterministically — no AI tokens spent on pattern matching.
+- **Background agent pattern** — a background agent handles prefetch + pre-filter + classification while the main agent shows the user immediate context (config, calendar, meetings). The main agent polls the background agent's output file and narrates progress. This eliminates dead wait time — the user sees useful content immediately.
+- **Sonnet reserved for deep-dive only** (when user says "Dig Deeper" during guided triage).
 - **Sub-agent types:**
-  - **Triage agent** (Step 4) — classifies batch + auto-archives noise/stale scheduling + auto-accepts invites. Returns only items needing user input.
   - **Deep-dive agent** (Step 6, "Dig Deeper") — fetches and summarizes a single email/thread. **Always use sonnet** (haiku failed in QA).
   - **Label resolver** (Step 6, "Label & archive") — fetches label list, fuzzy-matches, applies labels
 - **Use bash scripts for bulk operations.** Archive/trash/mark-read across multiple emails is mechanical work — no AI reasoning needed. Use `skills/morning/scripts/bulk-gmail.sh`:
@@ -559,8 +561,8 @@ Common `gws` commands used during triage:
   - `bulk-gmail.sh archive <message_ids>` — archive messages + mark read
   - `bulk-gmail.sh trash <ids>` — delete + mark read
   - `bulk-gmail.sh mark-read <ids>` — mark read only
-- **Main agent gathers all data in Step 2** (parallel), then passes it to triage agents. This avoids multiple agents re-fetching the same calendar/task/OKR data.
-- **Deprecated sub-agents:** `batch-classifier.md` and `calendar-coordinator.md` are superseded by `triage-agent.md`. The triage agent handles both classification and calendar coordination.
+- **Main agent runs both scripts in Step 2**, then reads JSON files to build compact context for the haiku classifier.
+- **Deprecated sub-agents:** `batch-classifier.md` and `calendar-coordinator.md` are superseded by `triage-agent.md`.
 
 ### Classification
 - **Blocker detection is the most important classification rule.** An email where the user is CC'd and someone else owns the action is REVIEW, not ACT NOW — even if the thread is 5 weeks old and high-priority.
