@@ -1,5 +1,7 @@
 # Calendar Coordinator Prompt
 
+> **DEPRECATED (v0.3.0):** Calendar coordination is now handled by `triage-agent.md` which matches invites, checks conflicts, and RSVPs autonomously. Kept for reference only.
+
 **Model:** `sonnet` — needs conflict checking logic and calendar event matching.
 
 **Agent type:** `general-purpose`

@@ -84,13 +84,23 @@ gws gmail archive-thread <thread_id> --quiet
 ```
 
 ### SCHEDULING — Future Events, No Conflict → Auto-accept + archive
-1. Check the calendar events data for conflicts (overlapping time ranges, excluding all-day events)
+
+**Matching email to calendar event:**
+Match the invite email to the pre-fetched calendar events by:
+- Title similarity (fuzzy — "Q2 Planning" matches "Q2 Planning Session")
+- Date/time alignment (email mentions same date as event)
+- Sender appears in the event's attendees or organizer field
+
+If no matching event is found in the calendar data, classify as REVIEW with note "could not match to calendar event — accept manually".
+
+**Conflict check and RSVP:**
+1. Check the matched event's time range against ALL other events (excluding all-day events)
 2. If no conflict found:
 ```bash
 gws calendar rsvp <event-id> --response accepted
 gws gmail archive-thread <thread_id> --quiet
 ```
-3. If conflict found → return as REVIEW with conflict details
+3. If conflict found → return as REVIEW with conflict details (conflicting event title + time)
 
 ### SCHEDULING — Canceled Events → Auto-archive
 If subject contains "Canceled:" or email indicates cancellation:
@@ -121,7 +131,7 @@ Return a JSON array. For each email in the batch:
     "thread_id": "<id>",
     "subject": "<subject>",
     "sender": "<sender>",
-    "classification": "ACT_NOW | REVIEW | SCHEDULING | NOISE",
+    "classification": "ACT_NOW | REVIEW | NOISE",
     "priority": 1-5,
     "action_taken": "archived | accepted_and_archived | none",
     "summary": "2-3 line summary: what it's about, who's involved, why it matters",

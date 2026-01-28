@@ -1,5 +1,7 @@
 # Batch Email Classifier Prompt
 
+> **DEPRECATED (v0.3.0):** Replaced by `triage-agent.md` which classifies AND acts autonomously in parallel batches. Kept for reference only.
+
 **Model:** `sonnet` — fast structured output, cost-effective for bulk classification.
 
 **Agent type:** `general-purpose`
