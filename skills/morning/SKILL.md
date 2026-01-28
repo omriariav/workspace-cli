@@ -57,9 +57,30 @@ The config contains:
 
 ## Step 2: Quick Scan (Parallel Data Gathering)
 
-Gather ALL context data in parallel. Run these commands simultaneously:
+Run the prefetch script to gather ALL context data in parallel:
 
-### 2a. Inbox
+```bash
+skills/morning/scripts/morning-prefetch.sh "$SCRATCHPAD_DIR/morning"
+```
+
+The script reads config from `~/.config/gws/inbox-skill.yaml` and fetches all data sources in two phases. Results are saved as JSON files in the output directory. Read the script's stdout for a summary of what was fetched.
+
+**OKR caching:** OKR sheets are cached for 24 hours at `~/.cache/gws/morning/`. The summary JSON includes `"source":"cache"` or `"source":"fresh"` so you know which was used. If the user says their OKRs changed or asks to refresh, re-run with `--refresh-okr`:
+
+```bash
+skills/morning/scripts/morning-prefetch.sh "$SCRATCHPAD_DIR/morning" --refresh-okr
+```
+
+Then read results from the output directory:
+- `inbox.json` — unread inbox emails
+- `calendar.json` — 2-day calendar events
+- `tasks.json` — task list metadata
+- `tasks_<list_id>.json` — tasks per list
+- `okr_0.json` (etc.) — OKR sheet data
+
+### What the prefetch script does internally
+
+#### 2a. Inbox
 
 ```bash
 gws gmail list --max <max_unread> --query "is:unread in:inbox"
@@ -67,7 +88,7 @@ gws gmail list --max <max_unread> --query "is:unread in:inbox"
 
 **MUST use `in:inbox`** — without this, archived emails from months ago will surface.
 
-### 2b. Calendar
+#### 2b. Calendar
 
 ```bash
 gws calendar events --days 2
@@ -75,25 +96,25 @@ gws calendar events --days 2
 
 Fetch 2 days (today + tomorrow) for meeting prep context and scheduling conflict detection.
 
-### 2c. Tasks
+#### 2c. Tasks
 
 ```bash
 gws tasks lists
 ```
 
-Then for each monitored task list (from config `task_lists`):
+Then for each task list ID from the results:
 ```bash
 gws tasks list <task-list-id>
 ```
 
-### 2d. OKRs
+#### 2d. OKRs
 
 For each sheet in config `okr_sheets`:
 ```bash
 gws sheets read <okr_sheet_id> "<sheet_name>!A1:Q100"
 ```
 
-All four data sources are fetched in parallel (~10 seconds total). The main agent holds the structured results briefly for the header and triage agent input.
+All four data sources are fetched in parallel via the prefetch script. The main agent reads the resulting JSON files for the header and triage agent input.
 
 ## Step 3: Show Header Immediately
 
@@ -527,6 +548,7 @@ Common `gws` commands used during triage:
 ## Tips for AI Agents
 
 ### Architecture (v0.3.0 — Parallel Triage)
+- **Prefetch script handles deterministic data gathering.** Run `skills/morning/scripts/morning-prefetch.sh` in Step 2 instead of individual `gws` commands. The script fetches inbox, calendar, tasks, and OKR data in parallel and writes JSON files to a scratchpad directory. Principle: whatever can be not-AI should be not-AI.
 - **Parallel triage agents replace the single batch classifier.** Instead of one agent classifying all emails sequentially, spawn one triage agent per 5-10 email batch. They classify AND act autonomously. Sub-agent tokens don't consume main context.
 - **Sub-agent types:**
   - **Triage agent** (Step 4) — classifies batch + auto-archives noise/stale scheduling + auto-accepts invites. Returns only items needing user input.

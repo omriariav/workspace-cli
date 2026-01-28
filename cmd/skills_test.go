@@ -590,6 +590,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		"morning/prompts/label-resolver.md",
 		"morning/prompts/triage-agent.md",
 		"morning/scripts/bulk-gmail.sh",
+		"morning/scripts/morning-prefetch.sh",
 	}
 	for _, f := range morningExtras {
 		if _, err := os.Stat(filepath.Join(base, f)); err == nil {
@@ -597,7 +598,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		}
 	}
 
-	expectedTotal := 31 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md + 7 morning extras
+	expectedTotal := 32 // 1 marketplace.json + 12 SKILL.md + 10 commands.md + 1 setup-guide.md + 8 morning extras
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}
@@ -692,6 +693,76 @@ func TestMorningSkill_BulkScriptSyntax(t *testing.T) {
 	}
 }
 
+func TestMorningSkill_PrefetchScriptExists(t *testing.T) {
+	path := filepath.Join(skillsDir(t), "morning", "scripts", "morning-prefetch.sh")
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		t.Fatal("morning-prefetch.sh missing")
+	}
+	if info.Mode()&0111 == 0 {
+		t.Error("morning-prefetch.sh is not executable")
+	}
+}
+
+func TestMorningSkill_PrefetchScriptSyntax(t *testing.T) {
+	path := filepath.Join(skillsDir(t), "morning", "scripts", "morning-prefetch.sh")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read morning-prefetch.sh: %v", err)
+	}
+	content := string(data)
+
+	// Verify shebang
+	if !strings.HasPrefix(content, "#!/bin/bash") {
+		t.Error("morning-prefetch.sh missing #!/bin/bash shebang")
+	}
+
+	// Verify strict mode
+	if !strings.Contains(content, "set -euo pipefail") {
+		t.Error("morning-prefetch.sh missing set -euo pipefail")
+	}
+
+	// Verify all expected gws commands
+	expectedCmds := []string{
+		"gws gmail list",
+		"gws calendar events",
+		"gws tasks lists",
+		"gws tasks list",
+		"gws sheets read",
+	}
+	for _, cmd := range expectedCmds {
+		if !strings.Contains(content, cmd) {
+			t.Errorf("morning-prefetch.sh missing command: %s", cmd)
+		}
+	}
+
+	// Verify parallel execution
+	if !strings.Contains(content, "&") {
+		t.Error("morning-prefetch.sh missing background execution (&)")
+	}
+	if !strings.Contains(content, "wait") {
+		t.Error("morning-prefetch.sh missing wait command")
+	}
+
+	// Verify inbox safety
+	if !strings.Contains(content, "in:inbox") {
+		t.Error("morning-prefetch.sh missing in:inbox query constraint")
+	}
+
+	// Verify JSON summary output
+	if !strings.Contains(content, "output_dir") || !strings.Contains(content, "fetch_time_seconds") {
+		t.Error("morning-prefetch.sh missing JSON summary fields")
+	}
+
+	// Verify OKR caching
+	if !strings.Contains(content, "OKR_CACHE_DIR") || !strings.Contains(content, "OKR_CACHE_TTL") {
+		t.Error("morning-prefetch.sh missing OKR cache support")
+	}
+	if !strings.Contains(content, "--refresh-okr") {
+		t.Error("morning-prefetch.sh missing --refresh-okr flag")
+	}
+}
+
 func TestMorningSkill_SKILLmdReferencesPrompts(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(skillsDir(t), "morning", "SKILL.md"))
 	if err != nil {
@@ -705,6 +776,7 @@ func TestMorningSkill_SKILLmdReferencesPrompts(t *testing.T) {
 		"prompts/deep-dive.md",
 		"prompts/label-resolver.md",
 		"scripts/bulk-gmail.sh",
+		"scripts/morning-prefetch.sh",
 	}
 	for _, ref := range refs {
 		if !strings.Contains(content, ref) {
