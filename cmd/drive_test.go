@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -273,6 +274,36 @@ func TestDriveComments_EmptyResponse(t *testing.T) {
 	}
 }
 
+func TestDriveComments_DirectLink(t *testing.T) {
+	tests := []struct {
+		mimeType string
+		expected string
+	}{
+		{"application/vnd.google-apps.document", "https://docs.google.com/document/d/file-123/edit?disco=comment-1"},
+		{"application/vnd.google-apps.spreadsheet", "https://docs.google.com/spreadsheets/d/file-123/edit?disco=comment-1"},
+		{"application/vnd.google-apps.presentation", "https://docs.google.com/presentation/d/file-123/edit?disco=comment-1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.mimeType, func(t *testing.T) {
+			fileID := "file-123"
+			commentID := "comment-1"
+
+			directLink := fmt.Sprintf("https://docs.google.com/document/d/%s/edit?disco=%s", fileID, commentID)
+			switch tt.mimeType {
+			case "application/vnd.google-apps.spreadsheet":
+				directLink = fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit?disco=%s", fileID, commentID)
+			case "application/vnd.google-apps.presentation":
+				directLink = fmt.Sprintf("https://docs.google.com/presentation/d/%s/edit?disco=%s", fileID, commentID)
+			}
+
+			if directLink != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, directLink)
+			}
+		})
+	}
+}
+
 func TestDriveComments_OutputFormat(t *testing.T) {
 	// Test that output is properly structured JSON
 	result := map[string]interface{}{
@@ -281,8 +312,9 @@ func TestDriveComments_OutputFormat(t *testing.T) {
 		"mime_type": "application/vnd.google-apps.document",
 		"comments": []map[string]interface{}{
 			{
-				"id":      "c1",
-				"content": "Test comment",
+				"id":          "c1",
+				"content":     "Test comment",
+				"direct_link": "https://docs.google.com/document/d/test-id/edit?disco=c1",
 				"author": map[string]interface{}{
 					"name":  "Test User",
 					"email": "test@example.com",

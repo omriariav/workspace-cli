@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
@@ -98,6 +100,37 @@ Examples:
 	RunE: runGmailArchiveThread,
 }
 
+var gmailEventIDCmd = &cobra.Command{
+	Use:   "event-id <message-id>",
+	Short: "Extract calendar event ID from an invite email",
+	Long: `Extracts the Google Calendar event ID from a calendar invite email.
+
+Parses the eid parameter from Google Calendar URLs in the email body
+and base64 decodes it to extract the event ID.
+
+Examples:
+  gws gmail event-id 19c041be3fcd1b79
+  gws gmail event-id 19c041be3fcd1b79 | jq -r '.event_id' | xargs -I{} gws calendar rsvp {} --response accepted`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGmailEventID,
+}
+
+var gmailReplyCmd = &cobra.Command{
+	Use:   "reply <message-id>",
+	Short: "Reply to a message",
+	Long: `Replies to an existing email message within its thread.
+
+Automatically populates the thread ID, subject (with Re: prefix),
+and In-Reply-To/References headers from the original message.
+
+Examples:
+  gws gmail reply 18abc123 --body "Thanks, got it!"
+  gws gmail reply 18abc123 --body "Adding someone" --cc extra@example.com
+  gws gmail reply 18abc123 --body "Sounds good" --all`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGmailReply,
+}
+
 var gmailThreadCmd = &cobra.Command{
 	Use:   "thread <thread-id>",
 	Short: "Read a full thread",
@@ -122,6 +155,8 @@ func init() {
 	gmailCmd.AddCommand(gmailArchiveThreadCmd)
 	gmailCmd.AddCommand(gmailTrashCmd)
 	gmailCmd.AddCommand(gmailThreadCmd)
+	gmailCmd.AddCommand(gmailEventIDCmd)
+	gmailCmd.AddCommand(gmailReplyCmd)
 
 	// List flags
 	gmailListCmd.Flags().Int64("max", 10, "Maximum number of results")
@@ -133,9 +168,18 @@ func init() {
 	gmailSendCmd.Flags().String("body", "", "Email body (required)")
 	gmailSendCmd.Flags().String("cc", "", "CC recipients (comma-separated)")
 	gmailSendCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
+	gmailSendCmd.Flags().String("thread-id", "", "Thread ID to reply in")
+	gmailSendCmd.Flags().String("reply-to-message-id", "", "Message ID to reply to (sets In-Reply-To/References headers)")
 	gmailSendCmd.MarkFlagRequired("to")
 	gmailSendCmd.MarkFlagRequired("subject")
 	gmailSendCmd.MarkFlagRequired("body")
+
+	// Reply flags
+	gmailReplyCmd.Flags().String("body", "", "Reply body (required)")
+	gmailReplyCmd.Flags().String("cc", "", "CC recipients (comma-separated)")
+	gmailReplyCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
+	gmailReplyCmd.Flags().Bool("all", false, "Reply to all recipients")
+	gmailReplyCmd.MarkFlagRequired("body")
 
 	// Label flags
 	gmailLabelCmd.Flags().String("add", "", "Label names to add (comma-separated)")
@@ -278,6 +322,27 @@ func runGmailSend(cmd *cobra.Command, args []string) error {
 	body, _ := cmd.Flags().GetString("body")
 	cc, _ := cmd.Flags().GetString("cc")
 	bcc, _ := cmd.Flags().GetString("bcc")
+	threadID, _ := cmd.Flags().GetString("thread-id")
+	replyToMsgID, _ := cmd.Flags().GetString("reply-to-message-id")
+
+	// If replying, fetch the original message's Message-ID header
+	var inReplyTo string
+	if replyToMsgID != "" {
+		origMsg, err := svc.Users.Messages.Get("me", replyToMsgID).Format("metadata").MetadataHeaders("Message-ID", "Message-Id").Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get original message for reply: %w", err))
+		}
+		for _, header := range origMsg.Payload.Headers {
+			if header.Name == "Message-ID" || header.Name == "Message-Id" {
+				inReplyTo = header.Value
+				break
+			}
+		}
+		// Default thread ID from original message if not specified
+		if threadID == "" {
+			threadID = origMsg.ThreadId
+		}
+	}
 
 	// Build RFC 2822 message
 	var msgBuilder strings.Builder
@@ -289,6 +354,10 @@ func runGmailSend(cmd *cobra.Command, args []string) error {
 		msgBuilder.WriteString(fmt.Sprintf("Bcc: %s\r\n", bcc))
 	}
 	msgBuilder.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	if inReplyTo != "" {
+		msgBuilder.WriteString(fmt.Sprintf("In-Reply-To: %s\r\n", inReplyTo))
+		msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", inReplyTo))
+	}
 	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
 	msgBuilder.WriteString("\r\n")
 	msgBuilder.WriteString(body)
@@ -298,6 +367,9 @@ func runGmailSend(cmd *cobra.Command, args []string) error {
 
 	msg := &gmail.Message{
 		Raw: raw,
+	}
+	if threadID != "" {
+		msg.ThreadId = threadID
 	}
 
 	sent, err := svc.Users.Messages.Send("me", msg).Do()
@@ -602,6 +674,223 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 		"thread_id":     threadID,
 		"message_count": len(messages),
 		"messages":      messages,
+	})
+}
+
+func runGmailEventID(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	messageID := args[0]
+
+	msg, err := svc.Users.Messages.Get("me", messageID).Format("full").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get message: %w", err))
+	}
+
+	body := extractBody(msg.Payload)
+
+	// Try to extract event ID from Google Calendar URL eid parameter
+	eventID, err := extractEventIDFromBody(body)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("no calendar event ID found in message: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"message_id": messageID,
+		"event_id":   eventID,
+	}
+
+	// Extract subject for context
+	for _, header := range msg.Payload.Headers {
+		if header.Name == "Subject" {
+			result["subject"] = header.Value
+			break
+		}
+	}
+
+	return p.Print(result)
+}
+
+// extractEventIDFromBody parses a Google Calendar eid from the email body.
+func extractEventIDFromBody(body string) (string, error) {
+	// Pattern: look for eid= parameter in Google Calendar URLs
+	re := regexp.MustCompile(`[?&]eid=([A-Za-z0-9+/=_-]+)`)
+	matches := re.FindStringSubmatch(body)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("no eid parameter found")
+	}
+
+	eidEncoded := matches[1]
+
+	// URL-decode first (in case of URL encoding)
+	eidEncoded, _ = url.QueryUnescape(eidEncoded)
+
+	// Base64 decode (standard encoding, pad if needed)
+	// Google uses standard base64, but we try both
+	var decoded []byte
+	var err error
+	decoded, err = base64.StdEncoding.DecodeString(eidEncoded)
+	if err != nil {
+		// Try URL-safe encoding
+		decoded, err = base64.URLEncoding.DecodeString(eidEncoded)
+		if err != nil {
+			// Try without padding
+			decoded, err = base64.RawStdEncoding.DecodeString(eidEncoded)
+			if err != nil {
+				return "", fmt.Errorf("failed to decode eid: %w", err)
+			}
+		}
+	}
+
+	// The decoded value is "eventID email@domain.com" — take the first part
+	parts := strings.SplitN(string(decoded), " ", 2)
+	if len(parts) == 0 || parts[0] == "" {
+		return "", fmt.Errorf("decoded eid is empty")
+	}
+
+	return parts[0], nil
+}
+
+func runGmailReply(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	messageID := args[0]
+	body, _ := cmd.Flags().GetString("body")
+	cc, _ := cmd.Flags().GetString("cc")
+	bcc, _ := cmd.Flags().GetString("bcc")
+	replyAll, _ := cmd.Flags().GetBool("all")
+
+	// Fetch the original message
+	origMsg, err := svc.Users.Messages.Get("me", messageID).Format("full").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get original message: %w", err))
+	}
+
+	// Extract headers from original
+	var origSubject, origFrom, origTo, origCc, origMessageID string
+	for _, header := range origMsg.Payload.Headers {
+		switch header.Name {
+		case "Subject":
+			origSubject = header.Value
+		case "From":
+			origFrom = header.Value
+		case "To":
+			origTo = header.Value
+		case "Cc":
+			origCc = header.Value
+		case "Message-ID":
+			origMessageID = header.Value
+		case "Message-Id":
+			origMessageID = header.Value
+		}
+	}
+
+	// Build reply To: reply to sender
+	replyTo := origFrom
+
+	// For reply-all, add original To and Cc (excluding self)
+	if replyAll {
+		// Get user's email to exclude from recipients
+		profile, err := svc.Users.GetProfile("me").Do()
+		if err == nil && profile.EmailAddress != "" {
+			myEmail := strings.ToLower(profile.EmailAddress)
+			var additionalRecipients []string
+
+			// Add original To recipients (minus self)
+			for _, addr := range strings.Split(origTo, ",") {
+				addr = strings.TrimSpace(addr)
+				if addr != "" && !strings.Contains(strings.ToLower(addr), myEmail) {
+					additionalRecipients = append(additionalRecipients, addr)
+				}
+			}
+
+			if len(additionalRecipients) > 0 {
+				replyTo = replyTo + ", " + strings.Join(additionalRecipients, ", ")
+			}
+
+			// Add original Cc to cc
+			if origCc != "" {
+				var ccRecipients []string
+				for _, addr := range strings.Split(origCc, ",") {
+					addr = strings.TrimSpace(addr)
+					if addr != "" && !strings.Contains(strings.ToLower(addr), myEmail) {
+						ccRecipients = append(ccRecipients, addr)
+					}
+				}
+				if len(ccRecipients) > 0 {
+					if cc != "" {
+						cc = cc + ", " + strings.Join(ccRecipients, ", ")
+					} else {
+						cc = strings.Join(ccRecipients, ", ")
+					}
+				}
+			}
+		}
+	}
+
+	// Build subject with Re: prefix
+	replySubject := origSubject
+	if !strings.HasPrefix(strings.ToLower(replySubject), "re:") {
+		replySubject = "Re: " + replySubject
+	}
+
+	// Build RFC 2822 message with threading headers
+	var msgBuilder strings.Builder
+	msgBuilder.WriteString(fmt.Sprintf("To: %s\r\n", replyTo))
+	if cc != "" {
+		msgBuilder.WriteString(fmt.Sprintf("Cc: %s\r\n", cc))
+	}
+	if bcc != "" {
+		msgBuilder.WriteString(fmt.Sprintf("Bcc: %s\r\n", bcc))
+	}
+	msgBuilder.WriteString(fmt.Sprintf("Subject: %s\r\n", replySubject))
+	if origMessageID != "" {
+		msgBuilder.WriteString(fmt.Sprintf("In-Reply-To: %s\r\n", origMessageID))
+		msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", origMessageID))
+	}
+	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	msgBuilder.WriteString("\r\n")
+	msgBuilder.WriteString(body)
+
+	raw := base64.URLEncoding.EncodeToString([]byte(msgBuilder.String()))
+
+	msg := &gmail.Message{
+		Raw:      raw,
+		ThreadId: origMsg.ThreadId,
+	}
+
+	sent, err := svc.Users.Messages.Send("me", msg).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to send reply: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":     "sent",
+		"message_id": sent.Id,
+		"thread_id":  sent.ThreadId,
+		"in_reply_to": messageID,
 	})
 }
 

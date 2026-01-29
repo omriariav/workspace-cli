@@ -3,7 +3,9 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -622,6 +624,193 @@ func TestResolveLabelNames(t *testing.T) {
 			t.Errorf("expected 1 id, got %d", len(ids))
 		}
 	})
+}
+
+// TestExtractEventIDFromBody tests event ID extraction from email body
+func TestExtractEventIDFromBody(t *testing.T) {
+	t.Run("valid eid parameter", func(t *testing.T) {
+		// "18t8hl5rgsh8oihvjnbtt4g788 omri.a@taboola.com" base64 encoded
+		body := `Click here to view: https://calendar.google.com/calendar/event?action=VIEW&eid=MTh0OGhsNXJnc2g4b2lodmpuYnR0NGc3ODggb21yaS5hQHRhYm9vbGEuY29t&more=stuff`
+		eventID, err := extractEventIDFromBody(body)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if eventID != "18t8hl5rgsh8oihvjnbtt4g788" {
+			t.Errorf("expected '18t8hl5rgsh8oihvjnbtt4g788', got '%s'", eventID)
+		}
+	})
+
+	t.Run("no eid found", func(t *testing.T) {
+		body := "This is a regular email with no calendar link"
+		_, err := extractEventIDFromBody(body)
+		if err == nil {
+			t.Error("expected error for body without eid")
+		}
+	})
+
+	t.Run("eid as first parameter", func(t *testing.T) {
+		body := `https://calendar.google.com/calendar/event?eid=dGVzdGV2ZW50MTIzIHVzZXJAZXhhbXBsZS5jb20=`
+		eventID, err := extractEventIDFromBody(body)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if eventID != "testevent123" {
+			t.Errorf("expected 'testevent123', got '%s'", eventID)
+		}
+	})
+}
+
+func TestGmailEventIDCommand_Help(t *testing.T) {
+	cmd := gmailEventIDCmd
+
+	if cmd.Use != "event-id <message-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestGmailReplyCommand_Help(t *testing.T) {
+	cmd := gmailReplyCmd
+
+	if cmd.Use != "reply <message-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestGmailReplyCommand_Flags(t *testing.T) {
+	cmd := gmailReplyCmd
+
+	bodyFlag := cmd.Flags().Lookup("body")
+	if bodyFlag == nil {
+		t.Error("expected --body flag to exist")
+	}
+
+	allFlag := cmd.Flags().Lookup("all")
+	if allFlag == nil {
+		t.Error("expected --all flag to exist")
+	}
+
+	ccFlag := cmd.Flags().Lookup("cc")
+	if ccFlag == nil {
+		t.Error("expected --cc flag to exist")
+	}
+}
+
+// TestGmailReply_MockServer tests the reply workflow
+func TestGmailReply_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Get original message
+		if r.URL.Path == "/gmail/v1/users/me/messages/orig-msg-123" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"id":       "orig-msg-123",
+				"threadId": "thread-xyz",
+				"payload": map[string]interface{}{
+					"headers": []map[string]string{
+						{"name": "Subject", "value": "Hello"},
+						{"name": "From", "value": "alice@example.com"},
+						{"name": "To", "value": "bob@example.com"},
+						{"name": "Message-ID", "value": "<abc123@mail.gmail.com>"},
+					},
+					"mimeType": "text/plain",
+					"body":     map[string]interface{}{"data": "SGVsbG8="},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Send reply
+		if r.URL.Path == "/gmail/v1/users/me/messages/send" && r.Method == "POST" {
+			var msg gmail.Message
+			if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+				t.Errorf("failed to decode: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			// Verify thread ID is set
+			if msg.ThreadId != "thread-xyz" {
+				t.Errorf("expected ThreadId 'thread-xyz', got '%s'", msg.ThreadId)
+			}
+
+			// Decode raw to verify headers
+			rawBytes, _ := base64.URLEncoding.DecodeString(msg.Raw)
+			rawStr := string(rawBytes)
+			if !strings.Contains(rawStr, "In-Reply-To: <abc123@mail.gmail.com>") {
+				t.Errorf("expected In-Reply-To header in raw message")
+			}
+			if !strings.Contains(rawStr, "Re: Hello") {
+				t.Errorf("expected Re: prefix in subject")
+			}
+
+			resp := &gmail.Message{
+				Id:       "reply-msg-456",
+				ThreadId: "thread-xyz",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	// Fetch original message
+	origMsg, err := svc.Users.Messages.Get("me", "orig-msg-123").Format("full").Do()
+	if err != nil {
+		t.Fatalf("failed to get original message: %v", err)
+	}
+
+	if origMsg.ThreadId != "thread-xyz" {
+		t.Errorf("unexpected thread id: %s", origMsg.ThreadId)
+	}
+
+	// Build and send reply
+	var origMessageIDHeader string
+	for _, header := range origMsg.Payload.Headers {
+		if header.Name == "Message-ID" {
+			origMessageIDHeader = header.Value
+		}
+	}
+
+	var msgBuilder strings.Builder
+	msgBuilder.WriteString("To: alice@example.com\r\n")
+	msgBuilder.WriteString("Subject: Re: Hello\r\n")
+	msgBuilder.WriteString(fmt.Sprintf("In-Reply-To: %s\r\n", origMessageIDHeader))
+	msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", origMessageIDHeader))
+	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	msgBuilder.WriteString("\r\n")
+	msgBuilder.WriteString("Got it, thanks!")
+
+	raw := base64.URLEncoding.EncodeToString([]byte(msgBuilder.String()))
+	msg := &gmail.Message{
+		Raw:      raw,
+		ThreadId: origMsg.ThreadId,
+	}
+
+	sent, err := svc.Users.Messages.Send("me", msg).Do()
+	if err != nil {
+		t.Fatalf("failed to send reply: %v", err)
+	}
+
+	if sent.ThreadId != "thread-xyz" {
+		t.Errorf("unexpected reply thread id: %s", sent.ThreadId)
+	}
 }
 
 func TestGmailThreadCommand_Help(t *testing.T) {

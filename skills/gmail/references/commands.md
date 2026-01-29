@@ -103,7 +103,7 @@ No additional flags. Use the `thread_id` from `gws gmail list` output.
 
 ## gws gmail send
 
-Sends a new email message.
+Sends a new email message. Supports replying within an existing thread.
 
 ```
 Usage: gws gmail send [flags]
@@ -116,6 +116,50 @@ Usage: gws gmail send [flags]
 | `--body` | string | | Yes | Email body |
 | `--cc` | string | | No | CC recipients (comma-separated) |
 | `--bcc` | string | | No | BCC recipients (comma-separated) |
+| `--thread-id` | string | | No | Thread ID to reply in |
+| `--reply-to-message-id` | string | | No | Message ID to reply to (sets In-Reply-To/References headers) |
+
+---
+
+## gws gmail reply
+
+Replies to an existing email message within its thread.
+
+```
+Usage: gws gmail reply <message-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--body` | string | | Yes | Reply body |
+| `--cc` | string | | No | CC recipients (comma-separated) |
+| `--bcc` | string | | No | BCC recipients (comma-separated) |
+| `--all` | bool | false | No | Reply to all recipients |
+
+### Output Fields (JSON)
+
+- `status` — Always `"sent"`
+- `message_id` — New reply message ID
+- `thread_id` — Thread ID
+- `in_reply_to` — Original message ID
+
+---
+
+## gws gmail event-id
+
+Extracts the Google Calendar event ID from a calendar invite email.
+
+```
+Usage: gws gmail event-id <message-id>
+```
+
+No additional flags. Parses the `eid` parameter from Google Calendar URLs in the email body and base64 decodes it.
+
+### Output Fields (JSON)
+
+- `message_id` — Source message ID
+- `event_id` — Extracted calendar event ID
+- `subject` — Email subject (for context)
 
 ---
 

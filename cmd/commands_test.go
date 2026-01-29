@@ -125,6 +125,8 @@ func TestGmailCommands(t *testing.T) {
 		{"trash", "trash <message-id>", true},
 		{"archive-thread", "archive-thread <thread-id>", true},
 		{"thread", "thread <thread-id>", true},
+		{"event-id", "event-id <message-id>", true},
+		{"reply", "reply <message-id>", true},
 	}
 
 	for _, tt := range tests {
@@ -170,7 +172,7 @@ func TestGmailSendCommand_Flags(t *testing.T) {
 		}
 	}
 
-	optionalFlags := []string{"cc", "bcc"}
+	optionalFlags := []string{"cc", "bcc", "thread-id", "reply-to-message-id"}
 	for _, flag := range optionalFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected --%s flag", flag)

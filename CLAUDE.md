@@ -18,7 +18,7 @@
 | Service | Commands |
 |---------|----------|
 | `auth` | login, logout, status |
-| `gmail` | list, read, thread, send, labels, label, archive, trash |
+| `gmail` | list, read, thread, send, reply, labels, label, archive, trash, event-id |
 | `calendar` | list, events, create, update, delete, rsvp |
 | `tasks` | lists, list, create, complete |
 | `drive` | list, search, info, download, upload, create-folder, move, delete, comments |
@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.4.0** - Docs content format: `--content-format` flag (markdown/plaintext/richformat) for create, append, insert commands.
+**v1.5.0** - Gmail reply & event-id, Drive comments direct links. New `gmail reply`, `gmail event-id` commands; `gmail send` gains `--thread-id`/`--reply-to-message-id` flags; `drive comments` now includes `direct_link` per comment.
 
 ## Roadmap
 
