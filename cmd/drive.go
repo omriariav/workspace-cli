@@ -466,11 +466,25 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
+		// Construct direct link to comment based on file type
+		var directLink string
+		switch file.MimeType {
+		case "application/vnd.google-apps.document":
+			directLink = fmt.Sprintf("https://docs.google.com/document/d/%s/edit?disco=%s", fileID, comment.Id)
+		case "application/vnd.google-apps.spreadsheet":
+			directLink = fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit?disco=%s", fileID, comment.Id)
+		case "application/vnd.google-apps.presentation":
+			directLink = fmt.Sprintf("https://docs.google.com/presentation/d/%s/edit?disco=%s", fileID, comment.Id)
+		default:
+			directLink = fmt.Sprintf("https://drive.google.com/file/d/%s/view?disco=%s", fileID, comment.Id)
+		}
+
 		c := map[string]interface{}{
-			"id":       comment.Id,
-			"content":  comment.Content,
-			"created":  comment.CreatedTime,
-			"resolved": comment.Resolved,
+			"id":          comment.Id,
+			"content":     comment.Content,
+			"created":     comment.CreatedTime,
+			"resolved":    comment.Resolved,
+			"direct_link": directLink,
 		}
 
 		if comment.ModifiedTime != "" {

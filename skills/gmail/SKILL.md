@@ -44,6 +44,9 @@ For initial setup, see the `gws-auth` skill.
 | Archive a message | `gws gmail archive <message-id>` |
 | Archive a thread | `gws gmail archive-thread <thread-id>` |
 | Trash a message | `gws gmail trash <message-id>` |
+| Reply to a message | `gws gmail reply <message-id> --body "Thanks!"` |
+| Reply to all | `gws gmail reply <message-id> --body "Got it" --all` |
+| Extract event ID | `gws gmail event-id <message-id>` |
 
 ## Detailed Usage
 
@@ -155,6 +158,41 @@ gws gmail trash <message-id>
 ```
 
 Moves a Gmail message to the trash. Messages in trash are permanently deleted after 30 days.
+
+### reply — Reply to a message
+
+```bash
+gws gmail reply <message-id> --body <body> [flags]
+```
+
+Replies to an existing email message within its thread. Automatically sets threading headers (In-Reply-To, References), thread ID, and Re: subject prefix.
+
+**Flags:**
+- `--body string` — Reply body (required)
+- `--cc string` — CC recipients (comma-separated)
+- `--bcc string` — BCC recipients (comma-separated)
+- `--all` — Reply to all recipients
+
+**Examples:**
+```bash
+gws gmail reply 18abc123 --body "Thanks, got it!"
+gws gmail reply 18abc123 --body "Adding someone" --cc extra@example.com
+gws gmail reply 18abc123 --body "Sounds good" --all
+```
+
+### event-id — Extract calendar event ID from an invite email
+
+```bash
+gws gmail event-id <message-id>
+```
+
+Extracts the Google Calendar event ID from a calendar invite email by parsing the `eid` parameter from Google Calendar URLs in the email body and base64 decoding it.
+
+**Examples:**
+```bash
+gws gmail event-id 19c041be3fcd1b79
+gws gmail event-id 19c041be3fcd1b79 | jq -r '.event_id' | xargs -I{} gws calendar rsvp {} --response accepted
+```
 
 ## Output Modes
 
