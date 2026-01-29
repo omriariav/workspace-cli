@@ -325,17 +325,19 @@ func runGmailSend(cmd *cobra.Command, args []string) error {
 	threadID, _ := cmd.Flags().GetString("thread-id")
 	replyToMsgID, _ := cmd.Flags().GetString("reply-to-message-id")
 
-	// If replying, fetch the original message's Message-ID header
-	var inReplyTo string
+	// If replying, fetch the original message's Message-ID and References headers
+	var inReplyTo, origReferences string
 	if replyToMsgID != "" {
-		origMsg, err := svc.Users.Messages.Get("me", replyToMsgID).Format("metadata").MetadataHeaders("Message-ID", "Message-Id").Do()
+		origMsg, err := svc.Users.Messages.Get("me", replyToMsgID).Format("metadata").MetadataHeaders("Message-ID", "Message-Id", "References").Do()
 		if err != nil {
 			return p.PrintError(fmt.Errorf("failed to get original message for reply: %w", err))
 		}
 		for _, header := range origMsg.Payload.Headers {
-			if header.Name == "Message-ID" || header.Name == "Message-Id" {
+			switch header.Name {
+			case "Message-ID", "Message-Id":
 				inReplyTo = header.Value
-				break
+			case "References":
+				origReferences = header.Value
 			}
 		}
 		// Default thread ID from original message if not specified
@@ -356,7 +358,11 @@ func runGmailSend(cmd *cobra.Command, args []string) error {
 	msgBuilder.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
 	if inReplyTo != "" {
 		msgBuilder.WriteString(fmt.Sprintf("In-Reply-To: %s\r\n", inReplyTo))
-		msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", inReplyTo))
+		references := inReplyTo
+		if origReferences != "" {
+			references = origReferences + " " + inReplyTo
+		}
+		msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", references))
 	}
 	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
 	msgBuilder.WriteString("\r\n")

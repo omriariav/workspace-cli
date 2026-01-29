@@ -658,6 +658,18 @@ func TestExtractEventIDFromBody(t *testing.T) {
 			t.Errorf("expected 'testevent123', got '%s'", eventID)
 		}
 	})
+
+	t.Run("URL-encoded eid with percent encoding", func(t *testing.T) {
+		// Same base64 as first test but with = URL-encoded as %3D
+		body := `https://calendar.google.com/calendar/event?eid=dGVzdGV2ZW50MTIzIHVzZXJAZXhhbXBsZS5jb20%3D`
+		eventID, err := extractEventIDFromBody(body)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if eventID != "testevent123" {
+			t.Errorf("expected 'testevent123', got '%s'", eventID)
+		}
+	})
 }
 
 func TestGmailEventIDCommand_Help(t *testing.T) {
@@ -810,6 +822,230 @@ func TestGmailReply_MockServer(t *testing.T) {
 
 	if sent.ThreadId != "thread-xyz" {
 		t.Errorf("unexpected reply thread id: %s", sent.ThreadId)
+	}
+}
+
+// TestGmailReplyAll_MockServer tests the reply-all workflow with recipient deduplication
+func TestGmailReplyAll_MockServer(t *testing.T) {
+	var sentRaw string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Get original message
+		if r.URL.Path == "/gmail/v1/users/me/messages/orig-msg-all" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"id":       "orig-msg-all",
+				"threadId": "thread-all",
+				"payload": map[string]interface{}{
+					"headers": []map[string]string{
+						{"name": "Subject", "value": "Team discussion"},
+						{"name": "From", "value": "alice@example.com"},
+						{"name": "To", "value": "me@example.com, bob@example.com"},
+						{"name": "Cc", "value": "carol@example.com"},
+						{"name": "Message-ID", "value": "<orig@mail.gmail.com>"},
+						{"name": "References", "value": "<prev@mail.gmail.com>"},
+					},
+					"mimeType": "text/plain",
+					"body":     map[string]interface{}{"data": "SGVsbG8="},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Get profile
+		if r.URL.Path == "/gmail/v1/users/me/profile" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"emailAddress": "me@example.com",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Send reply
+		if r.URL.Path == "/gmail/v1/users/me/messages/send" && r.Method == "POST" {
+			var msg gmail.Message
+			json.NewDecoder(r.Body).Decode(&msg)
+			sentRaw = msg.Raw
+			resp := &gmail.Message{Id: "reply-all-456", ThreadId: "thread-all"}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	// Simulate reply-all flow
+	origMsg, _ := svc.Users.Messages.Get("me", "orig-msg-all").Format("full").Do()
+	profile, _ := svc.Users.GetProfile("me").Do()
+	myEmail := strings.ToLower(profile.EmailAddress)
+
+	var origFrom, origTo, origCc, origMsgID, origRefs string
+	for _, h := range origMsg.Payload.Headers {
+		switch h.Name {
+		case "From":
+			origFrom = h.Value
+		case "To":
+			origTo = h.Value
+		case "Cc":
+			origCc = h.Value
+		case "Message-ID":
+			origMsgID = h.Value
+		case "References":
+			origRefs = h.Value
+		}
+	}
+
+	// Build To: sender + other To recipients (excluding self)
+	replyTo := origFrom
+	for _, addr := range strings.Split(origTo, ",") {
+		addr = strings.TrimSpace(addr)
+		if addr != "" && !emailMatchesSelf(addr, myEmail) {
+			replyTo += ", " + addr
+		}
+	}
+
+	// Build Cc from original
+	var ccParts []string
+	for _, addr := range strings.Split(origCc, ",") {
+		addr = strings.TrimSpace(addr)
+		if addr != "" && !emailMatchesSelf(addr, myEmail) {
+			ccParts = append(ccParts, addr)
+		}
+	}
+
+	var msgBuilder strings.Builder
+	msgBuilder.WriteString(fmt.Sprintf("To: %s\r\n", replyTo))
+	if len(ccParts) > 0 {
+		msgBuilder.WriteString(fmt.Sprintf("Cc: %s\r\n", strings.Join(ccParts, ", ")))
+	}
+	msgBuilder.WriteString("Subject: Re: Team discussion\r\n")
+	msgBuilder.WriteString(fmt.Sprintf("In-Reply-To: %s\r\n", origMsgID))
+	refs := origRefs + " " + origMsgID
+	msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", refs))
+	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n\r\nReply body")
+
+	raw := base64.URLEncoding.EncodeToString([]byte(msgBuilder.String()))
+	msg := &gmail.Message{Raw: raw, ThreadId: origMsg.ThreadId}
+	sent, _ := svc.Users.Messages.Send("me", msg).Do()
+
+	if sent.ThreadId != "thread-all" {
+		t.Errorf("unexpected thread: %s", sent.ThreadId)
+	}
+
+	// Verify the sent message includes all expected recipients
+	rawBytes, _ := base64.URLEncoding.DecodeString(sentRaw)
+	rawStr := string(rawBytes)
+	if !strings.Contains(rawStr, "bob@example.com") {
+		t.Error("reply-all should include bob@example.com in To")
+	}
+	if !strings.Contains(rawStr, "carol@example.com") {
+		t.Error("reply-all should include carol@example.com in Cc")
+	}
+	if strings.Contains(rawStr, "To: alice@example.com, me@example.com") {
+		t.Error("reply-all should exclude self from To")
+	}
+	// Verify References chaining
+	if !strings.Contains(rawStr, "<prev@mail.gmail.com> <orig@mail.gmail.com>") {
+		t.Error("References should chain original References + Message-ID")
+	}
+}
+
+// TestGmailSendThreading_MockServer tests send with --thread-id and --reply-to-message-id
+func TestGmailSendThreading_MockServer(t *testing.T) {
+	var sentMsg gmail.Message
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Get original message for reply-to
+		if r.URL.Path == "/gmail/v1/users/me/messages/orig-for-send" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"id":       "orig-for-send",
+				"threadId": "thread-send",
+				"payload": map[string]interface{}{
+					"headers": []map[string]string{
+						{"name": "Message-ID", "value": "<send-orig@mail.gmail.com>"},
+						{"name": "References", "value": "<earlier@mail.gmail.com>"},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Send
+		if r.URL.Path == "/gmail/v1/users/me/messages/send" && r.Method == "POST" {
+			json.NewDecoder(r.Body).Decode(&sentMsg)
+			resp := &gmail.Message{Id: "sent-thread-msg", ThreadId: "thread-send"}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	// Simulate the send threading path: fetch original to get Message-ID
+	origMsg, err := svc.Users.Messages.Get("me", "orig-for-send").Format("metadata").Do()
+	if err != nil {
+		t.Fatalf("failed to get original: %v", err)
+	}
+
+	var inReplyTo, origRefs string
+	for _, h := range origMsg.Payload.Headers {
+		switch h.Name {
+		case "Message-ID":
+			inReplyTo = h.Value
+		case "References":
+			origRefs = h.Value
+		}
+	}
+
+	// Build message with threading headers
+	var msgBuilder strings.Builder
+	msgBuilder.WriteString("To: recipient@example.com\r\n")
+	msgBuilder.WriteString("Subject: Re: Thread test\r\n")
+	msgBuilder.WriteString(fmt.Sprintf("In-Reply-To: %s\r\n", inReplyTo))
+	references := inReplyTo
+	if origRefs != "" {
+		references = origRefs + " " + inReplyTo
+	}
+	msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", references))
+	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n\r\nThreaded reply")
+
+	raw := base64.URLEncoding.EncodeToString([]byte(msgBuilder.String()))
+	msg := &gmail.Message{Raw: raw, ThreadId: origMsg.ThreadId}
+	sent, err := svc.Users.Messages.Send("me", msg).Do()
+	if err != nil {
+		t.Fatalf("failed to send: %v", err)
+	}
+
+	if sent.ThreadId != "thread-send" {
+		t.Errorf("expected thread-send, got %s", sent.ThreadId)
+	}
+	if sentMsg.ThreadId != "thread-send" {
+		t.Errorf("sent message should have ThreadId set")
+	}
+
+	// Verify References chaining in raw
+	rawBytes, _ := base64.URLEncoding.DecodeString(sentMsg.Raw)
+	rawStr := string(rawBytes)
+	if !strings.Contains(rawStr, "In-Reply-To: <send-orig@mail.gmail.com>") {
+		t.Error("expected In-Reply-To header")
+	}
+	if !strings.Contains(rawStr, "<earlier@mail.gmail.com> <send-orig@mail.gmail.com>") {
+		t.Error("expected chained References header")
 	}
 }
 
