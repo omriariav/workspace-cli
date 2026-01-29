@@ -725,7 +725,8 @@ func runGmailEventID(cmd *cobra.Command, args []string) error {
 // extractEventIDFromBody parses a Google Calendar eid from the email body.
 func extractEventIDFromBody(body string) (string, error) {
 	// Pattern: look for eid= parameter in Google Calendar URLs
-	re := regexp.MustCompile(`[?&]eid=([A-Za-z0-9+/=_-]+)`)
+	// Match broadly (any non-whitespace, non-& chars) to capture URL-encoded values
+	re := regexp.MustCompile(`[?&]eid=([^\s&"<>]+)`)
 	matches := re.FindStringSubmatch(body)
 	if len(matches) < 2 {
 		return "", fmt.Errorf("no eid parameter found")
@@ -789,7 +790,7 @@ func runGmailReply(cmd *cobra.Command, args []string) error {
 	}
 
 	// Extract headers from original
-	var origSubject, origFrom, origTo, origCc, origMessageID string
+	var origSubject, origFrom, origTo, origCc, origMessageID, origReferences string
 	for _, header := range origMsg.Payload.Headers {
 		switch header.Name {
 		case "Subject":
@@ -800,10 +801,10 @@ func runGmailReply(cmd *cobra.Command, args []string) error {
 			origTo = header.Value
 		case "Cc":
 			origCc = header.Value
-		case "Message-ID":
+		case "Message-ID", "Message-Id":
 			origMessageID = header.Value
-		case "Message-Id":
-			origMessageID = header.Value
+		case "References":
+			origReferences = header.Value
 		}
 	}
 
@@ -814,37 +815,38 @@ func runGmailReply(cmd *cobra.Command, args []string) error {
 	if replyAll {
 		// Get user's email to exclude from recipients
 		profile, err := svc.Users.GetProfile("me").Do()
-		if err == nil && profile.EmailAddress != "" {
-			myEmail := strings.ToLower(profile.EmailAddress)
-			var additionalRecipients []string
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get profile for reply-all: %w", err))
+		}
+		myEmail := strings.ToLower(profile.EmailAddress)
+		var additionalRecipients []string
 
-			// Add original To recipients (minus self)
-			for _, addr := range strings.Split(origTo, ",") {
+		// Add original To recipients (minus self)
+		for _, addr := range strings.Split(origTo, ",") {
+			addr = strings.TrimSpace(addr)
+			if addr != "" && !emailMatchesSelf(addr, myEmail) {
+				additionalRecipients = append(additionalRecipients, addr)
+			}
+		}
+
+		if len(additionalRecipients) > 0 {
+			replyTo = replyTo + ", " + strings.Join(additionalRecipients, ", ")
+		}
+
+		// Add original Cc to cc
+		if origCc != "" {
+			var ccRecipients []string
+			for _, addr := range strings.Split(origCc, ",") {
 				addr = strings.TrimSpace(addr)
-				if addr != "" && !strings.Contains(strings.ToLower(addr), myEmail) {
-					additionalRecipients = append(additionalRecipients, addr)
+				if addr != "" && !emailMatchesSelf(addr, myEmail) {
+					ccRecipients = append(ccRecipients, addr)
 				}
 			}
-
-			if len(additionalRecipients) > 0 {
-				replyTo = replyTo + ", " + strings.Join(additionalRecipients, ", ")
-			}
-
-			// Add original Cc to cc
-			if origCc != "" {
-				var ccRecipients []string
-				for _, addr := range strings.Split(origCc, ",") {
-					addr = strings.TrimSpace(addr)
-					if addr != "" && !strings.Contains(strings.ToLower(addr), myEmail) {
-						ccRecipients = append(ccRecipients, addr)
-					}
-				}
-				if len(ccRecipients) > 0 {
-					if cc != "" {
-						cc = cc + ", " + strings.Join(ccRecipients, ", ")
-					} else {
-						cc = strings.Join(ccRecipients, ", ")
-					}
+			if len(ccRecipients) > 0 {
+				if cc != "" {
+					cc = cc + ", " + strings.Join(ccRecipients, ", ")
+				} else {
+					cc = strings.Join(ccRecipients, ", ")
 				}
 			}
 		}
@@ -868,7 +870,12 @@ func runGmailReply(cmd *cobra.Command, args []string) error {
 	msgBuilder.WriteString(fmt.Sprintf("Subject: %s\r\n", replySubject))
 	if origMessageID != "" {
 		msgBuilder.WriteString(fmt.Sprintf("In-Reply-To: %s\r\n", origMessageID))
-		msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", origMessageID))
+		// Chain References: original References + original Message-ID
+		references := origMessageID
+		if origReferences != "" {
+			references = origReferences + " " + origMessageID
+		}
+		msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", references))
 	}
 	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
 	msgBuilder.WriteString("\r\n")
@@ -887,11 +894,25 @@ func runGmailReply(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(map[string]interface{}{
-		"status":     "sent",
-		"message_id": sent.Id,
-		"thread_id":  sent.ThreadId,
+		"status":      "sent",
+		"message_id":  sent.Id,
+		"thread_id":   sent.ThreadId,
 		"in_reply_to": messageID,
 	})
+}
+
+// emailMatchesSelf checks if an RFC 5322 address matches the user's email.
+// Handles both "user@domain.com" and "Name <user@domain.com>" formats.
+func emailMatchesSelf(addr string, myEmail string) bool {
+	addr = strings.ToLower(strings.TrimSpace(addr))
+	// Extract email from angle brackets if present: "Name <email>"
+	if idx := strings.LastIndex(addr, "<"); idx >= 0 {
+		end := strings.Index(addr[idx:], ">")
+		if end > 0 {
+			addr = addr[idx+1 : idx+end]
+		}
+	}
+	return addr == myEmail
 }
 
 // extractBody extracts the plain text body from a message payload.

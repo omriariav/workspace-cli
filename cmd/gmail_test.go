@@ -813,6 +813,30 @@ func TestGmailReply_MockServer(t *testing.T) {
 	}
 }
 
+func TestEmailMatchesSelf(t *testing.T) {
+	tests := []struct {
+		addr    string
+		myEmail string
+		want    bool
+	}{
+		{"user@example.com", "user@example.com", true},
+		{"User@Example.com", "user@example.com", true},
+		{"other@example.com", "user@example.com", false},
+		{"xuser@example.com", "user@example.com", false},
+		{`"John Doe" <user@example.com>`, "user@example.com", true},
+		{`"John Doe" <other@example.com>`, "user@example.com", false},
+		{"<user@example.com>", "user@example.com", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.addr, func(t *testing.T) {
+			got := emailMatchesSelf(tt.addr, tt.myEmail)
+			if got != tt.want {
+				t.Errorf("emailMatchesSelf(%q, %q) = %v, want %v", tt.addr, tt.myEmail, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGmailThreadCommand_Help(t *testing.T) {
 	cmd := gmailThreadCmd
 

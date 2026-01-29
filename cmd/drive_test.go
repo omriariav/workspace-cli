@@ -282,6 +282,7 @@ func TestDriveComments_DirectLink(t *testing.T) {
 		{"application/vnd.google-apps.document", "https://docs.google.com/document/d/file-123/edit?disco=comment-1"},
 		{"application/vnd.google-apps.spreadsheet", "https://docs.google.com/spreadsheets/d/file-123/edit?disco=comment-1"},
 		{"application/vnd.google-apps.presentation", "https://docs.google.com/presentation/d/file-123/edit?disco=comment-1"},
+		{"application/pdf", "https://drive.google.com/file/d/file-123/view?disco=comment-1"},
 	}
 
 	for _, tt := range tests {
@@ -289,12 +290,16 @@ func TestDriveComments_DirectLink(t *testing.T) {
 			fileID := "file-123"
 			commentID := "comment-1"
 
-			directLink := fmt.Sprintf("https://docs.google.com/document/d/%s/edit?disco=%s", fileID, commentID)
+			var directLink string
 			switch tt.mimeType {
+			case "application/vnd.google-apps.document":
+				directLink = fmt.Sprintf("https://docs.google.com/document/d/%s/edit?disco=%s", fileID, commentID)
 			case "application/vnd.google-apps.spreadsheet":
 				directLink = fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit?disco=%s", fileID, commentID)
 			case "application/vnd.google-apps.presentation":
 				directLink = fmt.Sprintf("https://docs.google.com/presentation/d/%s/edit?disco=%s", fileID, commentID)
+			default:
+				directLink = fmt.Sprintf("https://drive.google.com/file/d/%s/view?disco=%s", fileID, commentID)
 			}
 
 			if directLink != tt.expected {
