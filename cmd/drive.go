@@ -438,7 +438,7 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 	includeDeleted, _ := cmd.Flags().GetBool("include-deleted")
 
 	// Get file info first for context
-	file, err := svc.Files.Get(fileID).Fields("name, mimeType").Do()
+	file, err := svc.Files.Get(fileID).SupportsAllDrives(true).Fields("name, mimeType").Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to get file info: %w", err))
 	}
