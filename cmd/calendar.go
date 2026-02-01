@@ -128,6 +128,7 @@ func init() {
 	// RSVP flags
 	calendarRsvpCmd.Flags().String("response", "", "Response: accepted, declined, tentative (required)")
 	calendarRsvpCmd.Flags().String("calendar-id", "primary", "Calendar ID")
+	calendarRsvpCmd.Flags().String("message", "", "Optional message to include with your RSVP (notifies all attendees)")
 	calendarRsvpCmd.MarkFlagRequired("response")
 }
 
@@ -492,6 +493,7 @@ func runCalendarRsvp(cmd *cobra.Command, args []string) error {
 	eventID := args[0]
 	calendarID, _ := cmd.Flags().GetString("calendar-id")
 	response, _ := cmd.Flags().GetString("response")
+	message, _ := cmd.Flags().GetString("message")
 
 	if !validRsvpResponses[response] {
 		return p.PrintError(fmt.Errorf("invalid response '%s': must be accepted, declined, or tentative", response))
@@ -509,6 +511,9 @@ func runCalendarRsvp(cmd *cobra.Command, args []string) error {
 	for _, attendee := range event.Attendees {
 		if attendee.Self {
 			attendee.ResponseStatus = response
+			if message != "" {
+				attendee.Comment = message
+			}
 			found = true
 			break
 		}
@@ -518,19 +523,29 @@ func runCalendarRsvp(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("you are not an attendee of this event"))
 	}
 
-	updated, err := svc.Events.Patch(calendarID, eventID, &calendar.Event{
+	patchCall := svc.Events.Patch(calendarID, eventID, &calendar.Event{
 		Attendees: event.Attendees,
-	}).Do()
+	})
+	if message != "" {
+		patchCall = patchCall.SendUpdates("all")
+	}
+
+	updated, err := patchCall.Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to update RSVP: %w", err))
 	}
 
-	return p.Print(map[string]interface{}{
-		"status":   response,
-		"id":       updated.Id,
-		"summary":  updated.Summary,
+	result := map[string]interface{}{
+		"status":    response,
+		"id":        updated.Id,
+		"summary":   updated.Summary,
 		"html_link": updated.HtmlLink,
-	})
+	}
+	if message != "" {
+		result["message"] = message
+	}
+
+	return p.Print(result)
 }
 
 // parseTime parses a time string in RFC3339 or "YYYY-MM-DD HH:MM" format.

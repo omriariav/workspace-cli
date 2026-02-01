@@ -82,6 +82,10 @@ func TestCalendarRsvpCommand_Flags(t *testing.T) {
 	if cmd.Flags().Lookup("calendar-id") == nil {
 		t.Error("expected --calendar-id flag to exist")
 	}
+
+	if cmd.Flags().Lookup("message") == nil {
+		t.Error("expected --message flag to exist")
+	}
 }
 
 func TestCalendarRsvpCommand_Help(t *testing.T) {
@@ -273,6 +277,165 @@ func TestCalendarRsvp_MockServer(t *testing.T) {
 
 	if updated.Id != "evt-789" {
 		t.Errorf("unexpected event id: %s", updated.Id)
+	}
+}
+
+// TestCalendarRsvp_MockServer_WithMessage tests RSVP with message sets Comment and sendUpdates
+func TestCalendarRsvp_MockServer_WithMessage(t *testing.T) {
+	var receivedSendUpdates string
+	var receivedComment string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/calendars/primary/events/evt-msg" && r.Method == "GET" {
+			resp := &calendar.Event{
+				Id:      "evt-msg",
+				Summary: "Meeting with Message",
+				Attendees: []*calendar.EventAttendee{
+					{Email: "organizer@example.com", ResponseStatus: "accepted"},
+					{Email: "me@example.com", Self: true, ResponseStatus: "needsAction"},
+				},
+				HtmlLink: "https://calendar.google.com/event?id=evt-msg",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/calendars/primary/events/evt-msg" && r.Method == "PATCH" {
+			receivedSendUpdates = r.URL.Query().Get("sendUpdates")
+
+			var event calendar.Event
+			if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			for _, a := range event.Attendees {
+				if a.Self {
+					receivedComment = a.Comment
+				}
+			}
+
+			resp := &calendar.Event{
+				Id:       "evt-msg",
+				Summary:  "Meeting with Message",
+				HtmlLink: "https://calendar.google.com/event?id=evt-msg",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	// Get event
+	event, err := svc.Events.Get("primary", "evt-msg").Do()
+	if err != nil {
+		t.Fatalf("failed to get event: %v", err)
+	}
+
+	// Update self attendee with comment
+	for _, attendee := range event.Attendees {
+		if attendee.Self {
+			attendee.ResponseStatus = "declined"
+			attendee.Comment = "Sorry, I have a conflict"
+			break
+		}
+	}
+
+	// Patch with sendUpdates
+	_, err = svc.Events.Patch("primary", "evt-msg", &calendar.Event{
+		Attendees: event.Attendees,
+	}).SendUpdates("all").Do()
+	if err != nil {
+		t.Fatalf("failed to RSVP with message: %v", err)
+	}
+
+	if receivedSendUpdates != "all" {
+		t.Errorf("expected sendUpdates=all, got '%s'", receivedSendUpdates)
+	}
+	if receivedComment != "Sorry, I have a conflict" {
+		t.Errorf("expected comment 'Sorry, I have a conflict', got '%s'", receivedComment)
+	}
+}
+
+// TestCalendarRsvp_MockServer_WithoutMessage verifies sendUpdates is NOT set when no message provided
+func TestCalendarRsvp_MockServer_WithoutMessage(t *testing.T) {
+	var receivedSendUpdates string
+	patchCalled := false
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/calendars/primary/events/evt-nomsg" && r.Method == "GET" {
+			resp := &calendar.Event{
+				Id:      "evt-nomsg",
+				Summary: "Silent RSVP",
+				Attendees: []*calendar.EventAttendee{
+					{Email: "me@example.com", Self: true, ResponseStatus: "needsAction"},
+				},
+				HtmlLink: "https://calendar.google.com/event?id=evt-nomsg",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/calendars/primary/events/evt-nomsg" && r.Method == "PATCH" {
+			patchCalled = true
+			receivedSendUpdates = r.URL.Query().Get("sendUpdates")
+
+			resp := &calendar.Event{
+				Id:       "evt-nomsg",
+				Summary:  "Silent RSVP",
+				HtmlLink: "https://calendar.google.com/event?id=evt-nomsg",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	event, err := svc.Events.Get("primary", "evt-nomsg").Do()
+	if err != nil {
+		t.Fatalf("failed to get event: %v", err)
+	}
+
+	for _, attendee := range event.Attendees {
+		if attendee.Self {
+			attendee.ResponseStatus = "accepted"
+			break
+		}
+	}
+
+	// Patch WITHOUT SendUpdates (mirrors no --message code path)
+	_, err = svc.Events.Patch("primary", "evt-nomsg", &calendar.Event{
+		Attendees: event.Attendees,
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to RSVP: %v", err)
+	}
+
+	if !patchCalled {
+		t.Fatal("expected PATCH to be called")
+	}
+	if receivedSendUpdates != "" {
+		t.Errorf("expected no sendUpdates param, got '%s'", receivedSendUpdates)
 	}
 }
 
