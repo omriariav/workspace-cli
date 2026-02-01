@@ -1,6 +1,6 @@
 ---
 name: gws-morning
-version: 0.4.0
+version: 0.5.0
 description: "AI-powered morning inbox briefing. Reads Gmail, Google Tasks, Calendar, and OKR sheets to produce a prioritized daily briefing with actionable recommendations. Triggers: /morning, morning briefing, inbox triage, email priorities, daily digest."
 metadata:
   short-description: AI inbox briefing with OKR/task matching
@@ -287,6 +287,9 @@ Use AskUserQuestion with **4 options**. Pick the best 4 from the pool based on c
 
 **Rotate the 4th slot based on context:**
 - **Dig Deeper** — Spawn deep-dive sub-agent (for complex threads, action items)
+- **Reply** — Compose a reply: fetch email via `gws gmail read <message_id>`, draft a response using conversation context (OKR/task matches, deep-dive insights if available), present draft for user approval, then `gws gmail reply <message_id> --body "<reply>"`. Thread ID, subject, and headers are auto-populated.
+- **Reply All** — Same as Reply but to all recipients: `gws gmail reply <message_id> --body "<reply>" --all`
+- **Forward** — Forward to a colleague: ask who, fetch email content (`read` for single message, `thread` for conversations), compose brief forwarding context (why forwarding + 1-2 key points, include OKR/task match if relevant), then `gws gmail send --to "<email>" --subject "Fwd: <subject>" --body "<your note>\n\n---\nOriginal message:\n<content>"`
 - **Label & archive** — Spawn label-resolver sub-agent (`skills/morning/prompts/label-resolver.md`) with `action=archive`
 - **Add task & archive** — Ask for title, run `gws tasks create`, then archive
 - **Open in browser** — Run `open "https://mail.google.com/mail/u/0/#inbox/<thread_id>"`
@@ -297,6 +300,9 @@ Free-form responses via "Other":
 - "add task & archive" → create task, then archive thread
 - "label X" / "label & archive" → spawn label-resolver sub-agent
 - "star" → `gws gmail label <message_id> --add STARRED`
+- "reply" → Fetch email, draft reply using context, present draft for approval, then `gws gmail reply <message_id> --body "<reply>"`
+- "reply all" → Same as reply but with `--all` flag: `gws gmail reply <message_id> --body "<reply>" --all`
+- "forward to X" → Fetch email via `gws gmail read/thread`, compose forwarding context, then `gws gmail send --to "X" --subject "Fwd: <subject>" --body "<context>\n\n---\n<original email>"`
 
 ### Mark-as-Read Rule
 
@@ -334,6 +340,7 @@ The sub-agent returns a structured brief. Present it and ask what to do next:
 - **Open in browser** — open in Gmail
 - **Archive** — remove from inbox
 - **Add task** — create a Google Task
+- **Forward** — compose forwarding context with insights from deep-dive, then send
 - **Delete** — trash the email
 - **Move on** — go to the next item
 
@@ -390,6 +397,9 @@ After the digest, remain ready for follow-up commands:
 | "read item N" | Run `gws gmail read <message_id>` or `gws gmail thread <thread_id>` |
 | "archive items N, M" | Run `skills/morning/scripts/bulk-gmail.sh archive-thread <thread_ids>` |
 | "add task: <title>" | Run `gws tasks create --title "<title>" --tasklist "Incoming"` |
+| "reply to item N" | Fetch email, draft reply, present for approval, then `gws gmail reply <message_id> --body "<reply>"` |
+| "reply all to item N" | Same but with `--all`: `gws gmail reply <message_id> --body "<reply>" --all` |
+| "forward item N to X" | Fetch email, compose context, then `gws gmail send --to "X" --subject "Fwd: <subject>" --body "<context>\n\n---\n<email>"` |
 | "triage" | Start guided triage from the beginning |
 
 ## Step 8: Post-Triage Cleanup (MANDATORY)
@@ -538,6 +548,10 @@ Common `gws` commands used during triage:
 | Create task | `gws tasks create --title "<title>" --tasklist "<list>"` |
 | Update task | `gws tasks update <tasklist-id> <task-id> --title "<title>"` |
 | Calendar events | `gws calendar events --days 2` |
+| Reply | `gws gmail reply <message-id> --body "<reply>"` |
+| Reply all | `gws gmail reply <message-id> --body "<reply>" --all` |
+| Reply with CC | `gws gmail reply <message-id> --body "<reply>" --cc "extra@example.com"` |
+| Send new email | `gws gmail send --to "<email>" --subject "<subject>" --body "<body>"` |
 | RSVP accept | `gws calendar rsvp <event-id> --response accepted` |
 | Bulk archive (thread) | `skills/morning/scripts/bulk-gmail.sh archive-thread <thread_id1> <thread_id2> ...` |
 | Bulk archive (message) | `skills/morning/scripts/bulk-gmail.sh archive <id1> <id2> ...` |
@@ -583,6 +597,8 @@ Common `gws` commands used during triage:
 - Track actions taken (auto-handled + user actions) and report them at the end.
 - Overdue tasks should always appear in the summary header.
 - Calendar cross-referencing: "you have a 1:1 with X at 2pm, and X sent you an email" is actionable prep context.
+- **Always include subject lines when presenting lists.** When showing scheduling items or noise items as a numbered list, include the full subject line — not just sender + category. Users consistently ask "show me the subjects" when subjects are omitted. The classifier returns summaries; use them in every list view.
+- **Triage naturally extends to calendar** (future enhancement). After inbox triage, users may want to review the week's calendar and batch-RSVP. When this happens, cross-reference meetings with OKRs to help prioritize accept/decline decisions and protect deep work blocks.
 
 ### VIP Senders
 - VIP sender lists can be populated during first-run setup using an employee directory lookup if available.
@@ -591,6 +607,11 @@ Common `gws` commands used during triage:
 ### Task Management
 - `gws tasks update` modifies title, notes, or due date — it does NOT support moving tasks between lists or reordering. To move a task to a different list, create a new task in the target list and complete the old one.
 - When creating follow-up tasks from triage, always ask the user which task list to use. Default to `@default` if they don't specify.
+
+### Calendar RSVP Limitations (Known Issue)
+- `gws calendar rsvp` does NOT support adding a note/message with the response.
+- If the user wants to decline with a reason, offer to: (1) decline via CLI + send a separate message to the organizer, or (2) open the event in browser to decline natively with a note.
+- Tracked: https://github.com/omriariav/workspace-cli/issues/45
 
 ### Label Operations
 - Gmail labels are resolved by **display name** (case-insensitive), not by internal ID.
