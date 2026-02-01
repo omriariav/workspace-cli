@@ -128,7 +128,7 @@ func init() {
 	// RSVP flags
 	calendarRsvpCmd.Flags().String("response", "", "Response: accepted, declined, tentative (required)")
 	calendarRsvpCmd.Flags().String("calendar-id", "primary", "Calendar ID")
-	calendarRsvpCmd.Flags().String("message", "", "Optional message to include with your RSVP")
+	calendarRsvpCmd.Flags().String("message", "", "Optional message to include with your RSVP (notifies all attendees)")
 	calendarRsvpCmd.MarkFlagRequired("response")
 }
 

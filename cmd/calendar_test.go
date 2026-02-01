@@ -368,6 +368,77 @@ func TestCalendarRsvp_MockServer_WithMessage(t *testing.T) {
 	}
 }
 
+// TestCalendarRsvp_MockServer_WithoutMessage verifies sendUpdates is NOT set when no message provided
+func TestCalendarRsvp_MockServer_WithoutMessage(t *testing.T) {
+	var receivedSendUpdates string
+	patchCalled := false
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/calendars/primary/events/evt-nomsg" && r.Method == "GET" {
+			resp := &calendar.Event{
+				Id:      "evt-nomsg",
+				Summary: "Silent RSVP",
+				Attendees: []*calendar.EventAttendee{
+					{Email: "me@example.com", Self: true, ResponseStatus: "needsAction"},
+				},
+				HtmlLink: "https://calendar.google.com/event?id=evt-nomsg",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/calendars/primary/events/evt-nomsg" && r.Method == "PATCH" {
+			patchCalled = true
+			receivedSendUpdates = r.URL.Query().Get("sendUpdates")
+
+			resp := &calendar.Event{
+				Id:       "evt-nomsg",
+				Summary:  "Silent RSVP",
+				HtmlLink: "https://calendar.google.com/event?id=evt-nomsg",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	event, err := svc.Events.Get("primary", "evt-nomsg").Do()
+	if err != nil {
+		t.Fatalf("failed to get event: %v", err)
+	}
+
+	for _, attendee := range event.Attendees {
+		if attendee.Self {
+			attendee.ResponseStatus = "accepted"
+			break
+		}
+	}
+
+	// Patch WITHOUT SendUpdates (mirrors no --message code path)
+	_, err = svc.Events.Patch("primary", "evt-nomsg", &calendar.Event{
+		Attendees: event.Attendees,
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to RSVP: %v", err)
+	}
+
+	if !patchCalled {
+		t.Fatal("expected PATCH to be called")
+	}
+	if receivedSendUpdates != "" {
+		t.Errorf("expected no sendUpdates param, got '%s'", receivedSendUpdates)
+	}
+}
+
 // TestCalendarRsvp_InvalidResponse tests RSVP validation
 func TestCalendarRsvp_InvalidResponse(t *testing.T) {
 	tests := []struct {
