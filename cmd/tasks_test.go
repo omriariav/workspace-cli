@@ -207,6 +207,39 @@ func TestTasksUpdate_OutputFormat(t *testing.T) {
 	}
 }
 
+// TestNormalizeDueDate tests date format normalization
+func TestNormalizeDueDate(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+		wantErr  bool
+	}{
+		{"2026-02-04", "2026-02-04T00:00:00Z", false},
+		{"2024-01-01", "2024-01-01T00:00:00Z", false},
+		{"2026-02-04T00:00:00Z", "2026-02-04T00:00:00Z", false},
+		{"2026-02-04T10:30:00+02:00", "2026-02-04T10:30:00+02:00", false},
+		{"not-a-date", "not-a-date", false},           // non-matching passes through
+		{"", "", false},                               // empty string passthrough
+		{"2024-13-01", "", true},                      // invalid month
+		{"2024-02-30", "", true},                      // invalid day
+		{"2023-02-29", "", true},                      // non-leap year
+		{"2024-02-29", "2024-02-29T00:00:00Z", false}, // valid leap year
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := normalizeDueDate(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("normalizeDueDate(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if got != tt.expected {
+				t.Errorf("normalizeDueDate(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
 // TestTasksUpdate_MockServer tests update API integration
 func TestTasksUpdate_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
