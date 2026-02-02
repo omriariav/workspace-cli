@@ -114,7 +114,7 @@ Add `--format text` to any command for human-readable output.
 | `gws calendar create` | Create event (`--title`, `--start`, `--end`, `--attendees`) |
 | `gws calendar update <id>` | Update event (`--title`, `--start`, `--end`, `--add-attendees`) |
 | `gws calendar delete <id>` | Delete event |
-| `gws calendar rsvp <id>` | RSVP to invite (`--response accepted/declined/tentative`) |
+| `gws calendar rsvp <id>` | RSVP to invite (`--response accepted/declined/tentative`, `--message`) |
 
 ### Tasks
 
@@ -122,7 +122,7 @@ Add `--format text` to any command for human-readable output.
 |---------|-------------|
 | `gws tasks lists` | List task lists |
 | `gws tasks list <id>` | List tasks in a list (`--show-completed`) |
-| `gws tasks create` | Create task (`--title`, `--tasklist`, `--due`) |
+| `gws tasks create` | Create task (`--title`, `--tasklist`, `--due`); accepts YYYY-MM-DD dates |
 | `gws tasks complete <list> <task>` | Mark task as done |
 
 ### Drive
@@ -133,7 +133,7 @@ Add `--format text` to any command for human-readable output.
 | `gws drive search <query>` | Full-text search |
 | `gws drive info <id>` | File metadata, owners, permissions |
 | `gws drive download <id>` | Download file (`--output`); auto-exports Google formats |
-| `gws drive upload <file>` | Upload file (`--folder`, `--name`, `--mime-type`) |
+| `gws drive upload <file>` | Upload file (`--folder`, `--name`, `--mime-type`); supports Shared Drives |
 | `gws drive create-folder` | Create folder (`--name`, `--parent`) |
 | `gws drive move <id>` | Move file to folder (`--to`) |
 | `gws drive delete <id>` | Delete file (`--permanent` for hard delete) |
