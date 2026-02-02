@@ -185,6 +185,8 @@ func runDriveList(cmd *cobra.Command, args []string) error {
 		Q(query).
 		PageSize(maxResults).
 		OrderBy(orderBy).
+		SupportsAllDrives(true).
+		IncludeItemsFromAllDrives(true).
 		Fields("files(id, name, mimeType, size, modifiedTime, webViewLink)").
 		Do()
 	if err != nil {
@@ -239,6 +241,8 @@ func runDriveSearch(cmd *cobra.Command, args []string) error {
 	resp, err := svc.Files.List().
 		Q(query).
 		PageSize(maxResults).
+		SupportsAllDrives(true).
+		IncludeItemsFromAllDrives(true).
 		Fields("files(id, name, mimeType, size, modifiedTime, webViewLink)").
 		Do()
 	if err != nil {
@@ -289,7 +293,7 @@ func runDriveDownload(cmd *cobra.Command, args []string) error {
 	outputPath, _ := cmd.Flags().GetString("output")
 
 	// Get file metadata first
-	file, err := svc.Files.Get(fileID).Fields("name, mimeType, size").Do()
+	file, err := svc.Files.Get(fileID).SupportsAllDrives(true).Fields("name, mimeType, size").Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to get file info: %w", err))
 	}
@@ -334,7 +338,7 @@ func runDriveDownload(cmd *cobra.Command, args []string) error {
 		}
 	default:
 		// Regular file download
-		downloadResp, err := svc.Files.Get(fileID).Download()
+		downloadResp, err := svc.Files.Get(fileID).SupportsAllDrives(true).Download()
 		if err != nil {
 			return p.PrintError(fmt.Errorf("failed to download file: %w", err))
 		}
@@ -380,6 +384,7 @@ func runDriveInfo(cmd *cobra.Command, args []string) error {
 	fileID := args[0]
 
 	file, err := svc.Files.Get(fileID).
+		SupportsAllDrives(true).
 		Fields("id, name, mimeType, size, createdTime, modifiedTime, webViewLink, webContentLink, owners, parents, shared").
 		Do()
 	if err != nil {
@@ -595,6 +600,7 @@ func runDriveUpload(cmd *cobra.Command, args []string) error {
 
 	// Upload file
 	created, err := svc.Files.Create(driveFile).
+		SupportsAllDrives(true).
 		Media(file).
 		Fields("id, name, mimeType, size, webViewLink").
 		Do()
@@ -647,6 +653,7 @@ func runDriveCreateFolder(cmd *cobra.Command, args []string) error {
 
 	// Create folder
 	created, err := svc.Files.Create(folder).
+		SupportsAllDrives(true).
 		Fields("id, name, webViewLink").
 		Do()
 	if err != nil {
@@ -684,7 +691,7 @@ func runDriveMove(cmd *cobra.Command, args []string) error {
 	toFolderID, _ := cmd.Flags().GetString("to")
 
 	// Get current file info to find existing parents
-	file, err := svc.Files.Get(fileID).Fields("name, parents").Do()
+	file, err := svc.Files.Get(fileID).SupportsAllDrives(true).Fields("name, parents").Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to get file info: %w", err))
 	}
@@ -702,6 +709,7 @@ func runDriveMove(cmd *cobra.Command, args []string) error {
 
 	// Move file by adding new parent and removing old parents
 	updated, err := svc.Files.Update(fileID, nil).
+		SupportsAllDrives(true).
 		AddParents(toFolderID).
 		RemoveParents(removeParents).
 		Fields("id, name, parents, webViewLink").
@@ -742,14 +750,14 @@ func runDriveDelete(cmd *cobra.Command, args []string) error {
 	permanent, _ := cmd.Flags().GetBool("permanent")
 
 	// Get file info first for the response
-	file, err := svc.Files.Get(fileID).Fields("name").Do()
+	file, err := svc.Files.Get(fileID).SupportsAllDrives(true).Fields("name").Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to get file info: %w", err))
 	}
 
 	if permanent {
 		// Permanently delete
-		err = svc.Files.Delete(fileID).Do()
+		err = svc.Files.Delete(fileID).SupportsAllDrives(true).Do()
 		if err != nil {
 			return p.PrintError(fmt.Errorf("failed to delete file: %w", err))
 		}
@@ -762,7 +770,7 @@ func runDriveDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	// Move to trash
-	_, err = svc.Files.Update(fileID, &drive.File{Trashed: true}).Do()
+	_, err = svc.Files.Update(fileID, &drive.File{Trashed: true}).SupportsAllDrives(true).Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to trash file: %w", err))
 	}
