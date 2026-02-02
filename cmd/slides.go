@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -112,6 +113,118 @@ var slidesReplaceTextCmd = &cobra.Command{
 	RunE:  runSlidesReplaceText,
 }
 
+var slidesDeleteObjectCmd = &cobra.Command{
+	Use:   "delete-object <presentation-id>",
+	Short: "Delete any page element",
+	Long:  "Deletes any page element (shape, image, table, etc.) from a presentation by object ID.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesDeleteObject,
+}
+
+var slidesDeleteTextCmd = &cobra.Command{
+	Use:   "delete-text <presentation-id>",
+	Short: "Clear text from a shape",
+	Long:  "Deletes text from a shape, optionally within a specific range.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesDeleteText,
+}
+
+var slidesUpdateTextStyleCmd = &cobra.Command{
+	Use:   "update-text-style <presentation-id>",
+	Short: "Change font formatting",
+	Long: `Updates text styling within a shape.
+
+Supports bold, italic, underline, font size, font family, and text color.
+Color should be specified as hex "#RRGGBB".`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesUpdateTextStyle,
+}
+
+var slidesUpdateTransformCmd = &cobra.Command{
+	Use:   "update-transform <presentation-id>",
+	Short: "Move or resize elements",
+	Long: `Updates the position, size, or rotation of a page element.
+
+Position and size are in points (PT). Rotation is in degrees.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesUpdateTransform,
+}
+
+var slidesCreateTableCmd = &cobra.Command{
+	Use:   "create-table <presentation-id>",
+	Short: "Add a table to a slide",
+	Long: `Creates a new table on a slide with specified rows and columns.
+
+Position and size are in points (PT).`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesCreateTable,
+}
+
+var slidesInsertTableRowsCmd = &cobra.Command{
+	Use:   "insert-table-rows <presentation-id>",
+	Short: "Add rows to a table",
+	Long:  "Inserts one or more rows into an existing table at a specified position.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesInsertTableRows,
+}
+
+var slidesDeleteTableRowCmd = &cobra.Command{
+	Use:   "delete-table-row <presentation-id>",
+	Short: "Remove row from table",
+	Long:  "Deletes a row from an existing table.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesDeleteTableRow,
+}
+
+var slidesUpdateTableCellCmd = &cobra.Command{
+	Use:   "update-table-cell <presentation-id>",
+	Short: "Format table cell",
+	Long: `Updates table cell properties like background color and padding.
+
+Color should be specified as hex "#RRGGBB". Padding is in points (PT).`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesUpdateTableCell,
+}
+
+var slidesUpdateTableBorderCmd = &cobra.Command{
+	Use:   "update-table-border <presentation-id>",
+	Short: "Style table borders",
+	Long: `Updates table border properties like color, width, and style.
+
+Color should be specified as hex "#RRGGBB". Width is in points (PT).
+Styles: solid, dashed, dotted.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesUpdateTableBorder,
+}
+
+var slidesUpdateParagraphStyleCmd = &cobra.Command{
+	Use:   "update-paragraph-style <presentation-id>",
+	Short: "Paragraph formatting",
+	Long: `Updates paragraph-level formatting within a shape.
+
+Supports alignment, line spacing, and paragraph spacing.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesUpdateParagraphStyle,
+}
+
+var slidesUpdateShapeCmd = &cobra.Command{
+	Use:   "update-shape <presentation-id>",
+	Short: "Modify shape properties",
+	Long: `Updates shape properties like fill color and outline.
+
+Colors should be specified as hex "#RRGGBB". Outline width is in points (PT).`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesUpdateShape,
+}
+
+var slidesReorderSlidesCmd = &cobra.Command{
+	Use:   "reorder-slides <presentation-id>",
+	Short: "Change slide order",
+	Long:  "Moves slides to a new position within the presentation.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesReorderSlides,
+}
+
 func init() {
 	rootCmd.AddCommand(slidesCmd)
 	slidesCmd.AddCommand(slidesInfoCmd)
@@ -125,6 +238,18 @@ func init() {
 	slidesCmd.AddCommand(slidesAddImageCmd)
 	slidesCmd.AddCommand(slidesAddTextCmd)
 	slidesCmd.AddCommand(slidesReplaceTextCmd)
+	slidesCmd.AddCommand(slidesDeleteObjectCmd)
+	slidesCmd.AddCommand(slidesDeleteTextCmd)
+	slidesCmd.AddCommand(slidesUpdateTextStyleCmd)
+	slidesCmd.AddCommand(slidesUpdateTransformCmd)
+	slidesCmd.AddCommand(slidesCreateTableCmd)
+	slidesCmd.AddCommand(slidesInsertTableRowsCmd)
+	slidesCmd.AddCommand(slidesDeleteTableRowCmd)
+	slidesCmd.AddCommand(slidesUpdateTableCellCmd)
+	slidesCmd.AddCommand(slidesUpdateTableBorderCmd)
+	slidesCmd.AddCommand(slidesUpdateParagraphStyleCmd)
+	slidesCmd.AddCommand(slidesUpdateShapeCmd)
+	slidesCmd.AddCommand(slidesReorderSlidesCmd)
 
 	// Create flags
 	slidesCreateCmd.Flags().String("title", "", "Presentation title (required)")
@@ -174,6 +299,113 @@ func init() {
 	slidesReplaceTextCmd.Flags().Bool("match-case", true, "Case-sensitive matching")
 	slidesReplaceTextCmd.MarkFlagRequired("find")
 	slidesReplaceTextCmd.MarkFlagRequired("replace")
+
+	// Delete-object flags
+	slidesDeleteObjectCmd.Flags().String("object-id", "", "Object ID to delete (required)")
+	slidesDeleteObjectCmd.MarkFlagRequired("object-id")
+
+	// Delete-text flags
+	slidesDeleteTextCmd.Flags().String("object-id", "", "Shape containing text (required)")
+	slidesDeleteTextCmd.Flags().Int("from", 0, "Start index (default 0)")
+	slidesDeleteTextCmd.Flags().Int("to", -1, "End index (if omitted, deletes to end)")
+	slidesDeleteTextCmd.MarkFlagRequired("object-id")
+
+	// Update-text-style flags
+	slidesUpdateTextStyleCmd.Flags().String("object-id", "", "Shape containing text (required)")
+	slidesUpdateTextStyleCmd.Flags().Int("from", 0, "Start index")
+	slidesUpdateTextStyleCmd.Flags().Int("to", -1, "End index (if omitted, applies to all text)")
+	slidesUpdateTextStyleCmd.Flags().Bool("bold", false, "Make text bold")
+	slidesUpdateTextStyleCmd.Flags().Bool("italic", false, "Make text italic")
+	slidesUpdateTextStyleCmd.Flags().Bool("underline", false, "Underline text")
+	slidesUpdateTextStyleCmd.Flags().Float64("font-size", 0, "Font size in points")
+	slidesUpdateTextStyleCmd.Flags().String("font-family", "", "Font family name")
+	slidesUpdateTextStyleCmd.Flags().String("color", "", "Text color as hex #RRGGBB")
+	slidesUpdateTextStyleCmd.MarkFlagRequired("object-id")
+
+	// Update-transform flags
+	slidesUpdateTransformCmd.Flags().String("object-id", "", "Element to transform (required)")
+	slidesUpdateTransformCmd.Flags().Float64("x", 0, "X position in points")
+	slidesUpdateTransformCmd.Flags().Float64("y", 0, "Y position in points")
+	slidesUpdateTransformCmd.Flags().Float64("width", 0, "Width in points")
+	slidesUpdateTransformCmd.Flags().Float64("height", 0, "Height in points")
+	slidesUpdateTransformCmd.Flags().Float64("scale-x", 1, "Scale factor X")
+	slidesUpdateTransformCmd.Flags().Float64("scale-y", 1, "Scale factor Y")
+	slidesUpdateTransformCmd.Flags().Float64("rotate", 0, "Rotation in degrees")
+	slidesUpdateTransformCmd.MarkFlagRequired("object-id")
+
+	// Create-table flags
+	slidesCreateTableCmd.Flags().String("slide-id", "", "Slide object ID")
+	slidesCreateTableCmd.Flags().Int("slide-number", 0, "Slide number (1-indexed)")
+	slidesCreateTableCmd.Flags().Int("rows", 0, "Number of rows (required)")
+	slidesCreateTableCmd.Flags().Int("cols", 0, "Number of columns (required)")
+	slidesCreateTableCmd.Flags().Float64("x", 100, "X position in points")
+	slidesCreateTableCmd.Flags().Float64("y", 100, "Y position in points")
+	slidesCreateTableCmd.Flags().Float64("width", 400, "Width in points")
+	slidesCreateTableCmd.Flags().Float64("height", 200, "Height in points")
+	slidesCreateTableCmd.MarkFlagRequired("rows")
+	slidesCreateTableCmd.MarkFlagRequired("cols")
+
+	// Insert-table-rows flags
+	slidesInsertTableRowsCmd.Flags().String("table-id", "", "Table object ID (required)")
+	slidesInsertTableRowsCmd.Flags().Int("at", 0, "Row index to insert at (required)")
+	slidesInsertTableRowsCmd.Flags().Int("count", 1, "Number of rows to insert")
+	slidesInsertTableRowsCmd.Flags().Bool("below", true, "Insert below the index")
+	slidesInsertTableRowsCmd.MarkFlagRequired("table-id")
+	slidesInsertTableRowsCmd.MarkFlagRequired("at")
+
+	// Delete-table-row flags
+	slidesDeleteTableRowCmd.Flags().String("table-id", "", "Table object ID (required)")
+	slidesDeleteTableRowCmd.Flags().Int("row", 0, "Row index to delete (required)")
+	slidesDeleteTableRowCmd.MarkFlagRequired("table-id")
+	slidesDeleteTableRowCmd.MarkFlagRequired("row")
+
+	// Update-table-cell flags
+	slidesUpdateTableCellCmd.Flags().String("table-id", "", "Table object ID (required)")
+	slidesUpdateTableCellCmd.Flags().Int("row", 0, "Row index (required)")
+	slidesUpdateTableCellCmd.Flags().Int("col", 0, "Column index (required)")
+	slidesUpdateTableCellCmd.Flags().String("background-color", "", "Background color as hex #RRGGBB")
+	slidesUpdateTableCellCmd.Flags().Float64("padding-top", 0, "Top padding in points")
+	slidesUpdateTableCellCmd.Flags().Float64("padding-bottom", 0, "Bottom padding in points")
+	slidesUpdateTableCellCmd.Flags().Float64("padding-left", 0, "Left padding in points")
+	slidesUpdateTableCellCmd.Flags().Float64("padding-right", 0, "Right padding in points")
+	slidesUpdateTableCellCmd.MarkFlagRequired("table-id")
+	slidesUpdateTableCellCmd.MarkFlagRequired("row")
+	slidesUpdateTableCellCmd.MarkFlagRequired("col")
+
+	// Update-table-border flags
+	slidesUpdateTableBorderCmd.Flags().String("table-id", "", "Table object ID (required)")
+	slidesUpdateTableBorderCmd.Flags().Int("row", 0, "Row index (required)")
+	slidesUpdateTableBorderCmd.Flags().Int("col", 0, "Column index (required)")
+	slidesUpdateTableBorderCmd.Flags().String("border", "all", "Border to style: top, bottom, left, right, all")
+	slidesUpdateTableBorderCmd.Flags().String("color", "", "Border color as hex #RRGGBB")
+	slidesUpdateTableBorderCmd.Flags().Float64("width", 1, "Border width in points")
+	slidesUpdateTableBorderCmd.Flags().String("style", "solid", "Border style: solid, dashed, dotted")
+	slidesUpdateTableBorderCmd.MarkFlagRequired("table-id")
+	slidesUpdateTableBorderCmd.MarkFlagRequired("row")
+	slidesUpdateTableBorderCmd.MarkFlagRequired("col")
+
+	// Update-paragraph-style flags
+	slidesUpdateParagraphStyleCmd.Flags().String("object-id", "", "Shape containing text (required)")
+	slidesUpdateParagraphStyleCmd.Flags().Int("from", 0, "Start index")
+	slidesUpdateParagraphStyleCmd.Flags().Int("to", -1, "End index (if omitted, applies to all text)")
+	slidesUpdateParagraphStyleCmd.Flags().String("alignment", "", "Text alignment: START, CENTER, END, JUSTIFIED")
+	slidesUpdateParagraphStyleCmd.Flags().Float64("line-spacing", 0, "Line spacing percentage (e.g., 100 for single, 200 for double)")
+	slidesUpdateParagraphStyleCmd.Flags().Float64("space-above", 0, "Space above paragraph in points")
+	slidesUpdateParagraphStyleCmd.Flags().Float64("space-below", 0, "Space below paragraph in points")
+	slidesUpdateParagraphStyleCmd.MarkFlagRequired("object-id")
+
+	// Update-shape flags
+	slidesUpdateShapeCmd.Flags().String("object-id", "", "Shape to update (required)")
+	slidesUpdateShapeCmd.Flags().String("background-color", "", "Fill color as hex #RRGGBB")
+	slidesUpdateShapeCmd.Flags().String("outline-color", "", "Outline color as hex #RRGGBB")
+	slidesUpdateShapeCmd.Flags().Float64("outline-width", 0, "Outline width in points")
+	slidesUpdateShapeCmd.MarkFlagRequired("object-id")
+
+	// Reorder-slides flags
+	slidesReorderSlidesCmd.Flags().String("slide-ids", "", "Comma-separated slide IDs to move (required)")
+	slidesReorderSlidesCmd.Flags().Int("to", 0, "Target position (0-indexed, required)")
+	slidesReorderSlidesCmd.MarkFlagRequired("slide-ids")
+	slidesReorderSlidesCmd.MarkFlagRequired("to")
 }
 
 func runSlidesInfo(cmd *cobra.Command, args []string) error {
@@ -1117,5 +1349,904 @@ func runSlidesReplaceText(cmd *cobra.Command, args []string) error {
 		"find":                findText,
 		"replace":             replaceText,
 		"occurrences_changed": occurrences,
+	})
+}
+
+// parseHexColor converts "#RRGGBB" to slides.RgbColor
+func parseHexColor(hex string) (*slides.RgbColor, error) {
+	if len(hex) != 7 || hex[0] != '#' {
+		return nil, fmt.Errorf("invalid hex color format: %s (expected #RRGGBB)", hex)
+	}
+
+	var r, g, b int64
+	_, err := fmt.Sscanf(hex, "#%02x%02x%02x", &r, &g, &b)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hex color: %s", hex)
+	}
+
+	return &slides.RgbColor{
+		Red:   float64(r) / 255.0,
+		Green: float64(g) / 255.0,
+		Blue:  float64(b) / 255.0,
+	}, nil
+}
+
+func runSlidesDeleteObject(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	objectID, _ := cmd.Flags().GetString("object-id")
+
+	requests := []*slides.Request{
+		{
+			DeleteObject: &slides.DeleteObjectRequest{
+				ObjectId: objectID,
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete object: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "deleted",
+		"presentation_id": presentationID,
+		"object_id":       objectID,
+	})
+}
+
+func runSlidesDeleteText(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	objectID, _ := cmd.Flags().GetString("object-id")
+	fromIndex, _ := cmd.Flags().GetInt("from")
+	toIndex, _ := cmd.Flags().GetInt("to")
+
+	startIdx := int64(fromIndex)
+	textRange := &slides.Range{
+		StartIndex: &startIdx,
+		Type:       "FIXED_RANGE",
+	}
+
+	// If toIndex is -1, delete to end (use ALL type)
+	if toIndex < 0 {
+		textRange.Type = "FROM_START_INDEX"
+	} else {
+		endIdx := int64(toIndex)
+		textRange.EndIndex = &endIdx
+	}
+
+	requests := []*slides.Request{
+		{
+			DeleteText: &slides.DeleteTextRequest{
+				ObjectId:  objectID,
+				TextRange: textRange,
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete text: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":          "deleted",
+		"presentation_id": presentationID,
+		"object_id":       objectID,
+		"from":            fromIndex,
+	}
+	if toIndex >= 0 {
+		result["to"] = toIndex
+	}
+
+	return p.Print(result)
+}
+
+func runSlidesUpdateTextStyle(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	objectID, _ := cmd.Flags().GetString("object-id")
+	fromIndex, _ := cmd.Flags().GetInt("from")
+	toIndex, _ := cmd.Flags().GetInt("to")
+	bold, _ := cmd.Flags().GetBool("bold")
+	italic, _ := cmd.Flags().GetBool("italic")
+	underline, _ := cmd.Flags().GetBool("underline")
+	fontSize, _ := cmd.Flags().GetFloat64("font-size")
+	fontFamily, _ := cmd.Flags().GetString("font-family")
+	colorHex, _ := cmd.Flags().GetString("color")
+
+	// Build text style and fields mask
+	style := &slides.TextStyle{}
+	var fields []string
+
+	if cmd.Flags().Changed("bold") {
+		style.Bold = bold
+		fields = append(fields, "bold")
+	}
+	if cmd.Flags().Changed("italic") {
+		style.Italic = italic
+		fields = append(fields, "italic")
+	}
+	if cmd.Flags().Changed("underline") {
+		style.Underline = underline
+		fields = append(fields, "underline")
+	}
+	if fontSize > 0 {
+		style.FontSize = &slides.Dimension{
+			Magnitude: fontSize,
+			Unit:      "PT",
+		}
+		fields = append(fields, "fontSize")
+	}
+	if fontFamily != "" {
+		style.FontFamily = fontFamily
+		fields = append(fields, "fontFamily")
+	}
+	if colorHex != "" {
+		color, err := parseHexColor(colorHex)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		style.ForegroundColor = &slides.OptionalColor{
+			OpaqueColor: &slides.OpaqueColor{
+				RgbColor: color,
+			},
+		}
+		fields = append(fields, "foregroundColor")
+	}
+
+	if len(fields) == 0 {
+		return p.PrintError(fmt.Errorf("no style changes specified"))
+	}
+
+	startIdx := int64(fromIndex)
+	textRange := &slides.Range{
+		StartIndex: &startIdx,
+		Type:       "FIXED_RANGE",
+	}
+	if toIndex < 0 {
+		textRange.Type = "ALL"
+	} else {
+		endIdx := int64(toIndex)
+		textRange.EndIndex = &endIdx
+	}
+
+	requests := []*slides.Request{
+		{
+			UpdateTextStyle: &slides.UpdateTextStyleRequest{
+				ObjectId:  objectID,
+				TextRange: textRange,
+				Style:     style,
+				Fields:    strings.Join(fields, ","),
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update text style: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "updated",
+		"presentation_id": presentationID,
+		"object_id":       objectID,
+		"fields_updated":  fields,
+	})
+}
+
+func runSlidesUpdateTransform(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	objectID, _ := cmd.Flags().GetString("object-id")
+	x, _ := cmd.Flags().GetFloat64("x")
+	y, _ := cmd.Flags().GetFloat64("y")
+	scaleX, _ := cmd.Flags().GetFloat64("scale-x")
+	scaleY, _ := cmd.Flags().GetFloat64("scale-y")
+	rotate, _ := cmd.Flags().GetFloat64("rotate")
+
+	// Convert rotation from degrees to radians
+	radians := rotate * math.Pi / 180.0
+	cosR := math.Cos(radians)
+	sinR := math.Sin(radians)
+
+	transform := &slides.AffineTransform{
+		ScaleX:     scaleX * cosR,
+		ScaleY:     scaleY * cosR,
+		ShearX:     -scaleX * sinR,
+		ShearY:     scaleY * sinR,
+		TranslateX: x,
+		TranslateY: y,
+		Unit:       "PT",
+	}
+
+	requests := []*slides.Request{
+		{
+			UpdatePageElementTransform: &slides.UpdatePageElementTransformRequest{
+				ObjectId:  objectID,
+				Transform: transform,
+				ApplyMode: "ABSOLUTE",
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update transform: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "updated",
+		"presentation_id": presentationID,
+		"object_id":       objectID,
+		"position":        map[string]float64{"x": x, "y": y},
+		"scale":           map[string]float64{"x": scaleX, "y": scaleY},
+		"rotation":        rotate,
+	})
+}
+
+func runSlidesCreateTable(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
+	rows, _ := cmd.Flags().GetInt("rows")
+	cols, _ := cmd.Flags().GetInt("cols")
+	x, _ := cmd.Flags().GetFloat64("x")
+	y, _ := cmd.Flags().GetFloat64("y")
+	width, _ := cmd.Flags().GetFloat64("width")
+	height, _ := cmd.Flags().GetFloat64("height")
+
+	slideID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*slides.Request{
+		{
+			CreateTable: &slides.CreateTableRequest{
+				Rows:    int64(rows),
+				Columns: int64(cols),
+				ElementProperties: &slides.PageElementProperties{
+					PageObjectId: slideID,
+					Size: &slides.Size{
+						Width:  &slides.Dimension{Magnitude: width, Unit: "PT"},
+						Height: &slides.Dimension{Magnitude: height, Unit: "PT"},
+					},
+					Transform: &slides.AffineTransform{
+						ScaleX:     1,
+						ScaleY:     1,
+						TranslateX: x,
+						TranslateY: y,
+						Unit:       "PT",
+					},
+				},
+			},
+		},
+	}
+
+	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create table: %w", err))
+	}
+
+	var tableID string
+	if len(resp.Replies) > 0 && resp.Replies[0].CreateTable != nil {
+		tableID = resp.Replies[0].CreateTable.ObjectId
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "created",
+		"presentation_id": presentationID,
+		"slide_id":        slideID,
+		"table_id":        tableID,
+		"rows":            rows,
+		"cols":            cols,
+		"position":        map[string]float64{"x": x, "y": y},
+		"size":            map[string]float64{"width": width, "height": height},
+	})
+}
+
+func runSlidesInsertTableRows(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	tableID, _ := cmd.Flags().GetString("table-id")
+	atIndex, _ := cmd.Flags().GetInt("at")
+	count, _ := cmd.Flags().GetInt("count")
+	below, _ := cmd.Flags().GetBool("below")
+
+	requests := []*slides.Request{
+		{
+			InsertTableRows: &slides.InsertTableRowsRequest{
+				TableObjectId: tableID,
+				CellLocation: &slides.TableCellLocation{
+					RowIndex: int64(atIndex),
+				},
+				InsertBelow: below,
+				Number:      int64(count),
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to insert table rows: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "inserted",
+		"presentation_id": presentationID,
+		"table_id":        tableID,
+		"at_row":          atIndex,
+		"count":           count,
+		"below":           below,
+	})
+}
+
+func runSlidesDeleteTableRow(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	tableID, _ := cmd.Flags().GetString("table-id")
+	rowIndex, _ := cmd.Flags().GetInt("row")
+
+	requests := []*slides.Request{
+		{
+			DeleteTableRow: &slides.DeleteTableRowRequest{
+				TableObjectId: tableID,
+				CellLocation: &slides.TableCellLocation{
+					RowIndex: int64(rowIndex),
+				},
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete table row: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "deleted",
+		"presentation_id": presentationID,
+		"table_id":        tableID,
+		"row":             rowIndex,
+	})
+}
+
+func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	tableID, _ := cmd.Flags().GetString("table-id")
+	rowIndex, _ := cmd.Flags().GetInt("row")
+	colIndex, _ := cmd.Flags().GetInt("col")
+	bgColor, _ := cmd.Flags().GetString("background-color")
+	paddingTop, _ := cmd.Flags().GetFloat64("padding-top")
+	paddingBottom, _ := cmd.Flags().GetFloat64("padding-bottom")
+	paddingLeft, _ := cmd.Flags().GetFloat64("padding-left")
+	paddingRight, _ := cmd.Flags().GetFloat64("padding-right")
+
+	cellProps := &slides.TableCellProperties{}
+	var fields []string
+
+	if bgColor != "" {
+		color, err := parseHexColor(bgColor)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		cellProps.TableCellBackgroundFill = &slides.TableCellBackgroundFill{
+			SolidFill: &slides.SolidFill{
+				Color: &slides.OpaqueColor{
+					RgbColor: color,
+				},
+			},
+		}
+		fields = append(fields, "tableCellBackgroundFill")
+	}
+
+	if paddingTop > 0 {
+		cellProps.ContentAlignment = "TOP"
+		fields = append(fields, "contentAlignment")
+	}
+
+	// Note: Google Slides API doesn't have direct padding properties for table cells
+	// The ContentAlignment is the closest available property
+	_ = paddingBottom
+	_ = paddingLeft
+	_ = paddingRight
+
+	if len(fields) == 0 {
+		return p.PrintError(fmt.Errorf("no cell properties specified"))
+	}
+
+	requests := []*slides.Request{
+		{
+			UpdateTableCellProperties: &slides.UpdateTableCellPropertiesRequest{
+				ObjectId: tableID,
+				TableRange: &slides.TableRange{
+					Location: &slides.TableCellLocation{
+						RowIndex:    int64(rowIndex),
+						ColumnIndex: int64(colIndex),
+					},
+					RowSpan:    1,
+					ColumnSpan: 1,
+				},
+				TableCellProperties: cellProps,
+				Fields:              strings.Join(fields, ","),
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update table cell: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "updated",
+		"presentation_id": presentationID,
+		"table_id":        tableID,
+		"row":             rowIndex,
+		"col":             colIndex,
+		"fields_updated":  fields,
+	})
+}
+
+func runSlidesUpdateTableBorder(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	tableID, _ := cmd.Flags().GetString("table-id")
+	rowIndex, _ := cmd.Flags().GetInt("row")
+	colIndex, _ := cmd.Flags().GetInt("col")
+	border, _ := cmd.Flags().GetString("border")
+	colorHex, _ := cmd.Flags().GetString("color")
+	width, _ := cmd.Flags().GetFloat64("width")
+	style, _ := cmd.Flags().GetString("style")
+
+	// Build border properties
+	borderProps := &slides.TableBorderProperties{
+		Weight: &slides.Dimension{
+			Magnitude: width,
+			Unit:      "PT",
+		},
+	}
+
+	var fields []string
+	fields = append(fields, "weight")
+
+	if colorHex != "" {
+		color, err := parseHexColor(colorHex)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		borderProps.TableBorderFill = &slides.TableBorderFill{
+			SolidFill: &slides.SolidFill{
+				Color: &slides.OpaqueColor{
+					RgbColor: color,
+				},
+			},
+		}
+		fields = append(fields, "tableBorderFill")
+	}
+
+	// Map style to dash style
+	dashStyle := "SOLID"
+	switch style {
+	case "dashed":
+		dashStyle = "DASH"
+	case "dotted":
+		dashStyle = "DOT"
+	}
+	borderProps.DashStyle = dashStyle
+	fields = append(fields, "dashStyle")
+
+	// Determine which borders to update
+	borders := []string{}
+	switch border {
+	case "all":
+		borders = []string{"INNER_HORIZONTAL", "INNER_VERTICAL", "TOP", "BOTTOM", "LEFT", "RIGHT"}
+	case "top":
+		borders = []string{"TOP"}
+	case "bottom":
+		borders = []string{"BOTTOM"}
+	case "left":
+		borders = []string{"LEFT"}
+	case "right":
+		borders = []string{"RIGHT"}
+	default:
+		return p.PrintError(fmt.Errorf("invalid border: %s (use top, bottom, left, right, or all)", border))
+	}
+
+	requests := make([]*slides.Request, 0, len(borders))
+	for _, borderPos := range borders {
+		requests = append(requests, &slides.Request{
+			UpdateTableBorderProperties: &slides.UpdateTableBorderPropertiesRequest{
+				ObjectId: tableID,
+				TableRange: &slides.TableRange{
+					Location: &slides.TableCellLocation{
+						RowIndex:    int64(rowIndex),
+						ColumnIndex: int64(colIndex),
+					},
+					RowSpan:    1,
+					ColumnSpan: 1,
+				},
+				BorderPosition:        borderPos,
+				TableBorderProperties: borderProps,
+				Fields:                strings.Join(fields, ","),
+			},
+		})
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update table border: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "updated",
+		"presentation_id": presentationID,
+		"table_id":        tableID,
+		"row":             rowIndex,
+		"col":             colIndex,
+		"border":          border,
+		"style":           style,
+		"width":           width,
+	})
+}
+
+func runSlidesUpdateParagraphStyle(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	objectID, _ := cmd.Flags().GetString("object-id")
+	fromIndex, _ := cmd.Flags().GetInt("from")
+	toIndex, _ := cmd.Flags().GetInt("to")
+	alignment, _ := cmd.Flags().GetString("alignment")
+	lineSpacing, _ := cmd.Flags().GetFloat64("line-spacing")
+	spaceAbove, _ := cmd.Flags().GetFloat64("space-above")
+	spaceBelow, _ := cmd.Flags().GetFloat64("space-below")
+
+	paragraphStyle := &slides.ParagraphStyle{}
+	var fields []string
+
+	if alignment != "" {
+		paragraphStyle.Alignment = alignment
+		fields = append(fields, "alignment")
+	}
+	if lineSpacing > 0 {
+		paragraphStyle.LineSpacing = lineSpacing
+		fields = append(fields, "lineSpacing")
+	}
+	if spaceAbove > 0 {
+		paragraphStyle.SpaceAbove = &slides.Dimension{
+			Magnitude: spaceAbove,
+			Unit:      "PT",
+		}
+		fields = append(fields, "spaceAbove")
+	}
+	if spaceBelow > 0 {
+		paragraphStyle.SpaceBelow = &slides.Dimension{
+			Magnitude: spaceBelow,
+			Unit:      "PT",
+		}
+		fields = append(fields, "spaceBelow")
+	}
+
+	if len(fields) == 0 {
+		return p.PrintError(fmt.Errorf("no paragraph style changes specified"))
+	}
+
+	startIdx := int64(fromIndex)
+	textRange := &slides.Range{
+		StartIndex: &startIdx,
+		Type:       "FIXED_RANGE",
+	}
+	if toIndex < 0 {
+		textRange.Type = "ALL"
+	} else {
+		endIdx := int64(toIndex)
+		textRange.EndIndex = &endIdx
+	}
+
+	requests := []*slides.Request{
+		{
+			UpdateParagraphStyle: &slides.UpdateParagraphStyleRequest{
+				ObjectId:  objectID,
+				TextRange: textRange,
+				Style:     paragraphStyle,
+				Fields:    strings.Join(fields, ","),
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update paragraph style: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "updated",
+		"presentation_id": presentationID,
+		"object_id":       objectID,
+		"fields_updated":  fields,
+	})
+}
+
+func runSlidesUpdateShape(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	objectID, _ := cmd.Flags().GetString("object-id")
+	bgColor, _ := cmd.Flags().GetString("background-color")
+	outlineColor, _ := cmd.Flags().GetString("outline-color")
+	outlineWidth, _ := cmd.Flags().GetFloat64("outline-width")
+
+	shapeProps := &slides.ShapeProperties{}
+	var fields []string
+
+	if bgColor != "" {
+		color, err := parseHexColor(bgColor)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		shapeProps.ShapeBackgroundFill = &slides.ShapeBackgroundFill{
+			SolidFill: &slides.SolidFill{
+				Color: &slides.OpaqueColor{
+					RgbColor: color,
+				},
+			},
+		}
+		fields = append(fields, "shapeBackgroundFill")
+	}
+
+	if outlineColor != "" || outlineWidth > 0 {
+		outline := &slides.Outline{}
+		if outlineColor != "" {
+			color, err := parseHexColor(outlineColor)
+			if err != nil {
+				return p.PrintError(err)
+			}
+			outline.OutlineFill = &slides.OutlineFill{
+				SolidFill: &slides.SolidFill{
+					Color: &slides.OpaqueColor{
+						RgbColor: color,
+					},
+				},
+			}
+		}
+		if outlineWidth > 0 {
+			outline.Weight = &slides.Dimension{
+				Magnitude: outlineWidth,
+				Unit:      "PT",
+			}
+		}
+		shapeProps.Outline = outline
+		fields = append(fields, "outline")
+	}
+
+	if len(fields) == 0 {
+		return p.PrintError(fmt.Errorf("no shape properties specified"))
+	}
+
+	requests := []*slides.Request{
+		{
+			UpdateShapeProperties: &slides.UpdateShapePropertiesRequest{
+				ObjectId:        objectID,
+				ShapeProperties: shapeProps,
+				Fields:          strings.Join(fields, ","),
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update shape: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "updated",
+		"presentation_id": presentationID,
+		"object_id":       objectID,
+		"fields_updated":  fields,
+	})
+}
+
+func runSlidesReorderSlides(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	slideIDsStr, _ := cmd.Flags().GetString("slide-ids")
+	toPosition, _ := cmd.Flags().GetInt("to")
+
+	slideIDs := strings.Split(slideIDsStr, ",")
+	for i, id := range slideIDs {
+		slideIDs[i] = strings.TrimSpace(id)
+	}
+
+	requests := []*slides.Request{
+		{
+			UpdateSlidesPosition: &slides.UpdateSlidesPositionRequest{
+				SlideObjectIds: slideIDs,
+				InsertionIndex: int64(toPosition),
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to reorder slides: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "reordered",
+		"presentation_id": presentationID,
+		"slide_ids":       slideIDs,
+		"new_position":    toPosition,
 	})
 }

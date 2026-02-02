@@ -208,3 +208,226 @@ Usage: gws slides replace-text <presentation-id> [flags]
 | `--match-case` | bool | true | No | Case-sensitive matching |
 
 Operates across every slide in the presentation — useful for template variable substitution (e.g., replace `{{name}}` with a value).
+
+---
+
+## gws slides delete-object
+
+Deletes any page element (shape, image, table, etc.) from a presentation.
+
+```
+Usage: gws slides delete-object <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--object-id` | string | | Yes | Object ID to delete |
+
+Get object IDs from `gws slides list <id>` output.
+
+---
+
+## gws slides delete-text
+
+Clears text from a shape, optionally within a specific range.
+
+```
+Usage: gws slides delete-text <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--object-id` | string | | Yes | Shape containing text |
+| `--from` | int | 0 | No | Start index |
+| `--to` | int | | No | End index (if omitted, deletes to end) |
+
+---
+
+## gws slides update-text-style
+
+Updates text styling within a shape (bold, italic, font, color).
+
+```
+Usage: gws slides update-text-style <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--object-id` | string | | Yes | Shape containing text |
+| `--from` | int | 0 | No | Start index |
+| `--to` | int | | No | End index (if omitted, applies to all) |
+| `--bold` | bool | false | No | Make text bold |
+| `--italic` | bool | false | No | Make text italic |
+| `--underline` | bool | false | No | Underline text |
+| `--font-size` | float | | No | Font size in points |
+| `--font-family` | string | | No | Font family name |
+| `--color` | string | | No | Text color as hex `#RRGGBB` |
+
+---
+
+## gws slides update-transform
+
+Updates the position, size, or rotation of a page element.
+
+```
+Usage: gws slides update-transform <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--object-id` | string | | Yes | Element to transform |
+| `--x` | float | 0 | No | X position in points |
+| `--y` | float | 0 | No | Y position in points |
+| `--width` | float | 0 | No | Width in points |
+| `--height` | float | 0 | No | Height in points |
+| `--scale-x` | float | 1 | No | Scale factor X |
+| `--scale-y` | float | 1 | No | Scale factor Y |
+| `--rotate` | float | 0 | No | Rotation in degrees |
+
+---
+
+## gws slides create-table
+
+Creates a new table on a slide.
+
+```
+Usage: gws slides create-table <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--slide-number` | int | | | Slide number (1-indexed) |
+| `--slide-id` | string | | | Slide object ID |
+| `--rows` | int | | Yes | Number of rows |
+| `--cols` | int | | Yes | Number of columns |
+| `--x` | float | 100 | No | X position in points |
+| `--y` | float | 100 | No | Y position in points |
+| `--width` | float | 400 | No | Width in points |
+| `--height` | float | 200 | No | Height in points |
+
+One of `--slide-number` or `--slide-id` is required.
+
+---
+
+## gws slides insert-table-rows
+
+Inserts rows into an existing table.
+
+```
+Usage: gws slides insert-table-rows <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--table-id` | string | | Yes | Table object ID |
+| `--at` | int | | Yes | Row index to insert at |
+| `--count` | int | 1 | No | Number of rows to insert |
+| `--below` | bool | true | No | Insert below the index |
+
+---
+
+## gws slides delete-table-row
+
+Removes a row from a table.
+
+```
+Usage: gws slides delete-table-row <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--table-id` | string | | Yes | Table object ID |
+| `--row` | int | | Yes | Row index to delete |
+
+---
+
+## gws slides update-table-cell
+
+Updates table cell properties (background color, alignment).
+
+```
+Usage: gws slides update-table-cell <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--table-id` | string | | Yes | Table object ID |
+| `--row` | int | | Yes | Row index |
+| `--col` | int | | Yes | Column index |
+| `--background-color` | string | | No | Background color as hex `#RRGGBB` |
+| `--padding-top` | float | 0 | No | Top padding in points |
+| `--padding-bottom` | float | 0 | No | Bottom padding in points |
+| `--padding-left` | float | 0 | No | Left padding in points |
+| `--padding-right` | float | 0 | No | Right padding in points |
+
+---
+
+## gws slides update-table-border
+
+Styles table cell borders.
+
+```
+Usage: gws slides update-table-border <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--table-id` | string | | Yes | Table object ID |
+| `--row` | int | | Yes | Row index |
+| `--col` | int | | Yes | Column index |
+| `--border` | string | all | No | Border to style: `top`, `bottom`, `left`, `right`, `all` |
+| `--color` | string | | No | Border color as hex `#RRGGBB` |
+| `--width` | float | 1 | No | Border width in points |
+| `--style` | string | solid | No | Border style: `solid`, `dashed`, `dotted` |
+
+---
+
+## gws slides update-paragraph-style
+
+Updates paragraph-level formatting (alignment, spacing).
+
+```
+Usage: gws slides update-paragraph-style <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--object-id` | string | | Yes | Shape containing text |
+| `--from` | int | 0 | No | Start index |
+| `--to` | int | | No | End index (if omitted, applies to all) |
+| `--alignment` | string | | No | Text alignment: `START`, `CENTER`, `END`, `JUSTIFIED` |
+| `--line-spacing` | float | | No | Line spacing percentage (100 = single) |
+| `--space-above` | float | | No | Space above paragraph in points |
+| `--space-below` | float | | No | Space below paragraph in points |
+
+---
+
+## gws slides update-shape
+
+Modifies shape properties (fill color, outline).
+
+```
+Usage: gws slides update-shape <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--object-id` | string | | Yes | Shape to update |
+| `--background-color` | string | | No | Fill color as hex `#RRGGBB` |
+| `--outline-color` | string | | No | Outline color as hex `#RRGGBB` |
+| `--outline-width` | float | 0 | No | Outline width in points |
+
+---
+
+## gws slides reorder-slides
+
+Moves slides to a new position within the presentation.
+
+```
+Usage: gws slides reorder-slides <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--slide-ids` | string | | Yes | Comma-separated slide IDs to move |
+| `--to` | int | | Yes | Target position (0-indexed) |

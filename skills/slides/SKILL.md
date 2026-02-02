@@ -1,6 +1,6 @@
 ---
 name: gws-slides
-version: 1.0.0
+version: 1.1.0
 description: "Google Slides CLI operations via gws. Use when users need to create, read, or edit Google Slides presentations. Triggers: slides, presentation, google slides, deck."
 metadata:
   short-description: Google Slides CLI operations
@@ -45,6 +45,18 @@ For initial setup, see the `gws-auth` skill.
 | Add an image | `gws slides add-image <id> --slide-number 1 --url "https://..."` |
 | Add text to object | `gws slides add-text <id> --object-id <obj-id> --text "Hello"` |
 | Find and replace | `gws slides replace-text <id> --find "old" --replace "new"` |
+| Delete any element | `gws slides delete-object <id> --object-id <obj-id>` |
+| Clear text from shape | `gws slides delete-text <id> --object-id <obj-id>` |
+| Style text | `gws slides update-text-style <id> --object-id <obj-id> --bold --color "#FF0000"` |
+| Move/resize element | `gws slides update-transform <id> --object-id <obj-id> --x 200 --y 100` |
+| Create a table | `gws slides create-table <id> --slide-number 1 --rows 3 --cols 4` |
+| Insert table rows | `gws slides insert-table-rows <id> --table-id <tbl-id> --at 1 --count 2` |
+| Delete table row | `gws slides delete-table-row <id> --table-id <tbl-id> --row 2` |
+| Style table cell | `gws slides update-table-cell <id> --table-id <tbl-id> --row 0 --col 0 --background-color "#FFFF00"` |
+| Style table border | `gws slides update-table-border <id> --table-id <tbl-id> --row 0 --col 0 --color "#000000"` |
+| Paragraph style | `gws slides update-paragraph-style <id> --object-id <obj-id> --alignment CENTER` |
+| Shape properties | `gws slides update-shape <id> --object-id <obj-id> --background-color "#0000FF"` |
+| Reorder slides | `gws slides reorder-slides <id> --slide-ids "slide1,slide2" --to 0` |
 
 ## Detailed Usage
 
@@ -165,6 +177,142 @@ gws slides replace-text <presentation-id> --find <text> --replace <text> [flags]
 - `--match-case` — Case-sensitive matching (default: true)
 
 Replaces across ALL slides in the presentation.
+
+### delete-object — Delete any page element
+
+```bash
+gws slides delete-object <presentation-id> --object-id <id>
+```
+
+Deletes shapes, images, tables, or any page element by object ID.
+
+### delete-text — Clear text from shape
+
+```bash
+gws slides delete-text <presentation-id> --object-id <id> [flags]
+```
+
+**Flags:**
+- `--object-id string` — Shape containing text (required)
+- `--from int` — Start index (default: 0)
+- `--to int` — End index (if omitted, deletes to end)
+
+### update-text-style — Style text formatting
+
+```bash
+gws slides update-text-style <presentation-id> --object-id <id> [flags]
+```
+
+**Flags:**
+- `--object-id string` — Shape containing text (required)
+- `--from int` / `--to int` — Text range (optional)
+- `--bold` / `--italic` / `--underline` — Boolean styles
+- `--font-size float` — Size in points
+- `--font-family string` — Font name
+- `--color string` — Hex color `#RRGGBB`
+
+### update-transform — Move or resize elements
+
+```bash
+gws slides update-transform <presentation-id> --object-id <id> [flags]
+```
+
+**Flags:**
+- `--object-id string` — Element to transform (required)
+- `--x` / `--y float` — Position in points
+- `--width` / `--height float` — Size in points
+- `--scale-x` / `--scale-y float` — Scale factors
+- `--rotate float` — Rotation in degrees
+
+### create-table — Add a table
+
+```bash
+gws slides create-table <presentation-id> --rows <n> --cols <n> [flags]
+```
+
+**Flags:**
+- `--slide-number int` or `--slide-id string` — Target slide
+- `--rows int` — Number of rows (required)
+- `--cols int` — Number of columns (required)
+- `--x` / `--y` / `--width` / `--height float` — Position and size
+
+### insert-table-rows — Insert rows into table
+
+```bash
+gws slides insert-table-rows <presentation-id> --table-id <id> --at <row> [flags]
+```
+
+**Flags:**
+- `--table-id string` — Table object ID (required)
+- `--at int` — Row index to insert at (required)
+- `--count int` — Number of rows (default: 1)
+- `--below` — Insert below the index (default: true)
+
+### delete-table-row — Remove row from table
+
+```bash
+gws slides delete-table-row <presentation-id> --table-id <id> --row <index>
+```
+
+### update-table-cell — Style table cell
+
+```bash
+gws slides update-table-cell <presentation-id> --table-id <id> --row <r> --col <c> [flags]
+```
+
+**Flags:**
+- `--table-id string` — Table object ID (required)
+- `--row int` / `--col int` — Cell location (required)
+- `--background-color string` — Hex color `#RRGGBB`
+
+### update-table-border — Style table borders
+
+```bash
+gws slides update-table-border <presentation-id> --table-id <id> --row <r> --col <c> [flags]
+```
+
+**Flags:**
+- `--table-id string` — Table object ID (required)
+- `--row int` / `--col int` — Cell location (required)
+- `--border string` — `top`, `bottom`, `left`, `right`, or `all`
+- `--color string` — Hex color `#RRGGBB`
+- `--width float` — Border width in points
+- `--style string` — `solid`, `dashed`, or `dotted`
+
+### update-paragraph-style — Paragraph formatting
+
+```bash
+gws slides update-paragraph-style <presentation-id> --object-id <id> [flags]
+```
+
+**Flags:**
+- `--object-id string` — Shape containing text (required)
+- `--from int` / `--to int` — Text range (optional)
+- `--alignment string` — `START`, `CENTER`, `END`, `JUSTIFIED`
+- `--line-spacing float` — Line spacing percentage (100 = single)
+- `--space-above` / `--space-below float` — Paragraph spacing in points
+
+### update-shape — Shape properties
+
+```bash
+gws slides update-shape <presentation-id> --object-id <id> [flags]
+```
+
+**Flags:**
+- `--object-id string` — Shape to update (required)
+- `--background-color string` — Fill color `#RRGGBB`
+- `--outline-color string` — Outline color `#RRGGBB`
+- `--outline-width float` — Outline width in points
+
+### reorder-slides — Change slide order
+
+```bash
+gws slides reorder-slides <presentation-id> --slide-ids <ids> --to <position>
+```
+
+**Flags:**
+- `--slide-ids string` — Comma-separated slide IDs to move (required)
+- `--to int` — Target position, 0-indexed (required)
 
 ## Output Modes
 

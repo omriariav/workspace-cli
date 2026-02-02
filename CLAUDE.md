@@ -24,7 +24,7 @@
 | `drive` | list, search, info, download, upload, create-folder, move, delete, comments |
 | `docs` | read, info, create, append, insert, replace, delete, add-table |
 | `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace |
-| `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text |
+| `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides |
 | `chat` | list, messages, send (needs Chat App config) |
 | `forms` | info, responses |
 | `search` | web search (needs API key) |
@@ -45,14 +45,13 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.6.0** - Shared Drive support, Calendar RSVP messages, Tasks due date fix. All Drive operations now support Shared Drives (Team Drives) via `SupportsAllDrives`; `calendar rsvp` gains `--message` flag; `tasks create` normalizes YYYY-MM-DD dates to RFC3339.
+**v1.7.0** - Full Slides API editing operations. Adds 12 new Slides commands: delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides. Enables complete programmatic control over presentation elements including tables, text styling, transforms, and slide ordering.
 
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for planned features including:
 - Sheets: formatting, charts, named ranges, filters, conditional formatting
 - Docs: text formatting, lists
-- Slides: delete-object, update-shape, reorder
 - Gmail/Calendar/Tasks: additional operations
 - `/morning` command for daily briefings
 
