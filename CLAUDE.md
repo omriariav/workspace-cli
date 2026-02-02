@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.5.0** - Gmail reply & event-id, Drive comments direct links. New `gmail reply`, `gmail event-id` commands; `gmail send` gains `--thread-id`/`--reply-to-message-id` flags; `drive comments` now includes `direct_link` per comment.
+**v1.6.0** - Shared Drive support, Calendar RSVP messages, Tasks due date fix. All Drive operations now support Shared Drives (Team Drives) via `SupportsAllDrives`; `calendar rsvp` gains `--message` flag; `tasks create` normalizes YYYY-MM-DD dates to RFC3339.
 
 ## Roadmap
 
