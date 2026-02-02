@@ -4,12 +4,27 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/tasks/v1"
 )
+
+// normalizeDueDate converts YYYY-MM-DD to RFC3339 format required by Google Tasks API.
+// If already RFC3339, returns as-is.
+func normalizeDueDate(due string) (string, error) {
+	if matched, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, due); matched {
+		t, err := time.Parse("2006-01-02", due)
+		if err != nil {
+			return "", fmt.Errorf("invalid date %q: %w", due, err)
+		}
+		return t.UTC().Format(time.RFC3339), nil
+	}
+	return due, nil
+}
 
 var tasksCmd = &cobra.Command{
 	Use:   "tasks",
@@ -198,6 +213,10 @@ func runTasksCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	if due != "" {
+		due, err = normalizeDueDate(due)
+		if err != nil {
+			return p.PrintError(err)
+		}
 		task.Due = due
 	}
 
@@ -257,6 +276,10 @@ func runTasksUpdate(cmd *cobra.Command, args []string) error {
 	}
 	if dueChanged {
 		due, _ := cmd.Flags().GetString("due")
+		due, err = normalizeDueDate(due)
+		if err != nil {
+			return p.PrintError(err)
+		}
 		task.Due = due
 	}
 
