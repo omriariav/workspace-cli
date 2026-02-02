@@ -3,7 +3,7 @@ PKG := ./cmd/gws
 BUILD_DIR := ./bin
 
 # Version info
-VERSION ?= 1.6.0
+VERSION ?= 1.7.0
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS := -ldflags "-X github.com/omriariav/workspace-cli/cmd.Version=$(VERSION) \

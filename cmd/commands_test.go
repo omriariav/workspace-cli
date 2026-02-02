@@ -344,6 +344,22 @@ func TestSlidesCommands(t *testing.T) {
 		{"add-slide"},
 		{"delete-slide"},
 		{"duplicate-slide"},
+		{"add-shape"},
+		{"add-image"},
+		{"add-text"},
+		{"replace-text"},
+		{"delete-object"},
+		{"delete-text"},
+		{"update-text-style"},
+		{"update-transform"},
+		{"create-table"},
+		{"insert-table-rows"},
+		{"delete-table-row"},
+		{"update-table-cell"},
+		{"update-table-border"},
+		{"update-paragraph-style"},
+		{"update-shape"},
+		{"reorder-slides"},
 	}
 
 	for _, tt := range tests {

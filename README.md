@@ -191,6 +191,18 @@ Add `--format text` to any command for human-readable output.
 | `gws slides add-image <id>` | Add image (`--slide-id/--slide-number`, `--url`, `--x`, `--y`, `--width`) |
 | `gws slides add-text <id>` | Insert text into object (`--object-id`, `--text`, `--at`) |
 | `gws slides replace-text <id>` | Find and replace text (`--find`, `--replace`, `--match-case`) |
+| `gws slides delete-object <id>` | Delete any page element (`--object-id`) |
+| `gws slides delete-text <id>` | Clear text from shape (`--object-id`, `--from`, `--to`) |
+| `gws slides update-text-style <id>` | Style text (`--object-id`, `--bold`, `--italic`, `--font-size`, `--color`) |
+| `gws slides update-transform <id>` | Move/scale/rotate element (`--object-id`, `--x`, `--y`, `--scale-x`, `--rotate`) |
+| `gws slides create-table <id>` | Add table (`--slide-id/--slide-number`, `--rows`, `--cols`) |
+| `gws slides insert-table-rows <id>` | Insert rows (`--table-id`, `--at`, `--count`) |
+| `gws slides delete-table-row <id>` | Delete row (`--table-id`, `--row`) |
+| `gws slides update-table-cell <id>` | Style cell (`--table-id`, `--row`, `--col`, `--background-color`) |
+| `gws slides update-table-border <id>` | Style border (`--table-id`, `--row`, `--col`, `--border`, `--color`) |
+| `gws slides update-paragraph-style <id>` | Paragraph style (`--object-id`, `--alignment`, `--line-spacing`) |
+| `gws slides update-shape <id>` | Shape properties (`--object-id`, `--background-color`, `--outline-color`) |
+| `gws slides reorder-slides <id>` | Reorder slides (`--slide-ids`, `--to`) |
 
 ### Chat
 
