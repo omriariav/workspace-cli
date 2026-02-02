@@ -267,7 +267,7 @@ Usage: gws slides update-text-style <presentation-id> [flags]
 
 ## gws slides update-transform
 
-Updates the position, size, or rotation of a page element.
+Updates the position, scale, or rotation of a page element.
 
 ```
 Usage: gws slides update-transform <presentation-id> [flags]
@@ -278,8 +278,6 @@ Usage: gws slides update-transform <presentation-id> [flags]
 | `--object-id` | string | | Yes | Element to transform |
 | `--x` | float | 0 | No | X position in points |
 | `--y` | float | 0 | No | Y position in points |
-| `--width` | float | 0 | No | Width in points |
-| `--height` | float | 0 | No | Height in points |
 | `--scale-x` | float | 1 | No | Scale factor X |
 | `--scale-y` | float | 1 | No | Scale factor Y |
 | `--rotate` | float | 0 | No | Rotation in degrees |
@@ -343,7 +341,7 @@ Usage: gws slides delete-table-row <presentation-id> [flags]
 
 ## gws slides update-table-cell
 
-Updates table cell properties (background color, alignment).
+Updates table cell background color.
 
 ```
 Usage: gws slides update-table-cell <presentation-id> [flags]
@@ -354,11 +352,7 @@ Usage: gws slides update-table-cell <presentation-id> [flags]
 | `--table-id` | string | | Yes | Table object ID |
 | `--row` | int | | Yes | Row index |
 | `--col` | int | | Yes | Column index |
-| `--background-color` | string | | No | Background color as hex `#RRGGBB` |
-| `--padding-top` | float | 0 | No | Top padding in points |
-| `--padding-bottom` | float | 0 | No | Bottom padding in points |
-| `--padding-left` | float | 0 | No | Left padding in points |
-| `--padding-right` | float | 0 | No | Right padding in points |
+| `--background-color` | string | | Yes | Background color as hex `#RRGGBB` |
 
 ---
 

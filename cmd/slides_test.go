@@ -1075,7 +1075,7 @@ func TestSlidesUpdateTransformCommand_Flags(t *testing.T) {
 		t.Fatal("slides update-transform command not found")
 	}
 
-	expectedFlags := []string{"object-id", "x", "y", "width", "height", "scale-x", "scale-y", "rotate"}
+	expectedFlags := []string{"object-id", "x", "y", "scale-x", "scale-y", "rotate"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)
@@ -1135,7 +1135,7 @@ func TestSlidesUpdateTableCellCommand_Flags(t *testing.T) {
 		t.Fatal("slides update-table-cell command not found")
 	}
 
-	expectedFlags := []string{"table-id", "row", "col", "background-color", "padding-top", "padding-bottom", "padding-left", "padding-right"}
+	expectedFlags := []string{"table-id", "row", "col", "background-color"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)

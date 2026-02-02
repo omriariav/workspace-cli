@@ -326,8 +326,6 @@ func init() {
 	slidesUpdateTransformCmd.Flags().String("object-id", "", "Element to transform (required)")
 	slidesUpdateTransformCmd.Flags().Float64("x", 0, "X position in points")
 	slidesUpdateTransformCmd.Flags().Float64("y", 0, "Y position in points")
-	slidesUpdateTransformCmd.Flags().Float64("width", 0, "Width in points")
-	slidesUpdateTransformCmd.Flags().Float64("height", 0, "Height in points")
 	slidesUpdateTransformCmd.Flags().Float64("scale-x", 1, "Scale factor X")
 	slidesUpdateTransformCmd.Flags().Float64("scale-y", 1, "Scale factor Y")
 	slidesUpdateTransformCmd.Flags().Float64("rotate", 0, "Rotation in degrees")
@@ -364,10 +362,6 @@ func init() {
 	slidesUpdateTableCellCmd.Flags().Int("row", 0, "Row index (required)")
 	slidesUpdateTableCellCmd.Flags().Int("col", 0, "Column index (required)")
 	slidesUpdateTableCellCmd.Flags().String("background-color", "", "Background color as hex #RRGGBB")
-	slidesUpdateTableCellCmd.Flags().Float64("padding-top", 0, "Top padding in points")
-	slidesUpdateTableCellCmd.Flags().Float64("padding-bottom", 0, "Bottom padding in points")
-	slidesUpdateTableCellCmd.Flags().Float64("padding-left", 0, "Left padding in points")
-	slidesUpdateTableCellCmd.Flags().Float64("padding-right", 0, "Right padding in points")
 	slidesUpdateTableCellCmd.MarkFlagRequired("table-id")
 	slidesUpdateTableCellCmd.MarkFlagRequired("row")
 	slidesUpdateTableCellCmd.MarkFlagRequired("col")
@@ -1541,16 +1535,19 @@ func runSlidesUpdateTextStyle(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("no style changes specified"))
 	}
 
-	startIdx := int64(fromIndex)
-	textRange := &slides.Range{
-		StartIndex: &startIdx,
-		Type:       "FIXED_RANGE",
-	}
+	var textRange *slides.Range
 	if toIndex < 0 {
-		textRange.Type = "ALL"
+		textRange = &slides.Range{
+			Type: "ALL",
+		}
 	} else {
+		startIdx := int64(fromIndex)
 		endIdx := int64(toIndex)
-		textRange.EndIndex = &endIdx
+		textRange = &slides.Range{
+			StartIndex: &startIdx,
+			EndIndex:   &endIdx,
+			Type:       "FIXED_RANGE",
+		}
 	}
 
 	requests := []*slides.Request{
@@ -1832,42 +1829,24 @@ func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
 	rowIndex, _ := cmd.Flags().GetInt("row")
 	colIndex, _ := cmd.Flags().GetInt("col")
 	bgColor, _ := cmd.Flags().GetString("background-color")
-	paddingTop, _ := cmd.Flags().GetFloat64("padding-top")
-	paddingBottom, _ := cmd.Flags().GetFloat64("padding-bottom")
-	paddingLeft, _ := cmd.Flags().GetFloat64("padding-left")
-	paddingRight, _ := cmd.Flags().GetFloat64("padding-right")
 
-	cellProps := &slides.TableCellProperties{}
-	var fields []string
+	if bgColor == "" {
+		return p.PrintError(fmt.Errorf("--background-color is required"))
+	}
 
-	if bgColor != "" {
-		color, err := parseHexColor(bgColor)
-		if err != nil {
-			return p.PrintError(err)
-		}
-		cellProps.TableCellBackgroundFill = &slides.TableCellBackgroundFill{
+	color, err := parseHexColor(bgColor)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	cellProps := &slides.TableCellProperties{
+		TableCellBackgroundFill: &slides.TableCellBackgroundFill{
 			SolidFill: &slides.SolidFill{
 				Color: &slides.OpaqueColor{
 					RgbColor: color,
 				},
 			},
-		}
-		fields = append(fields, "tableCellBackgroundFill")
-	}
-
-	if paddingTop > 0 {
-		cellProps.ContentAlignment = "TOP"
-		fields = append(fields, "contentAlignment")
-	}
-
-	// Note: Google Slides API doesn't have direct padding properties for table cells
-	// The ContentAlignment is the closest available property
-	_ = paddingBottom
-	_ = paddingLeft
-	_ = paddingRight
-
-	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no cell properties specified"))
+		},
 	}
 
 	requests := []*slides.Request{
@@ -1883,7 +1862,7 @@ func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
 					ColumnSpan: 1,
 				},
 				TableCellProperties: cellProps,
-				Fields:              strings.Join(fields, ","),
+				Fields:              "tableCellBackgroundFill",
 			},
 		},
 	}
@@ -1896,12 +1875,12 @@ func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(map[string]interface{}{
-		"status":          "updated",
-		"presentation_id": presentationID,
-		"table_id":        tableID,
-		"row":             rowIndex,
-		"col":             colIndex,
-		"fields_updated":  fields,
+		"status":           "updated",
+		"presentation_id":  presentationID,
+		"table_id":         tableID,
+		"row":              rowIndex,
+		"col":              colIndex,
+		"background_color": bgColor,
 	})
 }
 
@@ -2074,16 +2053,19 @@ func runSlidesUpdateParagraphStyle(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("no paragraph style changes specified"))
 	}
 
-	startIdx := int64(fromIndex)
-	textRange := &slides.Range{
-		StartIndex: &startIdx,
-		Type:       "FIXED_RANGE",
-	}
+	var textRange *slides.Range
 	if toIndex < 0 {
-		textRange.Type = "ALL"
+		textRange = &slides.Range{
+			Type: "ALL",
+		}
 	} else {
+		startIdx := int64(fromIndex)
 		endIdx := int64(toIndex)
-		textRange.EndIndex = &endIdx
+		textRange = &slides.Range{
+			StartIndex: &startIdx,
+			EndIndex:   &endIdx,
+			Type:       "FIXED_RANGE",
+		}
 	}
 
 	requests := []*slides.Request{

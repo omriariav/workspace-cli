@@ -194,7 +194,7 @@ Add `--format text` to any command for human-readable output.
 | `gws slides delete-object <id>` | Delete any page element (`--object-id`) |
 | `gws slides delete-text <id>` | Clear text from shape (`--object-id`, `--from`, `--to`) |
 | `gws slides update-text-style <id>` | Style text (`--object-id`, `--bold`, `--italic`, `--font-size`, `--color`) |
-| `gws slides update-transform <id>` | Move/resize element (`--object-id`, `--x`, `--y`, `--scale-x`, `--rotate`) |
+| `gws slides update-transform <id>` | Move/scale/rotate element (`--object-id`, `--x`, `--y`, `--scale-x`, `--rotate`) |
 | `gws slides create-table <id>` | Add table (`--slide-id/--slide-number`, `--rows`, `--cols`) |
 | `gws slides insert-table-rows <id>` | Insert rows (`--table-id`, `--at`, `--count`) |
 | `gws slides delete-table-row <id>` | Delete row (`--table-id`, `--row`) |

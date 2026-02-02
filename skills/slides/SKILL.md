@@ -211,7 +211,7 @@ gws slides update-text-style <presentation-id> --object-id <id> [flags]
 - `--font-family string` — Font name
 - `--color string` — Hex color `#RRGGBB`
 
-### update-transform — Move or resize elements
+### update-transform — Move, scale, or rotate elements
 
 ```bash
 gws slides update-transform <presentation-id> --object-id <id> [flags]
@@ -220,7 +220,6 @@ gws slides update-transform <presentation-id> --object-id <id> [flags]
 **Flags:**
 - `--object-id string` — Element to transform (required)
 - `--x` / `--y float` — Position in points
-- `--width` / `--height float` — Size in points
 - `--scale-x` / `--scale-y float` — Scale factors
 - `--rotate float` — Rotation in degrees
 
