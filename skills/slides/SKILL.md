@@ -1,6 +1,6 @@
 ---
 name: gws-slides
-version: 1.1.0
+version: 1.2.0
 description: "Google Slides CLI operations via gws. Use when users need to create, read, or edit Google Slides presentations. Triggers: slides, presentation, google slides, deck."
 metadata:
   short-description: Google Slides CLI operations
@@ -331,3 +331,47 @@ gws slides list <id> --format text    # Human-readable text
 - `add-text` inserts into an existing object; use `add-shape --type TEXT_BOX` to create a text container first
 - Presentation IDs can be extracted from URLs: `docs.google.com/presentation/d/<ID>/edit`
 - For comments on a presentation, use `gws drive comments <presentation-id>`
+
+## Known Limitations
+
+### Table Cell Text Population
+
+**Gap**: The `add-text` command cannot insert text into table cells. It only works with shapes and text boxes.
+
+**Status**: [Issue #54](https://github.com/omriariav/workspace-cli/issues/54) - Feature request open
+
+**Workaround**: Use the Google Slides API directly with the OAuth token from `~/.config/gws/token.json`:
+
+```python
+import json, os, requests
+
+# Get token
+token = json.load(open(os.path.expanduser("~/.config/gws/token.json")))["access_token"]
+
+# Build request
+url = f"https://slides.googleapis.com/v1/presentations/{PRESENTATION_ID}:batchUpdate"
+payload = {
+    "requests": [{
+        "insertText": {
+            "objectId": "TABLE_ID",
+            "cellLocation": {"rowIndex": 0, "columnIndex": 0},
+            "text": "Cell content",
+            "insertionIndex": 0
+        }
+    }]
+}
+
+# Send
+response = requests.post(url,
+    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    json=payload
+)
+```
+
+For bulk population, batch multiple `insertText` requests in the `requests` array.
+
+## Learnings
+
+See [LEARNINGS.md](./LEARNINGS.md) for session-specific learnings and gotchas discovered during real usage.
+
+> **Note**: LEARNINGS.md is a template. Keep sensitive/proprietary learnings local - don't commit them to the repo.
