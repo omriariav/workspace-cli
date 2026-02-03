@@ -100,9 +100,12 @@ Position and size are in points (PT). The image URL must be publicly accessible.
 var slidesAddTextCmd = &cobra.Command{
 	Use:   "add-text <presentation-id>",
 	Short: "Add text to an object",
-	Long:  "Inserts text into an existing shape or text box on a slide.",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runSlidesAddText,
+	Long: `Inserts text into an existing shape, text box, or table cell.
+
+For shapes/text boxes, use --object-id.
+For table cells, use --table-id with --row and --col (0-indexed).`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesAddText,
 }
 
 var slidesReplaceTextCmd = &cobra.Command{
@@ -287,10 +290,12 @@ func init() {
 	slidesAddImageCmd.MarkFlagRequired("url")
 
 	// Add-text flags
-	slidesAddTextCmd.Flags().String("object-id", "", "Object ID to insert text into (required)")
+	slidesAddTextCmd.Flags().String("object-id", "", "Object ID to insert text into (required for shapes/text boxes)")
+	slidesAddTextCmd.Flags().String("table-id", "", "Table object ID (required for table cells, mutually exclusive with --object-id)")
+	slidesAddTextCmd.Flags().Int("row", -1, "Row index, 0-based (required with --table-id)")
+	slidesAddTextCmd.Flags().Int("col", -1, "Column index, 0-based (required with --table-id)")
 	slidesAddTextCmd.Flags().String("text", "", "Text to insert (required)")
 	slidesAddTextCmd.Flags().Int("at", 0, "Position to insert at (0 = beginning)")
-	slidesAddTextCmd.MarkFlagRequired("object-id")
 	slidesAddTextCmd.MarkFlagRequired("text")
 
 	// Replace-text flags
@@ -1264,16 +1269,58 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 
 	presentationID := args[0]
 	objectID, _ := cmd.Flags().GetString("object-id")
+	tableID, _ := cmd.Flags().GetString("table-id")
+	row, _ := cmd.Flags().GetInt("row")
+	col, _ := cmd.Flags().GetInt("col")
 	text, _ := cmd.Flags().GetString("text")
 	insertionIndex, _ := cmd.Flags().GetInt("at")
 
+	// Validate mutually exclusive flags
+	if objectID != "" && tableID != "" {
+		return p.PrintError(fmt.Errorf("cannot specify both --object-id and --table-id"))
+	}
+	if objectID == "" && tableID == "" {
+		return p.PrintError(fmt.Errorf("must specify either --object-id or --table-id"))
+	}
+
+	// Build the InsertText request
+	insertTextReq := &slides.InsertTextRequest{
+		Text:           text,
+		InsertionIndex: int64(insertionIndex),
+	}
+
+	result := map[string]interface{}{
+		"status":          "inserted",
+		"presentation_id": presentationID,
+		"text_length":     len(text),
+		"position":        insertionIndex,
+	}
+
+	if tableID != "" {
+		// Table cell mode - validate row and col
+		if row < 0 {
+			return p.PrintError(fmt.Errorf("--row is required when using --table-id"))
+		}
+		if col < 0 {
+			return p.PrintError(fmt.Errorf("--col is required when using --table-id"))
+		}
+		insertTextReq.ObjectId = tableID
+		insertTextReq.CellLocation = &slides.TableCellLocation{
+			RowIndex:    int64(row),
+			ColumnIndex: int64(col),
+		}
+		result["table_id"] = tableID
+		result["row"] = row
+		result["col"] = col
+	} else {
+		// Shape/text box mode
+		insertTextReq.ObjectId = objectID
+		result["object_id"] = objectID
+	}
+
 	requests := []*slides.Request{
 		{
-			InsertText: &slides.InsertTextRequest{
-				ObjectId:       objectID,
-				Text:           text,
-				InsertionIndex: int64(insertionIndex),
-			},
+			InsertText: insertTextReq,
 		},
 	}
 
@@ -1284,13 +1331,7 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to add text: %w", err))
 	}
 
-	return p.Print(map[string]interface{}{
-		"status":          "inserted",
-		"presentation_id": presentationID,
-		"object_id":       objectID,
-		"text_length":     len(text),
-		"position":        insertionIndex,
-	})
+	return p.Print(result)
 }
 
 func runSlidesReplaceText(cmd *cobra.Command, args []string) error {

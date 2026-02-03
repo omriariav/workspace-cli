@@ -189,7 +189,7 @@ Add `--format text` to any command for human-readable output.
 | `gws slides duplicate-slide <id>` | Duplicate slide (`--slide-id` or `--slide-number`) |
 | `gws slides add-shape <id>` | Add shape (`--slide-id/--slide-number`, `--type`, `--x`, `--y`, `--width`, `--height`) |
 | `gws slides add-image <id>` | Add image (`--slide-id/--slide-number`, `--url`, `--x`, `--y`, `--width`) |
-| `gws slides add-text <id>` | Insert text into object (`--object-id`, `--text`, `--at`) |
+| `gws slides add-text <id>` | Insert text into shape or table cell (`--object-id` or `--table-id`/`--row`/`--col`, `--text`, `--at`) |
 | `gws slides replace-text <id>` | Find and replace text (`--find`, `--replace`, `--match-case`) |
 | `gws slides delete-object <id>` | Delete any page element (`--object-id`) |
 | `gws slides delete-text <id>` | Clear text from shape (`--object-id`, `--from`, `--to`) |

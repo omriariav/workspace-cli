@@ -667,7 +667,7 @@ func TestSlidesAddTextCommand_Flags(t *testing.T) {
 		t.Fatal("slides add-text command not found")
 	}
 
-	expectedFlags := []string{"object-id", "text", "at"}
+	expectedFlags := []string{"object-id", "table-id", "row", "col", "text", "at"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)
@@ -913,6 +913,78 @@ func TestSlidesAddText_Success(t *testing.T) {
 	}).Do()
 	if err != nil {
 		t.Fatalf("failed to insert text: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestSlidesAddTextToTableCell_Success tests inserting text into a table cell
+func TestSlidesAddTextToTableCell_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-table-text:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req slides.BatchUpdatePresentationRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			insertText := req.Requests[0].InsertText
+			if insertText == nil {
+				t.Error("expected InsertText request")
+			} else {
+				if insertText.ObjectId != "table-123" {
+					t.Errorf("expected object ID 'table-123', got '%s'", insertText.ObjectId)
+				}
+				if insertText.Text != "Cell Content" {
+					t.Errorf("expected text 'Cell Content', got '%s'", insertText.Text)
+				}
+				if insertText.CellLocation == nil {
+					t.Error("expected CellLocation to be set for table cell")
+				} else {
+					if insertText.CellLocation.RowIndex != 1 {
+						t.Errorf("expected row index 1, got %d", insertText.CellLocation.RowIndex)
+					}
+					if insertText.CellLocation.ColumnIndex != 2 {
+						t.Errorf("expected column index 2, got %d", insertText.CellLocation.ColumnIndex)
+					}
+				}
+			}
+
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{
+				PresentationId: "pres-table-text",
+				Replies:        []*slides.Response{{}},
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	_, err = svc.Presentations.BatchUpdate("pres-table-text", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{
+			{
+				InsertText: &slides.InsertTextRequest{
+					ObjectId: "table-123",
+					Text:     "Cell Content",
+					CellLocation: &slides.TableCellLocation{
+						RowIndex:    1,
+						ColumnIndex: 2,
+					},
+					InsertionIndex: 0,
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to insert text into table cell: %v", err)
 	}
 
 	if !batchUpdateCalled {
