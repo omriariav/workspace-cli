@@ -43,7 +43,8 @@ For initial setup, see the `gws-auth` skill.
 | Duplicate a slide | `gws slides duplicate-slide <id> --slide-number 2` |
 | Add a shape | `gws slides add-shape <id> --slide-number 1 --type RECTANGLE` |
 | Add an image | `gws slides add-image <id> --slide-number 1 --url "https://..."` |
-| Add text to object | `gws slides add-text <id> --object-id <obj-id> --text "Hello"` |
+| Add text to shape | `gws slides add-text <id> --object-id <obj-id> --text "Hello"` |
+| Add text to table cell | `gws slides add-text <id> --table-id <tbl-id> --row 0 --col 0 --text "Cell"` |
 | Find and replace | `gws slides replace-text <id> --find "old" --replace "new"` |
 | Delete any element | `gws slides delete-object <id> --object-id <obj-id>` |
 | Clear text from shape | `gws slides delete-text <id> --object-id <obj-id>` |
@@ -152,18 +153,25 @@ gws slides add-image <presentation-id> --url <image-url> [flags]
 - `--y float` — Y position in points (default: 100)
 - `--width float` — Width in points (default: 400; height auto-calculated)
 
-### add-text — Add text to an object
+### add-text — Add text to shape or table cell
 
 ```bash
+# For shapes/text boxes:
 gws slides add-text <presentation-id> --object-id <id> --text <text> [flags]
+
+# For table cells:
+gws slides add-text <presentation-id> --table-id <id> --row <n> --col <n> --text <text> [flags]
 ```
 
 **Flags:**
-- `--object-id string` — Object ID to insert text into (required)
+- `--object-id string` — Shape/text box ID (mutually exclusive with --table-id)
+- `--table-id string` — Table object ID (requires --row and --col)
+- `--row int` — Row index, 0-based (required with --table-id)
+- `--col int` — Column index, 0-based (required with --table-id)
 - `--text string` — Text to insert (required)
 - `--at int` — Position to insert at (0 = beginning)
 
-Get object IDs from `gws slides list <id>` output.
+Get object IDs from `gws slides list <id>` output. For tables, find elements with `"type": "TABLE"` and use their `objectId` as the `--table-id` value.
 
 ### replace-text — Find and replace text
 
@@ -328,47 +336,9 @@ gws slides list <id> --format text    # Human-readable text
 - Positions and sizes are in **points (PT)**: standard slide is 720x405 points
 - Image URLs must be publicly accessible — Google Slides fetches them server-side
 - `replace-text` operates across ALL slides — useful for template variable substitution
-- `add-text` inserts into an existing object; use `add-shape --type TEXT_BOX` to create a text container first
+- `add-text` inserts into shapes/text boxes or table cells; use `add-shape --type TEXT_BOX` to create a text container first
 - Presentation IDs can be extracted from URLs: `docs.google.com/presentation/d/<ID>/edit`
 - For comments on a presentation, use `gws drive comments <presentation-id>`
-
-## Known Limitations
-
-### Table Cell Text Population
-
-**Gap**: The `add-text` command cannot insert text into table cells. It only works with shapes and text boxes.
-
-**Status**: [Issue #54](https://github.com/omriariav/workspace-cli/issues/54) - Feature request open
-
-**Workaround**: Use the Google Slides API directly with the OAuth token from `~/.config/gws/token.json`:
-
-```python
-import json, os, requests
-
-# Get token
-token = json.load(open(os.path.expanduser("~/.config/gws/token.json")))["access_token"]
-
-# Build request
-url = f"https://slides.googleapis.com/v1/presentations/{PRESENTATION_ID}:batchUpdate"
-payload = {
-    "requests": [{
-        "insertText": {
-            "objectId": "TABLE_ID",
-            "cellLocation": {"rowIndex": 0, "columnIndex": 0},
-            "text": "Cell content",
-            "insertionIndex": 0
-        }
-    }]
-}
-
-# Send
-response = requests.post(url,
-    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-    json=payload
-)
-```
-
-For bulk population, batch multiple `insertText` requests in the `requests` array.
 
 ## Learnings
 

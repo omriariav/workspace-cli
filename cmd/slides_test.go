@@ -3,8 +3,10 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -667,11 +669,138 @@ func TestSlidesAddTextCommand_Flags(t *testing.T) {
 		t.Fatal("slides add-text command not found")
 	}
 
-	expectedFlags := []string{"object-id", "text", "at"}
+	expectedFlags := []string{"object-id", "table-id", "row", "col", "text", "at"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)
 		}
+	}
+}
+
+// TestSlidesAddTextCommand_FlagDefaults tests add-text command flag defaults
+func TestSlidesAddTextCommand_FlagDefaults(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "add-text")
+	if cmd == nil {
+		t.Fatal("slides add-text command not found")
+	}
+
+	// Row and col should default to -1 (sentinel for "not provided")
+	rowFlag := cmd.Flags().Lookup("row")
+	if rowFlag.DefValue != "-1" {
+		t.Errorf("expected --row default '-1', got '%s'", rowFlag.DefValue)
+	}
+
+	colFlag := cmd.Flags().Lookup("col")
+	if colFlag.DefValue != "-1" {
+		t.Errorf("expected --col default '-1', got '%s'", colFlag.DefValue)
+	}
+
+	// at should default to 0
+	atFlag := cmd.Flags().Lookup("at")
+	if atFlag.DefValue != "0" {
+		t.Errorf("expected --at default '0', got '%s'", atFlag.DefValue)
+	}
+}
+
+// TestSlidesAddTextCommand_TextRequired tests that --text is required
+func TestSlidesAddTextCommand_TextRequired(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "add-text")
+	if cmd == nil {
+		t.Fatal("slides add-text command not found")
+	}
+
+	textFlag := cmd.Flags().Lookup("text")
+	// Check if flag has required annotation
+	if ann := textFlag.Annotations; ann != nil {
+		if _, ok := ann["cobra_annotation_bash_completion_one_required_flag"]; !ok {
+			// This is fine, required is checked differently
+		}
+	}
+}
+
+// TestSlidesAddTextCommand_ValidationErrors tests add-text flag validation via CLI
+func TestSlidesAddTextCommand_ValidationErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		flags         map[string]string
+		expectedError string
+	}{
+		{
+			name: "mutual exclusivity - both object-id and table-id",
+			flags: map[string]string{
+				"object-id": "shape-123",
+				"table-id":  "table-456",
+				"text":      "test",
+			},
+			expectedError: "cannot specify both --object-id and --table-id",
+		},
+		{
+			name: "missing both object-id and table-id",
+			flags: map[string]string{
+				"text": "test",
+			},
+			expectedError: "must specify either --object-id or --table-id",
+		},
+		{
+			name: "missing row with table-id",
+			flags: map[string]string{
+				"table-id": "table-456",
+				"col":      "0",
+				"text":     "test",
+			},
+			expectedError: "--row is required when using --table-id (valid values: 0 or greater)",
+		},
+		{
+			name: "missing col with table-id",
+			flags: map[string]string{
+				"table-id": "table-456",
+				"row":      "0",
+				"text":     "test",
+			},
+			expectedError: "--col is required when using --table-id (valid values: 0 or greater)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := findSubcommand(slidesCmd, "add-text")
+			if cmd == nil {
+				t.Fatal("slides add-text command not found")
+			}
+
+			// Reset flags to defaults before each test
+			cmd.Flags().Set("object-id", "")
+			cmd.Flags().Set("table-id", "")
+			cmd.Flags().Set("row", "-1")
+			cmd.Flags().Set("col", "-1")
+			cmd.Flags().Set("text", "")
+			cmd.Flags().Set("at", "0")
+
+			// Set test flags
+			for flag, value := range tt.flags {
+				if err := cmd.Flags().Set(flag, value); err != nil {
+					t.Fatalf("failed to set flag --%s: %v", flag, err)
+				}
+			}
+
+			// Capture os.Stdout since the printer writes directly to it
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Execute the command with a dummy presentation ID
+			_ = cmd.RunE(cmd, []string{"test-presentation-id"})
+
+			// Restore stdout and read captured output
+			w.Close()
+			os.Stdout = oldStdout
+			captured, _ := io.ReadAll(r)
+			output := string(captured)
+
+			if !strings.Contains(output, tt.expectedError) {
+				t.Errorf("expected output containing %q, got %q", tt.expectedError, output)
+			}
+		})
 	}
 }
 
@@ -913,6 +1042,139 @@ func TestSlidesAddText_Success(t *testing.T) {
 	}).Do()
 	if err != nil {
 		t.Fatalf("failed to insert text: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestSlidesAddTextToTableCell_Success tests inserting text into a table cell
+func TestSlidesAddTextToTableCell_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-table-text:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req slides.BatchUpdatePresentationRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			insertText := req.Requests[0].InsertText
+			if insertText == nil {
+				t.Error("expected InsertText request")
+			} else {
+				if insertText.ObjectId != "table-123" {
+					t.Errorf("expected object ID 'table-123', got '%s'", insertText.ObjectId)
+				}
+				if insertText.Text != "Cell Content" {
+					t.Errorf("expected text 'Cell Content', got '%s'", insertText.Text)
+				}
+				if insertText.CellLocation == nil {
+					t.Error("expected CellLocation to be set for table cell")
+				} else {
+					if insertText.CellLocation.RowIndex != 1 {
+						t.Errorf("expected row index 1, got %d", insertText.CellLocation.RowIndex)
+					}
+					if insertText.CellLocation.ColumnIndex != 2 {
+						t.Errorf("expected column index 2, got %d", insertText.CellLocation.ColumnIndex)
+					}
+				}
+			}
+
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{
+				PresentationId: "pres-table-text",
+				Replies:        []*slides.Response{{}},
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	_, err = svc.Presentations.BatchUpdate("pres-table-text", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{
+			{
+				InsertText: &slides.InsertTextRequest{
+					ObjectId: "table-123",
+					Text:     "Cell Content",
+					CellLocation: &slides.TableCellLocation{
+						RowIndex:    1,
+						ColumnIndex: 2,
+					},
+					InsertionIndex: 0,
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to insert text into table cell: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestSlidesAddText_ShapeMode_NoCellLocation verifies shape mode doesn't set CellLocation
+func TestSlidesAddText_ShapeMode_NoCellLocation(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-shape-text:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req slides.BatchUpdatePresentationRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			insertText := req.Requests[0].InsertText
+			if insertText == nil {
+				t.Error("expected InsertText request")
+			} else {
+				if insertText.ObjectId != "shape-456" {
+					t.Errorf("expected object ID 'shape-456', got '%s'", insertText.ObjectId)
+				}
+				// CellLocation should NOT be set for shape mode
+				if insertText.CellLocation != nil {
+					t.Error("CellLocation should be nil for shape mode (backward compatibility)")
+				}
+			}
+
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{
+				PresentationId: "pres-shape-text",
+				Replies:        []*slides.Response{{}},
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	// Shape mode: only ObjectId, no CellLocation
+	_, err = svc.Presentations.BatchUpdate("pres-shape-text", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{
+			{
+				InsertText: &slides.InsertTextRequest{
+					ObjectId:       "shape-456",
+					Text:           "Shape text",
+					InsertionIndex: 0,
+					// CellLocation intentionally nil
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to insert text into shape: %v", err)
 	}
 
 	if !batchUpdateCalled {

@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.7.0** - Full Slides API editing operations. Adds 12 new Slides commands: delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides. Enables complete programmatic control over presentation elements including tables, text styling, transforms, and slide ordering.
+**v1.8.0** - Table cell text support. Adds `--table-id`, `--row`, and `--col` flags to `slides add-text` for populating table cells programmatically.
 
 ## Roadmap
 
