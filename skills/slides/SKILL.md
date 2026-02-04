@@ -1,6 +1,6 @@
 ---
 name: gws-slides
-version: 1.2.0
+version: 1.3.0
 description: "Google Slides CLI operations via gws. Use when users need to create, read, or edit Google Slides presentations. Triggers: slides, presentation, google slides, deck."
 metadata:
   short-description: Google Slides CLI operations
@@ -330,15 +330,90 @@ gws slides list <id> --format text    # Human-readable text
 
 ## Tips for AI Agents
 
+### General
 - Always use `--format json` (the default) for programmatic parsing
-- Use `gws slides list <id>` to get slide object IDs and element object IDs
+- Use `gws slides list <id>` to get slide object IDs and element object IDs before using update commands
 - Slide numbers are **1-indexed** (first slide is 1, not 0)
 - Positions and sizes are in **points (PT)**: standard slide is 720x405 points
-- Image URLs must be publicly accessible — Google Slides fetches them server-side
-- `replace-text` operates across ALL slides — useful for template variable substitution
-- `add-text` inserts into shapes/text boxes or table cells; use `add-shape --type TEXT_BOX` to create a text container first
 - Presentation IDs can be extracted from URLs: `docs.google.com/presentation/d/<ID>/edit`
 - For comments on a presentation, use `gws drive comments <presentation-id>`
+
+### Styling
+- Colors are always hex format with `#` prefix: `--background-color "#005843"`, `--color "#FFFFFF"`
+- To style text: first `add-text`, then `update-text-style` for font/color, then `update-paragraph-style` for alignment
+- `update-shape` sets fill and outline colors on shapes, not text
+- `update-text-style` sets font properties (bold, italic, size, color) on text within shapes
+
+### Gotchas & Workarounds
+- `add-slide --layout` may fail on presentations with custom slide masters; use `duplicate-slide` + modify as workaround
+- `replace-text` operates across ALL slides in the presentation — cannot target specific slides
+- Image URLs must be publicly accessible — Google Slides fetches them server-side
+- `add-text` inserts into shapes/text boxes or table cells; use `add-shape --type TEXT_BOX` to create a text container first
+- When creating a styled slide from scratch, work in this order: (1) add shape, (2) style shape with `update-shape`, (3) add text, (4) style text with `update-text-style`, (5) align with `update-paragraph-style`
+
+## Common Workflows
+
+### Create a Colored Title Slide
+
+```bash
+# 1. Add a full-slide rectangle as background
+gws slides add-shape "<PRES_ID>" --slide-number 1 --type RECTANGLE \
+  --x 0 --y 0 --width 720 --height 405
+
+# 2. Get the shape ID from the output, then set fill color
+gws slides update-shape "<PRES_ID>" --object-id "<SHAPE_ID>" \
+  --background-color "#005843"
+
+# 3. Add title text to the shape
+gws slides add-text "<PRES_ID>" --object-id "<SHAPE_ID>" \
+  --text "Thank You"
+
+# 4. Style text: white, large, bold
+gws slides update-text-style "<PRES_ID>" --object-id "<SHAPE_ID>" \
+  --color "#FFFFFF" --font-size 48 --bold
+
+# 5. Center the text
+gws slides update-paragraph-style "<PRES_ID>" --object-id "<SHAPE_ID>" \
+  --alignment CENTER
+```
+
+### Populate a Table with Data
+
+```bash
+# 1. List slide to find table ID
+gws slides list "<PRES_ID>" | jq '.slides[0].elements[] | select(.type=="TABLE")'
+
+# 2. Add text to cells (0-indexed rows and columns)
+gws slides add-text "<PRES_ID>" --table-id "<TABLE_ID>" --row 0 --col 0 --text "Header 1"
+gws slides add-text "<PRES_ID>" --table-id "<TABLE_ID>" --row 0 --col 1 --text "Header 2"
+gws slides add-text "<PRES_ID>" --table-id "<TABLE_ID>" --row 1 --col 0 --text "Data A"
+gws slides add-text "<PRES_ID>" --table-id "<TABLE_ID>" --row 1 --col 1 --text "Data B"
+
+# 3. Style header row with background color
+gws slides update-table-cell "<PRES_ID>" --table-id "<TABLE_ID>" \
+  --row 0 --col 0 --background-color "#005843"
+gws slides update-table-cell "<PRES_ID>" --table-id "<TABLE_ID>" \
+  --row 0 --col 1 --background-color "#005843"
+```
+
+### Template Variable Replacement
+
+```bash
+# Replace placeholders across all slides
+gws slides replace-text "<PRES_ID>" --find "{{COMPANY_NAME}}" --replace "Acme Corp"
+gws slides replace-text "<PRES_ID>" --find "{{DATE}}" --replace "February 2026"
+gws slides replace-text "<PRES_ID>" --find "{{PRESENTER}}" --replace "Jane Smith"
+```
+
+### Move Slide to End
+
+```bash
+# Get slide ID from list
+SLIDE_ID=$(gws slides list "<PRES_ID>" | jq -r '.slides[2].slide_id')
+
+# Move to position 99 (will clamp to last position)
+gws slides reorder-slides "<PRES_ID>" --slide-ids "$SLIDE_ID" --to 99
+```
 
 ## Learnings
 
