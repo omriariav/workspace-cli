@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.8.0** - Table cell text support. Adds `--table-id`, `--row`, and `--col` flags to `slides add-text` for populating table cells programmatically.
+**v1.9.0** - Gmail pagination & slides documentation. Adds `--all` flag to `gmail list` for fetching >500 results via pagination. Enhanced slides SKILL.md with styling tips and workflow examples.
 
 ## Roadmap
 
