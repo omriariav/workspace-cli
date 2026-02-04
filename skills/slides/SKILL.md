@@ -408,10 +408,10 @@ gws slides replace-text "<PRES_ID>" --find "{{PRESENTER}}" --replace "Jane Smith
 ### Move Slide to End
 
 ```bash
-# Get slide ID from list
-SLIDE_ID=$(gws slides list "<PRES_ID>" | jq -r '.slides[2].slide_id')
+# Get slide ID from list (use .id field)
+SLIDE_ID=$(gws slides list "<PRES_ID>" | jq -r '.slides[2].id')
 
-# Move to position 99 (will clamp to last position)
+# Move to high position (API adjusts to valid range)
 gws slides reorder-slides "<PRES_ID>" --slide-ids "$SLIDE_ID" --to 99
 ```
 
