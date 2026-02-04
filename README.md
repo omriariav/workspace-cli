@@ -94,7 +94,7 @@ Add `--format text` to any command for human-readable output.
 
 | Command | Description |
 |---------|-------------|
-| `gws gmail list` | List threads with `thread_id` and `message_id` (`--max`, `--query`) |
+| `gws gmail list` | List threads with `thread_id` and `message_id` (`--max`, `--query`, `--all` for pagination) |
 | `gws gmail read <id>` | Read message body and headers |
 | `gws gmail thread <id>` | Read full thread conversation |
 | `gws gmail send` | Send email (`--to`, `--subject`, `--body`, `--cc`, `--bcc`, `--thread-id`, `--reply-to-message-id`) |

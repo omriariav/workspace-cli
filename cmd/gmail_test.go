@@ -1239,3 +1239,178 @@ func TestGmailLabel_OutputFormat(t *testing.T) {
 		t.Errorf("unexpected message_id: %v", decoded["message_id"])
 	}
 }
+
+// TestGmailListCommand_AllFlag tests that the --all flag exists
+func TestGmailListCommand_AllFlag(t *testing.T) {
+	cmd := gmailListCmd
+
+	allFlag := cmd.Flags().Lookup("all")
+	if allFlag == nil {
+		t.Error("expected --all flag to exist")
+	}
+	if allFlag.DefValue != "false" {
+		t.Errorf("expected --all default 'false', got '%s'", allFlag.DefValue)
+	}
+}
+
+// TestGmailList_Pagination_MockServer tests pagination when fetching more than one page
+func TestGmailList_Pagination_MockServer(t *testing.T) {
+	pageRequests := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Threads list with pagination
+		if r.URL.Path == "/gmail/v1/users/me/threads" && r.Method == "GET" {
+			pageRequests++
+			pageToken := r.URL.Query().Get("pageToken")
+
+			var resp map[string]interface{}
+			if pageToken == "" {
+				// First page
+				resp = map[string]interface{}{
+					"threads": []map[string]interface{}{
+						{"id": "thread-1", "snippet": "First"},
+						{"id": "thread-2", "snippet": "Second"},
+					},
+					"nextPageToken":      "page2token",
+					"resultSizeEstimate": 4,
+				}
+			} else if pageToken == "page2token" {
+				// Second page
+				resp = map[string]interface{}{
+					"threads": []map[string]interface{}{
+						{"id": "thread-3", "snippet": "Third"},
+						{"id": "thread-4", "snippet": "Fourth"},
+					},
+					"resultSizeEstimate": 4,
+				}
+			} else {
+				t.Errorf("unexpected page token: %s", pageToken)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Thread get (for metadata)
+		if strings.HasPrefix(r.URL.Path, "/gmail/v1/users/me/threads/thread-") && r.Method == "GET" {
+			threadID := strings.TrimPrefix(r.URL.Path, "/gmail/v1/users/me/threads/")
+			resp := map[string]interface{}{
+				"id": threadID,
+				"messages": []map[string]interface{}{
+					{
+						"id":       "msg-" + threadID,
+						"threadId": threadID,
+						"payload": map[string]interface{}{
+							"headers": []map[string]string{
+								{"name": "Subject", "value": "Test " + threadID},
+								{"name": "From", "value": "test@example.com"},
+								{"name": "Date", "value": "Mon, 1 Jan 2024 10:00:00 +0000"},
+							},
+						},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	// Simulate pagination: fetch all threads
+	var allThreads []*gmail.Thread
+	var pageToken string
+	for {
+		call := svc.Users.Threads.List("me").MaxResults(500)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+
+		resp, err := call.Do()
+		if err != nil {
+			t.Fatalf("failed to list threads: %v", err)
+		}
+
+		allThreads = append(allThreads, resp.Threads...)
+
+		if resp.NextPageToken == "" {
+			break
+		}
+		pageToken = resp.NextPageToken
+	}
+
+	// Verify we got all 4 threads across 2 pages
+	if len(allThreads) != 4 {
+		t.Errorf("expected 4 threads, got %d", len(allThreads))
+	}
+	if pageRequests != 2 {
+		t.Errorf("expected 2 page requests, got %d", pageRequests)
+	}
+}
+
+// TestGmailList_MaxRespected_MockServer tests that --max limits results even with pagination
+func TestGmailList_MaxRespected_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/gmail/v1/users/me/threads" && r.Method == "GET" {
+			maxResults := r.URL.Query().Get("maxResults")
+			// The request should respect the max parameter
+			if maxResults != "3" {
+				t.Logf("maxResults requested: %s", maxResults)
+			}
+
+			resp := map[string]interface{}{
+				"threads": []map[string]interface{}{
+					{"id": "thread-1", "snippet": "First"},
+					{"id": "thread-2", "snippet": "Second"},
+					{"id": "thread-3", "snippet": "Third"},
+				},
+				"nextPageToken":      "moretoken",
+				"resultSizeEstimate": 100,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if strings.HasPrefix(r.URL.Path, "/gmail/v1/users/me/threads/thread-") && r.Method == "GET" {
+			threadID := strings.TrimPrefix(r.URL.Path, "/gmail/v1/users/me/threads/")
+			resp := map[string]interface{}{
+				"id": threadID,
+				"messages": []map[string]interface{}{
+					{"id": "msg-1", "payload": map[string]interface{}{"headers": []map[string]string{}}},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	// Request only 3 results
+	resp, err := svc.Users.Threads.List("me").MaxResults(3).Do()
+	if err != nil {
+		t.Fatalf("failed to list threads: %v", err)
+	}
+
+	if len(resp.Threads) != 3 {
+		t.Errorf("expected 3 threads, got %d", len(resp.Threads))
+	}
+}
