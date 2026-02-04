@@ -3,8 +3,10 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -713,6 +715,92 @@ func TestSlidesAddTextCommand_TextRequired(t *testing.T) {
 		if _, ok := ann["cobra_annotation_bash_completion_one_required_flag"]; !ok {
 			// This is fine, required is checked differently
 		}
+	}
+}
+
+// TestSlidesAddTextCommand_ValidationErrors tests add-text flag validation via CLI
+func TestSlidesAddTextCommand_ValidationErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		flags         map[string]string
+		expectedError string
+	}{
+		{
+			name: "mutual exclusivity - both object-id and table-id",
+			flags: map[string]string{
+				"object-id": "shape-123",
+				"table-id":  "table-456",
+				"text":      "test",
+			},
+			expectedError: "cannot specify both --object-id and --table-id",
+		},
+		{
+			name: "missing both object-id and table-id",
+			flags: map[string]string{
+				"text": "test",
+			},
+			expectedError: "must specify either --object-id or --table-id",
+		},
+		{
+			name: "missing row with table-id",
+			flags: map[string]string{
+				"table-id": "table-456",
+				"col":      "0",
+				"text":     "test",
+			},
+			expectedError: "--row is required when using --table-id (valid values: 0 or greater)",
+		},
+		{
+			name: "missing col with table-id",
+			flags: map[string]string{
+				"table-id": "table-456",
+				"row":      "0",
+				"text":     "test",
+			},
+			expectedError: "--col is required when using --table-id (valid values: 0 or greater)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := findSubcommand(slidesCmd, "add-text")
+			if cmd == nil {
+				t.Fatal("slides add-text command not found")
+			}
+
+			// Reset flags to defaults before each test
+			cmd.Flags().Set("object-id", "")
+			cmd.Flags().Set("table-id", "")
+			cmd.Flags().Set("row", "-1")
+			cmd.Flags().Set("col", "-1")
+			cmd.Flags().Set("text", "")
+			cmd.Flags().Set("at", "0")
+
+			// Set test flags
+			for flag, value := range tt.flags {
+				if err := cmd.Flags().Set(flag, value); err != nil {
+					t.Fatalf("failed to set flag --%s: %v", flag, err)
+				}
+			}
+
+			// Capture os.Stdout since the printer writes directly to it
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Execute the command with a dummy presentation ID
+			_ = cmd.RunE(cmd, []string{"test-presentation-id"})
+
+			// Restore stdout and read captured output
+			w.Close()
+			os.Stdout = oldStdout
+			captured, _ := io.ReadAll(r)
+			output := string(captured)
+
+			if !strings.Contains(output, tt.expectedError) {
+				t.Errorf("expected output containing %q, got %q", tt.expectedError, output)
+			}
+		})
 	}
 }
 

@@ -1255,18 +1255,8 @@ func runSlidesAddImage(cmd *cobra.Command, args []string) error {
 
 func runSlidesAddText(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
-	ctx := context.Background()
 
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.Slides()
-	if err != nil {
-		return p.PrintError(err)
-	}
-
+	// Parse flags first (before client creation for early validation)
 	presentationID := args[0]
 	objectID, _ := cmd.Flags().GetString("object-id")
 	tableID, _ := cmd.Flags().GetString("table-id")
@@ -1275,12 +1265,34 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 	text, _ := cmd.Flags().GetString("text")
 	insertionIndex, _ := cmd.Flags().GetInt("at")
 
-	// Validate mutually exclusive flags
+	// Validate mutually exclusive flags (fail fast before network calls)
 	if objectID != "" && tableID != "" {
 		return p.PrintError(fmt.Errorf("cannot specify both --object-id and --table-id"))
 	}
 	if objectID == "" && tableID == "" {
 		return p.PrintError(fmt.Errorf("must specify either --object-id or --table-id"))
+	}
+
+	// Validate table cell mode requires row and col
+	if tableID != "" {
+		if row < 0 {
+			return p.PrintError(fmt.Errorf("--row is required when using --table-id (valid values: 0 or greater)"))
+		}
+		if col < 0 {
+			return p.PrintError(fmt.Errorf("--col is required when using --table-id (valid values: 0 or greater)"))
+		}
+	}
+
+	// Now create the client after validation passes
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
 	}
 
 	// Build the InsertText request
@@ -1297,13 +1309,7 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 	}
 
 	if tableID != "" {
-		// Table cell mode - validate row and col
-		if row < 0 {
-			return p.PrintError(fmt.Errorf("--row is required when using --table-id"))
-		}
-		if col < 0 {
-			return p.PrintError(fmt.Errorf("--col is required when using --table-id"))
-		}
+		// Table cell mode
 		insertTextReq.ObjectId = tableID
 		insertTextReq.CellLocation = &slides.TableCellLocation{
 			RowIndex:    int64(row),

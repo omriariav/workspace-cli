@@ -171,7 +171,7 @@ gws slides add-text <presentation-id> --table-id <id> --row <n> --col <n> --text
 - `--text string` — Text to insert (required)
 - `--at int` — Position to insert at (0 = beginning)
 
-Get object IDs from `gws slides list <id>` output.
+Get object IDs from `gws slides list <id>` output. For tables, find elements with `"type": "TABLE"` and use their `objectId` as the `--table-id` value.
 
 ### replace-text — Find and replace text
 
