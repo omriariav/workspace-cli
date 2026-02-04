@@ -159,8 +159,9 @@ func init() {
 	gmailCmd.AddCommand(gmailReplyCmd)
 
 	// List flags
-	gmailListCmd.Flags().Int64("max", 10, "Maximum number of results")
+	gmailListCmd.Flags().Int64("max", 10, "Maximum number of results (use --all for unlimited)")
 	gmailListCmd.Flags().String("query", "", "Gmail search query (e.g., 'is:unread', 'from:someone@example.com')")
+	gmailListCmd.Flags().Bool("all", false, "Fetch all matching results (may take time for large result sets)")
 
 	// Send flags
 	gmailSendCmd.Flags().String("to", "", "Recipient email address (required)")
@@ -202,21 +203,69 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 
 	maxResults, _ := cmd.Flags().GetInt64("max")
 	query, _ := cmd.Flags().GetString("query")
+	fetchAll, _ := cmd.Flags().GetBool("all")
 
-	// List threads (more useful than individual messages)
-	call := svc.Users.Threads.List("me").MaxResults(maxResults)
-	if query != "" {
-		call = call.Q(query)
+	// Gmail API has a hard limit of 500 results per request
+	const apiMaxPerPage int64 = 500
+
+	// Collect all threads using pagination
+	var allThreads []*gmail.Thread
+	var pageToken string
+	pageNum := 1
+
+	for {
+		// Determine how many to fetch in this request
+		perPage := apiMaxPerPage
+		if !fetchAll && maxResults > 0 {
+			remaining := maxResults - int64(len(allThreads))
+			if remaining <= 0 {
+				break
+			}
+			if remaining < perPage {
+				perPage = remaining
+			}
+		}
+
+		call := svc.Users.Threads.List("me").MaxResults(perPage)
+		if query != "" {
+			call = call.Q(query)
+		}
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+
+		resp, err := call.Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to list threads: %w", err))
+		}
+
+		allThreads = append(allThreads, resp.Threads...)
+
+		// Progress indicator for multi-page fetches (to stderr)
+		if resp.NextPageToken != "" && (fetchAll || maxResults > apiMaxPerPage) {
+			fmt.Fprintf(os.Stderr, "Fetched page %d (%d threads so far)...\n", pageNum, len(allThreads))
+		}
+
+		// Check if we should continue
+		if resp.NextPageToken == "" {
+			break
+		}
+		if !fetchAll && int64(len(allThreads)) >= maxResults {
+			break
+		}
+
+		pageToken = resp.NextPageToken
+		pageNum++
 	}
 
-	resp, err := call.Do()
-	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to list threads: %w", err))
+	// Trim to max if we fetched more (can happen due to page boundaries)
+	if !fetchAll && maxResults > 0 && int64(len(allThreads)) > maxResults {
+		allThreads = allThreads[:maxResults]
 	}
 
 	// Format results
-	results := make([]map[string]interface{}, 0, len(resp.Threads))
-	for _, thread := range resp.Threads {
+	results := make([]map[string]interface{}, 0, len(allThreads))
+	for _, thread := range allThreads {
 		// Get thread details for snippet and subject
 		threadDetail, err := svc.Users.Threads.Get("me", thread.Id).Format("metadata").MetadataHeaders("Subject", "From", "Date").Do()
 		if err != nil {
