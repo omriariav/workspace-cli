@@ -46,7 +46,7 @@ Using the gathered data, classify each PRIMARY email (not noise).
 
 <The main agent passes these values when spawning:>
 - max_emails: <number from config, default 50>
-- inbox_query: <query from config, default "is:unread">
+- inbox_query: <query from config, default "is:unread in:inbox">
 - Task list IDs: <list of IDs, or "all" — if "all", run `gws tasks lists` first to discover IDs>
 - OKR sheet ID: <sheet_id>
 - OKR sheet names: <list of sheet tab names>

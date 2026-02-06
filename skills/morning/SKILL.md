@@ -51,7 +51,7 @@ The config contains:
 - `priority_signals` — Signals that boost priority:
   - `starred: true` — Starred emails get a priority boost
   - `vip_senders` — List of email addresses whose emails are always prioritized (manager, direct reports, department heads, key partners)
-- `inbox_query` — Gmail search query (default: `"is:unread"`)
+- `inbox_query` — Gmail search query (default: `"is:unread in:inbox"`)
 - `max_emails` — How many unread emails to analyze (default 50)
 - `daily_log_doc_id` — Google Doc ID for the daily log (empty = skip logging)
 
@@ -85,7 +85,7 @@ Follow the prompt template in the file. Pass config values only:
 - OKR sheet ID and sheet names — from config
 - VIP senders — from config (`priority_signals.vip_senders`)
 - Noise strategy — from config
-- `inbox_query` — from config (default: `"is:unread"`)
+- `inbox_query` — from config (default: `"is:unread in:inbox"`)
 
 The sub-agent fetches inbox, tasks, and OKRs itself. **Do NOT pass raw data.**
 
@@ -494,7 +494,7 @@ priority_signals:
     # Department heads
     - dept_head@company.com
 
-inbox_query: "is:unread"
+inbox_query: "is:unread in:inbox"
 max_emails: 50
 
 daily_log_doc_id: ""
@@ -506,7 +506,7 @@ Common `gws` commands used during triage:
 
 | Action | Command |
 |--------|---------|
-| List unread | `gws gmail list --max 50 --query "is:unread"` |
+| List unread | `gws gmail list --max 50 --query "is:unread in:inbox"` |
 | Read message | `gws gmail read <message-id>` |
 | Read thread | `gws gmail thread <thread-id>` |
 | Archive thread | `gws gmail archive-thread <thread-id> --quiet` |
