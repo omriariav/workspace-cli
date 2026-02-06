@@ -139,9 +139,25 @@ Starting triage.
 - Archives calendar invite emails (Invitation:, Updated Invitation:, Canceled: from calendar-notification@google.com)
 - Writes `prefiltered.json` (remaining) and `auto_handled.json` (archived with reasons)
 
+### Enrich emails (deterministic tags)
+
+After pre-filtering, run enrichment to add deterministic tags:
+
+```bash
+scripts/morning-enrich.sh "$SCRATCHPAD_DIR/morning" ~/.config/gws/inbox-skill.yaml
+```
+
+This reads `prefiltered.json` + `calendar.json` + config, and writes `enriched.json` with tags:
+- `noise_signal`: "promotions" if CATEGORY_PROMOTIONS label
+- `vip_sender`: true if sender matches VIP list
+- `starred`: true if STARRED label
+- `is_thread`: true if multi-message thread
+- `calendar_match`: matching meeting title
+
 ### Output files
 
-- `prefiltered.json` — remaining emails for AI classification (OOO/invites removed)
+- `prefiltered.json` — remaining emails after OOO/invite removal
+- `enriched.json` — emails with deterministic tags for AI classification
 - `auto_handled.json` — items archived by pre-filter with reasons
 - `classified.json` — classification results from background agent
 - `inbox.json` — original unread inbox emails
@@ -151,7 +167,7 @@ Starting triage.
 
 ## Step 3: Classify (Background Agent)
 
-The background agent classifies all remaining emails using the rules from `skills/morning/prompts/triage-agent.md`. This happens as part of the background agent launched in Step 2 — the main agent does NOT classify.
+The background agent classifies enriched emails using the rules from `skills/morning/prompts/triage-agent.md`. This happens as part of the background agent launched in Step 2 — the main agent does NOT classify.
 
 The background agent returns a grouped JSON result (lean format — see `triage-agent.md`):
 - **`auto_handled`:** NOISE items — thread IDs + reason only (no subject/sender/matches)
