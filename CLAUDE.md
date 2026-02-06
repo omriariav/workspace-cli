@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.10.0** - Gmail label support & morning skill optimization. Adds `--include-labels` flag to `gmail list` for surfacing label IDs. Morning scripts use labels from inbox data instead of extra API calls (~2-3s savings).
+**v1.10.0** - Gmail label support. Adds `--include-labels` flag to `gmail list` for surfacing label IDs in thread output.
 
 ## Roadmap
 
@@ -53,7 +53,6 @@ See [ROADMAP.md](ROADMAP.md) for planned features including:
 - Sheets: formatting, charts, named ranges, filters, conditional formatting
 - Docs: text formatting, lists
 - Gmail/Calendar/Tasks: additional operations
-- `/morning` command for daily briefings
 
 ## Implementation Patterns
 

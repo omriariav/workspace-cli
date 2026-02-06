@@ -258,28 +258,13 @@ gws calendar events --template '{{range .}}{{.summary}} at {{.start}}{{end}}'
 Allow custom commands via git-cloned extensions, similar to `bkt`'s `bkt-<name>` convention.
 
 ```bash
-gws extension install github.com/user/gws-morning
-gws morning  # runs extension
+gws extension install github.com/user/gws-calendar-sync
+gws calendar-sync  # runs extension
 ```
 
 ---
 
 ## Feature Ideas (P3)
-
-### /morning Command
-
-Daily briefing aggregator for AI agents.
-
-```bash
-gws morning
-# Combines: calendar events, unread emails, due tasks, recent Drive activity
-# Output: Structured JSON or text summary
-```
-
-**Open questions:**
-- Subcommand vs external skill?
-- Configurable filters (VIP senders, specific calendars)?
-- Include Drive comments/notifications?
 
 ### Forms Write (P3, C)
 
