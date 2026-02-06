@@ -1,6 +1,6 @@
 ---
 name: gws-gmail
-version: 1.0.0
+version: 1.1.0
 description: "Google Gmail CLI operations via gws. Use when users need to list emails, read messages, send email, manage labels, archive, or trash messages. Triggers: gmail, email, inbox, send email, mail, labels, archive, trash."
 metadata:
   short-description: Google Gmail CLI operations
@@ -164,6 +164,17 @@ gws gmail list --format text    # Human-readable text
 ```
 
 ## Tips for AI Agents
+
+### Search Strategy for Finding Emails to/from a Person
+- **Get the exact email first**: If using employee lookup tools, use the returned email address — don't guess the format (e.g., `lior.g@` not `lior.golan@`)
+- **Use broad search first**: `from:me lior.g@taboola.com subject:keyword` searches both to/cc fields
+- **Narrow with `to:` only if needed**: `to:` only matches the To header, not CC — use the bare email address to match both
+- **When `list` isn't enough**: The `message_id` in list results is the *latest* message in the thread (could be from anyone). To find a specific person's message, use `gws gmail thread <thread-id>` and scan all messages.
+
+### Common Gotchas
+- `list` returns the latest `message_id` per thread — reading it may show someone else's reply, not the user's email
+- Gmail `to:` operator only matches the To header, not CC recipients
+- For multi-message threads, always prefer `thread` over `read` when searching for a specific message within a conversation
 
 - Always use `--format json` (the default) for programmatic parsing
 - Use `gws gmail list` to get IDs: `message_id` for `read`/`label`/`archive`/`trash`, `thread_id` for `thread`
