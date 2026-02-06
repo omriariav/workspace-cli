@@ -54,11 +54,12 @@ fi
 VIP_SENDERS='[]'
 if [ -f "$CONFIG_FILE" ]; then
   # Parse YAML VIP senders list (simple grep-based extraction)
+  # Note: uses [[:space:]] instead of \s for macOS sed compatibility
   VIP_SENDERS=$(grep -A 100 'vip_senders:' "$CONFIG_FILE" 2>/dev/null | \
-    grep '^\s*-\s' | \
-    sed 's/^\s*-\s*//' | \
-    sed 's/#.*//' | \
-    sed 's/\s*$//' | \
+    grep '^[[:space:]]*-[[:space:]]' | \
+    sed -E 's/^[[:space:]]*-[[:space:]]*//' | \
+    sed -E 's/#.*//' | \
+    sed -E 's/[[:space:]]*$//' | \
     jq -R -s 'split("\n") | map(select(length > 0) | ascii_downcase)' 2>/dev/null || echo '[]')
 fi
 
@@ -67,6 +68,21 @@ fi
 CAL_TITLES='[]'
 if [ -f "$CALENDAR" ]; then
   CAL_TITLES=$(jq '[.events[]?.summary // empty] | map(ascii_downcase)' "$CALENDAR" 2>/dev/null || echo '[]')
+fi
+
+# --- Fetch promotions and starred thread IDs via targeted queries ---
+# gws gmail list doesn't return labels, so we query Gmail directly for these categories
+
+PROMO_IDS='[]'
+if command -v gws &>/dev/null; then
+  PROMO_IDS=$(gws gmail list --max 100 --query "category:promotions is:unread in:inbox" 2>/dev/null | \
+    jq '[.threads[]?.thread_id // empty]' 2>/dev/null || echo '[]')
+fi
+
+STARRED_IDS='[]'
+if command -v gws &>/dev/null; then
+  STARRED_IDS=$(gws gmail list --max 100 --query "is:starred is:unread in:inbox" 2>/dev/null | \
+    jq '[.threads[]?.thread_id // empty]' 2>/dev/null || echo '[]')
 fi
 
 # --- Enrich each email ---
@@ -87,12 +103,11 @@ for i in $(seq 0 $((TOTAL - 1))); do
   SENDER=$(echo "$ENTRY" | jq -r '(.sender // .from // "") | ascii_downcase')
   SUBJECT=$(echo "$ENTRY" | jq -r '(.subject // "") | ascii_downcase')
   MSG_COUNT=$(echo "$ENTRY" | jq -r '.message_count // 1')
-  LABELS=$(echo "$ENTRY" | jq -r '.labels // [] | map(ascii_downcase) | join(" ")')
-  SNIPPET=$(echo "$ENTRY" | jq -r '.snippet // ""')
+  THREAD_ID=$(echo "$ENTRY" | jq -r '.thread_id // ""')
 
-  # --- Tag: noise_signal ---
+  # --- Tag: noise_signal (via promotions query, not labels) ---
   NOISE_SIGNAL="null"
-  if echo "$LABELS" | grep -q "category_promotions"; then
+  if echo "$PROMO_IDS" | jq -e --arg tid "$THREAD_ID" 'index($tid) != null' >/dev/null 2>&1; then
     NOISE_SIGNAL='"promotions"'
     NOISE_COUNT=$((NOISE_COUNT + 1))
   fi
@@ -107,9 +122,9 @@ for i in $(seq 0 $((TOTAL - 1))); do
     fi
   fi
 
-  # --- Tag: starred ---
+  # --- Tag: starred (via starred query, not labels) ---
   STARRED="false"
-  if echo "$LABELS" | grep -q "starred"; then
+  if echo "$STARRED_IDS" | jq -e --arg tid "$THREAD_ID" 'index($tid) != null' >/dev/null 2>&1; then
     STARRED="true"
     STARRED_COUNT=$((STARRED_COUNT + 1))
   fi
