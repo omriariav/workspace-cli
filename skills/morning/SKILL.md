@@ -1,6 +1,6 @@
 ---
 name: gws-morning
-version: 0.5.0
+version: 0.6.0
 description: "AI-powered morning inbox briefing. Reads Gmail, Google Tasks, Calendar, and OKR sheets to produce a prioritized daily briefing with actionable recommendations. Triggers: /morning, morning briefing, inbox triage, email priorities, daily digest."
 metadata:
   short-description: AI inbox briefing with OKR/task matching
@@ -128,7 +128,7 @@ Starting triage.
 ### What the scripts do internally
 
 **Prefetch** (`morning-prefetch.sh`):
-- `gws gmail list --max <max_unread> --query "is:unread in:inbox"` — **MUST use `in:inbox`**
+- `gws gmail list --max <max_unread> --query "is:unread in:inbox" --include-labels` — **MUST use `in:inbox`**
 - `gws calendar events --days 2` — today + tomorrow
 - `gws tasks lists` → `gws tasks list <id>` for each list
 - `gws sheets read <okr_sheet_id> "<sheet_name>!A1:Q100"` — OKR data (cached 24h)
