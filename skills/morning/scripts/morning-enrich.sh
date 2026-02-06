@@ -70,19 +70,18 @@ if [ -f "$CALENDAR" ]; then
   CAL_TITLES=$(jq '[.events[]?.summary // empty] | map(ascii_downcase)' "$CALENDAR" 2>/dev/null || echo '[]')
 fi
 
-# --- Fetch promotions and starred thread IDs via targeted queries ---
-# gws gmail list doesn't return labels, so we query Gmail directly for these categories
+# --- Extract promotions and starred thread IDs from inbox labels ---
+# Labels are included in inbox data via --include-labels flag (no extra API calls needed)
 
+INBOX_FILE="$SCRATCHPAD_DIR/inbox.json"
 PROMO_IDS='[]'
-if command -v gws &>/dev/null; then
-  PROMO_IDS=$(gws gmail list --max 100 --query "category:promotions is:unread in:inbox" 2>/dev/null | \
-    jq '[.threads[]?.thread_id // empty]' 2>/dev/null || echo '[]')
+if [ -f "$INBOX_FILE" ]; then
+  PROMO_IDS=$(jq '[.threads[]? | select(.labels[]? == "CATEGORY_PROMOTIONS") | .thread_id]' "$INBOX_FILE" 2>/dev/null || echo '[]')
 fi
 
 STARRED_IDS='[]'
-if command -v gws &>/dev/null; then
-  STARRED_IDS=$(gws gmail list --max 100 --query "is:starred is:unread in:inbox" 2>/dev/null | \
-    jq '[.threads[]?.thread_id // empty]' 2>/dev/null || echo '[]')
+if [ -f "$INBOX_FILE" ]; then
+  STARRED_IDS=$(jq '[.threads[]? | select(.labels[]? == "STARRED") | .thread_id]' "$INBOX_FILE" 2>/dev/null || echo '[]')
 fi
 
 # --- Enrich each email ---
