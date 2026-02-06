@@ -1,10 +1,13 @@
+---
+name: label-resolver
+model: haiku
+agent_type: general-purpose
+description: Fuzzy-match and apply Gmail labels during triage using cached label list
+---
+
 # Label Resolver Prompt
 
-**Model:** `haiku` — simple lookup task, no complex reasoning needed.
-
-**Agent type:** `general-purpose`
-
-**Purpose:** Apply Gmail labels during triage without loading the full label list (4000+ labels) into the main conversation context. Handles fuzzy label matching, archiving, and marking as read.
+Apply Gmail labels during triage without loading the full label list (4000+ labels) into the main conversation context. Handles fuzzy label matching, archiving, and marking as read.
 
 ## Prompt Template
 
@@ -17,15 +20,19 @@ You are a Gmail label resolver agent. Your job: find the best matching label for
 - thread_id: <thread_id> (required if action is "archive")
 - desired_label: <label name — may be fuzzy, partial, or case-insensitive>
 - action: <"archive" | "mark-read" | "none">
+- labels_file: <path to cached labels JSON, optional>
 
 ## STEPS
 
-### 1. Fetch Labels
+### 1. Load Labels
 
-Run:
+If `labels_file` is provided, read labels from the cached file:
+cat <labels_file>
+
+Otherwise, fetch live:
 gws gmail labels --format json
 
-This returns all Gmail labels with id, name, and type.
+This returns all Gmail labels with id, name, and type. Using the cached file saves ~4k tokens and ~2-3s per operation.
 
 ### 2. Find Best Match
 

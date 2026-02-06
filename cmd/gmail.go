@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
@@ -162,6 +163,7 @@ func init() {
 	gmailListCmd.Flags().Int64("max", 10, "Maximum number of results (use --all for unlimited)")
 	gmailListCmd.Flags().String("query", "", "Gmail search query (e.g., 'is:unread', 'from:someone@example.com')")
 	gmailListCmd.Flags().Bool("all", false, "Fetch all matching results (may take time for large result sets)")
+	gmailListCmd.Flags().Bool("include-labels", false, "Include Gmail label IDs in output")
 
 	// Send flags
 	gmailSendCmd.Flags().String("to", "", "Recipient email address (required)")
@@ -204,6 +206,7 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 	maxResults, _ := cmd.Flags().GetInt64("max")
 	query, _ := cmd.Flags().GetString("query")
 	fetchAll, _ := cmd.Flags().GetBool("all")
+	includeLabels, _ := cmd.Flags().GetBool("include-labels")
 
 	// Gmail API has a hard limit of 500 results per request
 	const apiMaxPerPage int64 = 500
@@ -295,6 +298,21 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 				case "Date":
 					threadInfo["date"] = header.Value
 				}
+			}
+
+			if includeLabels {
+				labelSet := make(map[string]bool)
+				for _, m := range threadDetail.Messages {
+					for _, lbl := range m.LabelIds {
+						labelSet[lbl] = true
+					}
+				}
+				labels := make([]string, 0, len(labelSet))
+				for lbl := range labelSet {
+					labels = append(labels, lbl)
+				}
+				sort.Strings(labels)
+				threadInfo["labels"] = labels
 			}
 		}
 

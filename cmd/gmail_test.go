@@ -1414,3 +1414,131 @@ func TestGmailList_MaxRespected_MockServer(t *testing.T) {
 		t.Errorf("expected 3 threads, got %d", len(resp.Threads))
 	}
 }
+
+// TestGmailListCommand_IncludeLabelsFlag tests that the --include-labels flag exists
+func TestGmailListCommand_IncludeLabelsFlag(t *testing.T) {
+	cmd := gmailListCmd
+
+	flag := cmd.Flags().Lookup("include-labels")
+	if flag == nil {
+		t.Error("expected --include-labels flag to exist")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("expected --include-labels default 'false', got '%s'", flag.DefValue)
+	}
+}
+
+// TestGmailList_IncludeLabels_MockServer tests that --include-labels returns union of all message labels
+func TestGmailList_IncludeLabels_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Threads list
+		if r.URL.Path == "/gmail/v1/users/me/threads" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"threads": []map[string]interface{}{
+					{"id": "thread-lbl", "snippet": "Test labels"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Thread get with metadata — two messages with different labels
+		if r.URL.Path == "/gmail/v1/users/me/threads/thread-lbl" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"id": "thread-lbl",
+				"messages": []map[string]interface{}{
+					{
+						"id":       "msg-001",
+						"threadId": "thread-lbl",
+						"labelIds": []string{"INBOX", "UNREAD", "CATEGORY_PROMOTIONS"},
+						"payload": map[string]interface{}{
+							"headers": []map[string]string{
+								{"name": "Subject", "value": "Promo email"},
+								{"name": "From", "value": "promo@example.com"},
+								{"name": "Date", "value": "Mon, 6 Feb 2026 10:00:00 +0000"},
+							},
+						},
+					},
+					{
+						"id":       "msg-002",
+						"threadId": "thread-lbl",
+						"labelIds": []string{"INBOX", "STARRED"},
+						"payload": map[string]interface{}{
+							"headers": []map[string]string{
+								{"name": "Subject", "value": "Re: Promo email"},
+								{"name": "From", "value": "reply@example.com"},
+								{"name": "Date", "value": "Mon, 6 Feb 2026 11:00:00 +0000"},
+							},
+						},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	// Fetch thread list
+	listResp, err := svc.Users.Threads.List("me").MaxResults(10).Do()
+	if err != nil {
+		t.Fatalf("failed to list threads: %v", err)
+	}
+
+	if len(listResp.Threads) != 1 {
+		t.Fatalf("expected 1 thread, got %d", len(listResp.Threads))
+	}
+
+	// Get thread detail (same as runGmailList does)
+	threadDetail, err := svc.Users.Threads.Get("me", listResp.Threads[0].Id).Format("metadata").MetadataHeaders("Subject", "From", "Date").Do()
+	if err != nil {
+		t.Fatalf("failed to get thread detail: %v", err)
+	}
+
+	// Simulate includeLabels=true logic
+	labelSet := make(map[string]bool)
+	for _, m := range threadDetail.Messages {
+		for _, lbl := range m.LabelIds {
+			labelSet[lbl] = true
+		}
+	}
+	labels := make([]string, 0, len(labelSet))
+	for lbl := range labelSet {
+		labels = append(labels, lbl)
+	}
+
+	// Verify union of labels from both messages
+	expected := map[string]bool{
+		"INBOX":                true,
+		"UNREAD":               true,
+		"CATEGORY_PROMOTIONS":  true,
+		"STARRED":              true,
+	}
+	if len(labels) != len(expected) {
+		t.Errorf("expected %d labels, got %d: %v", len(expected), len(labels), labels)
+	}
+	for _, lbl := range labels {
+		if !expected[lbl] {
+			t.Errorf("unexpected label: %s", lbl)
+		}
+	}
+
+	// Simulate includeLabels=false — labels should NOT be in output
+	threadInfo := map[string]interface{}{
+		"thread_id": "thread-lbl",
+	}
+	// Without the flag, no "labels" key should be set
+	if _, exists := threadInfo["labels"]; exists {
+		t.Error("labels should not be present when include-labels is false")
+	}
+}

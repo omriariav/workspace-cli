@@ -1,6 +1,6 @@
 ---
 name: gws-morning
-version: 0.5.0
+version: 0.6.0
 description: "AI-powered morning inbox briefing. Reads Gmail, Google Tasks, Calendar, and OKR sheets to produce a prioritized daily briefing with actionable recommendations. Triggers: /morning, morning briefing, inbox triage, email priorities, daily digest."
 metadata:
   short-description: AI inbox briefing with OKR/task matching
@@ -54,6 +54,16 @@ The config contains:
 - `max_unread` — How many unread inbox emails to fetch (default 50, configurable)
 - `inbox_query` — Gmail search query (default: `"is:unread in:inbox"`)
 - `daily_log_doc_id` — Google Doc ID for the daily log (empty = skip logging)
+
+### Cache label list
+
+Fetch the Gmail label list once at session start to avoid re-fetching on every label operation:
+
+```bash
+gws gmail labels > "$SCRATCHPAD_DIR/morning/labels.json"
+```
+
+This cached list is passed to the label-resolver sub-agent when the user picks "Label & archive" during triage. Saves ~4k tokens + 2-3s per label operation vs fetching each time.
 
 ## Step 2: Launch Background Data Gathering
 
@@ -118,7 +128,7 @@ Starting triage.
 ### What the scripts do internally
 
 **Prefetch** (`morning-prefetch.sh`):
-- `gws gmail list --max <max_unread> --query "is:unread in:inbox"` — **MUST use `in:inbox`**
+- `gws gmail list --max <max_unread> --query "is:unread in:inbox" --include-labels` — **MUST use `in:inbox`**
 - `gws calendar events --days 2` — today + tomorrow
 - `gws tasks lists` → `gws tasks list <id>` for each list
 - `gws sheets read <okr_sheet_id> "<sheet_name>!A1:Q100"` — OKR data (cached 24h)
@@ -129,9 +139,25 @@ Starting triage.
 - Archives calendar invite emails (Invitation:, Updated Invitation:, Canceled: from calendar-notification@google.com)
 - Writes `prefiltered.json` (remaining) and `auto_handled.json` (archived with reasons)
 
+### Enrich emails (deterministic tags)
+
+After pre-filtering, run enrichment to add deterministic tags:
+
+```bash
+scripts/morning-enrich.sh "$SCRATCHPAD_DIR/morning" ~/.config/gws/inbox-skill.yaml
+```
+
+This reads `prefiltered.json` + `calendar.json` + config, and writes `enriched.json` with tags:
+- `noise_signal`: "promotions" if CATEGORY_PROMOTIONS label
+- `vip_sender`: true if sender matches VIP list
+- `starred`: true if STARRED label
+- `is_thread`: true if multi-message thread
+- `calendar_match`: matching meeting title
+
 ### Output files
 
-- `prefiltered.json` — remaining emails for AI classification (OOO/invites removed)
+- `prefiltered.json` — remaining emails after OOO/invite removal
+- `enriched.json` — emails with deterministic tags for AI classification
 - `auto_handled.json` — items archived by pre-filter with reasons
 - `classified.json` — classification results from background agent
 - `inbox.json` — original unread inbox emails
@@ -141,20 +167,18 @@ Starting triage.
 
 ## Step 3: Classify (Background Agent)
 
-The background agent classifies all remaining emails using the rules from `skills/morning/prompts/triage-agent.md`. This happens as part of the background agent launched in Step 2 — the main agent does NOT classify.
+The background agent classifies enriched emails using the rules from `skills/morning/prompts/triage-agent.md`. This happens as part of the background agent launched in Step 2 — the main agent does NOT classify.
 
-For each email, the background agent determines:
-- **Classification:** ACT_NOW / REVIEW / NOISE
-- **Priority score:** 1-5 (highest signal, not additive)
-- **Summary:** 1-2 lines
-- **Matches:** OKR, task, or calendar match if any
-- **Recommended action**
+The background agent returns a grouped JSON result (lean format — see `triage-agent.md`):
+- **`auto_handled`:** NOISE items — thread IDs + reason only (no subject/sender/matches)
+- **`needs_input`:** ACT_NOW and REVIEW items with priority, summary, sender, subject, non-null matches, and `suggested_label`
+- **`batch_stats`:** Total counts per category
 
-The background agent writes results to `classified.json` and archives all NOISE items via `gws gmail archive-thread <thread_id> --quiet`.
+The main agent uses `auto_handled` thread IDs for bulk archive via `scripts/bulk-gmail.sh archive-thread`, and `needs_input` for guided triage.
 
 ## Step 4: Collect Results
 
-When the background agent completes, the main agent reads `classified.json` and presents the auto-action summary.
+When the background agent completes, the main agent bulk-archives NOISE items and presents the auto-action summary.
 
 ### Classification Categories
 
@@ -282,7 +306,7 @@ Use AskUserQuestion with **4 options**. Pick the best 4 from the pool based on c
 
 **Standard options (always include):**
 - **Mark as read** — Mark read, keep in inbox: `gws gmail label <message_id> --remove UNREAD --quiet`
-- **Archive** — Remove from inbox: `gws gmail archive-thread <thread_id> --quiet`
+- **Archive** — If `suggested_label` exists, apply label first then archive: `gws gmail label <message_id> --add "<suggested_label>" --quiet` followed by `gws gmail archive-thread <thread_id> --quiet`. Show: "Archived with label: <label>". If no suggested label, just archive. User can override with "Other" to specify a different label.
 - **Skip** — Move to next item (keeps email **unread**)
 
 **Rotate the 4th slot based on context:**
@@ -290,7 +314,7 @@ Use AskUserQuestion with **4 options**. Pick the best 4 from the pool based on c
 - **Reply** — Compose a reply: fetch email via `gws gmail read <message_id>`, draft a response using conversation context (OKR/task matches, deep-dive insights if available), present draft for user approval, then `gws gmail reply <message_id> --body "<reply>"`. Thread ID, subject, and headers are auto-populated.
 - **Reply All** — Same as Reply but to all recipients: `gws gmail reply <message_id> --body "<reply>" --all`
 - **Forward** — Forward to a colleague: ask who, fetch email content (`read` for single message, `thread` for conversations), compose brief forwarding context (why forwarding + 1-2 key points, include OKR/task match if relevant), then `gws gmail send --to "<email>" --subject "Fwd: <subject>" --body "<your note>\n\n---\nOriginal message:\n<content>"`
-- **Label & archive** — Spawn label-resolver sub-agent (`skills/morning/prompts/label-resolver.md`) with `action=archive`
+- **Label & archive** — Spawn label-resolver sub-agent (`skills/morning/prompts/label-resolver.md`) with `action=archive` and `labels_file="$SCRATCHPAD_DIR/morning/labels.json"` (cached from Step 1)
 - **Add task & archive** — Ask for title, run `gws tasks create`, then archive
 - **Open in browser** — Run `open "https://mail.google.com/mail/u/0/#inbox/<thread_id>"`
 
@@ -329,10 +353,9 @@ skills/morning/scripts/bulk-gmail.sh mark-read <id1> <id2> ...
 Spawn a sub-agent to fetch, summarize, and cross-reference the email.
 
 **Prompt file:** `skills/morning/prompts/deep-dive.md`
-**Model:** `sonnet` — **always use sonnet** (haiku is unreliable for email reading)
-**Agent type:** `general-purpose`
+**Model/agent_type:** defined in prompt frontmatter (`sonnet` / `general-purpose`)
 
-Pass: email ID, message count (for `read` vs `thread`), OKR/task/calendar context.
+Pass: **user context** (name, email, company, role/team), email ID, message count (for `read` vs `thread`), OKR/task/calendar context.
 
 The sub-agent returns a structured brief. Present it and ask what to do next:
 - **Open comment/doc** — open direct link (if available)
@@ -615,5 +638,6 @@ Common `gws` commands used during triage:
 
 ### Label Operations
 - Gmail labels are resolved by **display name** (case-insensitive), not by internal ID.
-- For label operations during triage, use the **label-resolver sub-agent** (`skills/morning/prompts/label-resolver.md`) to avoid loading the full label list (4000+ labels) into the main context.
+- **Labels are cached at session start** (Step 1) in `$SCRATCHPAD_DIR/morning/labels.json`. Pass `labels_file` to the label-resolver sub-agent to avoid re-fetching on every label operation (~4k tokens + 2-3s saved per operation).
+- For label operations during triage, use the **label-resolver sub-agent** (`skills/morning/prompts/label-resolver.md`) — keeps the full label list (4000+ labels) out of the main context.
 - Common label patterns: `gws gmail label <id> --add "STARRED"`, `gws gmail label <id> --remove "UNREAD"`

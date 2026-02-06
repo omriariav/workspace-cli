@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.9.0** - Gmail pagination & slides documentation. Adds `--all` flag to `gmail list` for fetching >500 results via pagination. Enhanced slides SKILL.md with styling tips and workflow examples.
+**v1.10.0** - Gmail label support & morning skill optimization. Adds `--include-labels` flag to `gmail list` for surfacing label IDs. Morning scripts use labels from inbox data instead of extra API calls (~2-3s savings).
 
 ## Roadmap
 

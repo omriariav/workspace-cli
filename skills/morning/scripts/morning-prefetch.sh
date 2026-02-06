@@ -105,7 +105,7 @@ okr_cache_fresh() {
 
 # Inbox
 (
-  gws gmail list --max "$MAX_EMAILS" --query "is:unread in:inbox" > "$OUTPUT_DIR/inbox.json" 2> "$OUTPUT_DIR/inbox.err"
+  gws gmail list --max "$MAX_EMAILS" --query "is:unread in:inbox" --include-labels > "$OUTPUT_DIR/inbox.json" 2> "$OUTPUT_DIR/inbox.err"
 ) &
 
 # Calendar

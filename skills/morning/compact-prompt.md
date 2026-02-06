@@ -1,8 +1,12 @@
+---
+name: compact-prompt
+type: template
+description: Session resumption template for /morning triage. Not a sub-agent.
+---
+
 # /morning Compact Prompt
 
 Use this when context runs out during a `/morning` triage session. Copy the template below, fill in the state from the conversation, and paste it to resume.
-
----
 
 ## Template
 

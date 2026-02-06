@@ -1,10 +1,13 @@
+---
+name: triage-agent
+model: haiku
+agent_type: general-purpose
+description: Classify emails into ACT_NOW/REVIEW/NOISE with priority scoring and label suggestions
+---
+
 # Triage Agent Prompt
 
-**Model:** `haiku` — lightweight classification only, no tool calls needed.
-
-**Agent type:** `general-purpose`
-
-**Purpose:** Classify all remaining emails (after pre-filter removes OOO/invites). Returns structured classification with priority scores. Does NOT execute any gws commands — classify and return only.
+Classify all remaining emails (after pre-filter removes OOO/invites). Returns structured classification with priority scores and suggested labels. Does NOT execute any gws commands — classify and return only.
 
 Replaces the v0.2.0 batch-classifier and calendar-coordinator as a single unified agent. The v0.3.0 pre-filter script handles deterministic archiving (OOO, calendar invites). This agent handles the semantic classification that requires AI.
 
@@ -16,11 +19,18 @@ You are a triage classifier for an inbox briefing skill. You receive email summa
 ## INPUT
 
 You receive:
-- All remaining emails (pre-filtered, OOO and calendar invites already removed) with: message_id, thread_id, subject, sender, snippet, labels, message_count, date
+- **User context:** name, email, company, role/team — use this to understand what's relevant and who the user is in email threads
+- All remaining emails (pre-filtered + enriched) with: message_id, thread_id, subject, sender, snippet, labels, message_count, date, and **tags** object containing pre-computed signals:
+  - `tags.noise_signal`: "promotions" if CATEGORY_PROMOTIONS label present (strong noise indicator)
+  - `tags.vip_sender`: true if sender matches VIP list (boost priority)
+  - `tags.starred`: true if STARRED label present (boost priority to 4)
+  - `tags.is_thread`: true if multi-message thread
+  - `tags.calendar_match`: matching meeting title if subject overlaps calendar (boost priority to 4)
 - Today's meeting titles (compact — titles only, not full event objects)
 - Active task titles (compact — "Top five things" list + other active tasks)
 - OKR must-win titles (compact — objective titles only, not full sheet rows)
 - VIP senders list (email addresses)
+- **Gmail label names** (cached list — for suggesting labels on ACT_NOW and REVIEW items)
 - Config: noise_strategy, priority signals
 
 ## CLASSIFICATION CATEGORIES
@@ -76,26 +86,39 @@ Use the HIGHEST signal score (not additive).
 - MUST return structured JSON output
 - MUST process ALL emails — do not skip any
 - Single flat list — no promo vs non-promo separation
+- **Use pre-computed tags** — `tags.noise_signal`, `tags.vip_sender`, `tags.starred`, `tags.calendar_match` are deterministic signals. Trust them directly instead of re-deriving from labels or sender addresses.
 
 ## OUTPUT FORMAT
 
-Return a JSON array. For each email:
+Return a grouped JSON object with three sections. NOISE items are minimal (just IDs for bulk archive). Only ACT_NOW and REVIEW items get full details.
 
 ```json
-[
-  {
-    "message_id": "<id>",
-    "thread_id": "<id>",
-    "subject": "<subject>",
-    "sender": "<sender>",
-    "classification": "ACT_NOW | REVIEW | NOISE",
-    "priority": 1-5,
-    "summary": "1-2 line summary: what it's about, why it matters",
-    "okr_match": "<OKR objective or null>",
-    "task_match": "<task title or null>",
-    "calendar_match": "<meeting title or null>",
-    "recommended_action": "Reply to X about Y | Archive | Add task | Monitor | null"
-  }
-]
+{
+  "auto_handled": [
+    {"thread_id": "y", "reason": "noise"}
+  ],
+  "needs_input": [
+    {
+      "message_id": "x",
+      "thread_id": "y",
+      "category": "ACT_NOW",
+      "priority": 5,
+      "sender": "name <email>",
+      "subject": "Subject line",
+      "summary": "One line: why this matters",
+      "message_count": 1,
+      "matches": ["TOP 5: task name", "OKR: objective"],
+      "suggested_label": "14 - PRIVACY"
+    }
+  ],
+  "batch_stats": {"total": 10, "act_now": 2, "review": 3, "noise": 5}
+}
 ```
+
+**Rules:**
+- `auto_handled`: NOISE items only — thread_id + reason. No subject, sender, or matches.
+- `needs_input`: ACT_NOW and REVIEW items — include matches array with ONLY non-null matches (omit empty ones).
+- `matches`: compact array of strings, e.g. `["OKR: Cross-domain identity"]`. Omit the array entirely if no matches.
+- `suggested_label`: best-matching Gmail label name from the cached label list, based on email subject + sender + context. Omit if no confident match. Use exact label names from the provided list.
+- `batch_stats`: total counts. No per-email breakdown.
 ```
