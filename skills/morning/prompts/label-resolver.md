@@ -1,10 +1,13 @@
+---
+name: label-resolver
+model: haiku
+agent_type: general-purpose
+description: Fuzzy-match and apply Gmail labels during triage using cached label list
+---
+
 # Label Resolver Prompt
 
-**Model:** `haiku` — simple lookup task, no complex reasoning needed.
-
-**Agent type:** `general-purpose`
-
-**Purpose:** Apply Gmail labels during triage without loading the full label list (4000+ labels) into the main conversation context. Handles fuzzy label matching, archiving, and marking as read.
+Apply Gmail labels during triage without loading the full label list (4000+ labels) into the main conversation context. Handles fuzzy label matching, archiving, and marking as read.
 
 ## Prompt Template
 

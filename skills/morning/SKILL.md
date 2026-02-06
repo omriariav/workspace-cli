@@ -155,7 +155,7 @@ The background agent classifies all remaining emails using the rules from `skill
 
 The background agent returns a grouped JSON result (lean format — see `triage-agent.md`):
 - **`auto_handled`:** NOISE items — thread IDs + reason only (no subject/sender/matches)
-- **`needs_input`:** ACT_NOW and REVIEW items with priority, summary, sender, subject, and non-null matches
+- **`needs_input`:** ACT_NOW and REVIEW items with priority, summary, sender, subject, non-null matches, and `suggested_label`
 - **`batch_stats`:** Total counts per category
 
 The main agent uses `auto_handled` thread IDs for bulk archive via `scripts/bulk-gmail.sh archive-thread`, and `needs_input` for guided triage.
@@ -290,7 +290,7 @@ Use AskUserQuestion with **4 options**. Pick the best 4 from the pool based on c
 
 **Standard options (always include):**
 - **Mark as read** — Mark read, keep in inbox: `gws gmail label <message_id> --remove UNREAD --quiet`
-- **Archive** — Remove from inbox: `gws gmail archive-thread <thread_id> --quiet`
+- **Archive** — If `suggested_label` exists, apply label first then archive: `gws gmail label <message_id> --add "<suggested_label>" --quiet` followed by `gws gmail archive-thread <thread_id> --quiet`. Show: "Archived with label: <label>". If no suggested label, just archive. User can override with "Other" to specify a different label.
 - **Skip** — Move to next item (keeps email **unread**)
 
 **Rotate the 4th slot based on context:**
@@ -337,10 +337,9 @@ skills/morning/scripts/bulk-gmail.sh mark-read <id1> <id2> ...
 Spawn a sub-agent to fetch, summarize, and cross-reference the email.
 
 **Prompt file:** `skills/morning/prompts/deep-dive.md`
-**Model:** `sonnet` — **always use sonnet** (haiku is unreliable for email reading)
-**Agent type:** `general-purpose`
+**Model/agent_type:** defined in prompt frontmatter (`sonnet` / `general-purpose`)
 
-Pass: email ID, message count (for `read` vs `thread`), OKR/task/calendar context.
+Pass: **user context** (name, email, company, role/team), email ID, message count (for `read` vs `thread`), OKR/task/calendar context.
 
 The sub-agent returns a structured brief. Present it and ask what to do next:
 - **Open comment/doc** — open direct link (if available)
