@@ -79,23 +79,33 @@ Use the HIGHEST signal score (not additive).
 
 ## OUTPUT FORMAT
 
-Return a JSON array. For each email:
+Return a grouped JSON object with three sections. NOISE items are minimal (just IDs for bulk archive). Only ACT_NOW and REVIEW items get full details.
 
 ```json
-[
-  {
-    "message_id": "<id>",
-    "thread_id": "<id>",
-    "subject": "<subject>",
-    "sender": "<sender>",
-    "classification": "ACT_NOW | REVIEW | NOISE",
-    "priority": 1-5,
-    "summary": "1-2 line summary: what it's about, why it matters",
-    "okr_match": "<OKR objective or null>",
-    "task_match": "<task title or null>",
-    "calendar_match": "<meeting title or null>",
-    "recommended_action": "Reply to X about Y | Archive | Add task | Monitor | null"
-  }
-]
+{
+  "auto_handled": [
+    {"thread_id": "y", "reason": "noise"}
+  ],
+  "needs_input": [
+    {
+      "message_id": "x",
+      "thread_id": "y",
+      "category": "ACT_NOW",
+      "priority": 5,
+      "sender": "name <email>",
+      "subject": "Subject line",
+      "summary": "One line: why this matters",
+      "message_count": 1,
+      "matches": ["TOP 5: task name", "OKR: objective"]
+    }
+  ],
+  "batch_stats": {"total": 10, "act_now": 2, "review": 3, "noise": 5}
+}
 ```
+
+**Rules:**
+- `auto_handled`: NOISE items only — thread_id + reason. No subject, sender, or matches.
+- `needs_input`: ACT_NOW and REVIEW items — include matches array with ONLY non-null matches (omit empty ones).
+- `matches`: compact array of strings, e.g. `["OKR: Cross-domain identity"]`. Omit the array entirely if no matches.
+- `batch_stats`: total counts. No per-email breakdown.
 ```
