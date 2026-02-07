@@ -344,7 +344,7 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 	services := map[string]serviceCommands{
 		"gmail": {
 			parentCmd:   gmailCmd,
-			subcommands: []string{"list", "read", "send", "labels", "label", "archive", "archive-thread", "trash", "thread"},
+			subcommands: []string{"list", "read", "send", "labels", "label", "archive", "archive-thread", "trash", "thread", "reply", "event-id"},
 		},
 		"calendar": {
 			parentCmd:   calendarCmd,
@@ -374,6 +374,12 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 				"info", "list", "read", "create",
 				"add-slide", "delete-slide", "duplicate-slide",
 				"add-shape", "add-image", "add-text", "replace-text",
+				"delete-object", "delete-text",
+				"update-text-style", "update-transform",
+				"create-table", "insert-table-rows", "delete-table-row",
+				"update-table-cell", "update-table-border",
+				"update-paragraph-style", "update-shape",
+				"reorder-slides",
 			},
 		},
 		"tasks": {
@@ -542,6 +548,25 @@ func TestReferenceFiles_DocumentGlobalFlags(t *testing.T) {
 			}
 			if !strings.Contains(content, "--format") {
 				t.Error("references/commands.md missing --format global flag")
+			}
+		})
+	}
+}
+
+func TestReferenceFiles_DocumentQuietFlag(t *testing.T) {
+	base := skillsDir(t)
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search"}
+
+	for _, svc := range services {
+		t.Run(svc, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(base, svc, "references", "commands.md"))
+			if err != nil {
+				t.Fatalf("failed to read file: %v", err)
+			}
+			content := string(data)
+
+			if !strings.Contains(content, "--quiet") {
+				t.Error("references/commands.md missing --quiet global flag")
 			}
 		})
 	}

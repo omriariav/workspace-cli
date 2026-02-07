@@ -1,6 +1,6 @@
 ---
 name: gws-gmail
-version: 1.0.0
+version: 1.1.0
 description: "Google Gmail CLI operations via gws. Use when users need to list emails, read messages, send email, manage labels, archive, or trash messages. Triggers: gmail, email, inbox, send email, mail, labels, archive, trash."
 metadata:
   short-description: Google Gmail CLI operations
@@ -33,6 +33,8 @@ For initial setup, see the `gws-auth` skill.
 | Task | Command |
 |------|---------|
 | List recent emails | `gws gmail list` |
+| List with labels | `gws gmail list --include-labels` |
+| List all matches | `gws gmail list --query "label:work" --all` |
 | List unread emails | `gws gmail list --query "is:unread"` |
 | Search emails | `gws gmail list --query "from:user@example.com"` |
 | Read a message | `gws gmail read <message-id>` |
@@ -62,8 +64,10 @@ Lists recent email threads from your inbox. Each result includes:
 - `message_count` — Number of messages in the thread
 
 **Flags:**
-- `--max int` — Maximum number of results (default 10)
+- `--max int` — Maximum number of results (default 10, use `--all` for unlimited)
+- `--all` — Fetch all matching results (may take time for large result sets)
 - `--query string` — Gmail search query (e.g., `is:unread`, `from:someone@example.com`)
+- `--include-labels` — Include Gmail label IDs in the output for each thread
 
 **Examples:**
 ```bash
@@ -71,6 +75,8 @@ gws gmail list --max 5
 gws gmail list --query "is:unread"
 gws gmail list --query "from:boss@company.com subject:urgent"
 gws gmail list --query "after:2024/01/01 has:attachment"
+gws gmail list --include-labels
+gws gmail list --query "label:work" --all
 ```
 
 ### thread — Read a full thread
@@ -212,3 +218,6 @@ gws gmail list --format text    # Human-readable text
 - Use `gws gmail archive-thread <thread-id>` to archive all messages in a conversation at once (archives + marks read)
 - To mark as read: `gws gmail label <id> --remove "UNREAD"`
 - To star a message: `gws gmail label <id> --add "STARRED"`
+- Use `--include-labels` with `list` to see which Gmail labels are applied to each thread
+- Use `--all` with `list` to fetch every matching result (bypasses the default 10 limit)
+- Use `--quiet` on any command to suppress JSON output (useful for scripted archive/label actions)
