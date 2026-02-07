@@ -10,6 +10,7 @@ Complete flag and option reference for `gws chat` commands.
 |------|------|---------|-------------|
 | `--config` | string | `~/.config/gws/config.yaml` | Config file path |
 | `--format` | string | `json` | Output format: `json` or `text` |
+| `--quiet` | bool | `false` | Suppress output (useful for scripted actions) |
 
 ## Prerequisites
 

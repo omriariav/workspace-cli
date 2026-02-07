@@ -177,3 +177,4 @@ gws docs read <doc-id> --format text    # Human-readable text
 - `replace` replaces ALL occurrences in the document, not just the first one
 - Document IDs can be extracted from Google Docs URLs: `docs.google.com/document/d/<ID>/edit`
 - For comments on a doc, use `gws drive comments <doc-id>`
+- Use `--quiet` on write operations to suppress JSON output in scripts

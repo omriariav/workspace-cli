@@ -214,3 +214,4 @@ gws sheets read <id> "A1:D10" --format text    # Human-readable text
 - `read --headers` (default true) uses the first row as JSON keys — disable with `--headers=false` for raw arrays
 - Spreadsheet IDs can be extracted from URLs: `docs.google.com/spreadsheets/d/<ID>/edit`
 - Unbounded ranges (`A:A`, `1:1`) are not supported for merge/unmerge/sort
+- Use `--quiet` on write/append/clear operations to suppress JSON output in scripts

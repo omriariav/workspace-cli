@@ -133,3 +133,4 @@ gws tasks list @default --format text    # Human-readable text
 - The default task list ID is `@default` — use this when users don't specify a list
 - Due dates accept both RFC3339 (`2024-02-01T00:00:00Z`) and simple date (`2024-02-01`) formats
 - Completed tasks are hidden by default; use `--show-completed` to include them
+- Use `--quiet` on create/update/complete operations to suppress JSON output in scripts
