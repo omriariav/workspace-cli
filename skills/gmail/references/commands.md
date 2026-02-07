@@ -12,6 +12,7 @@ These flags apply to all `gws gmail` commands:
 |------|------|---------|-------------|
 | `--config` | string | `~/.config/gws/config.yaml` | Config file path |
 | `--format` | string | `json` | Output format: `json` or `text` |
+| `--quiet` | bool | `false` | Suppress output (useful for scripted actions) |
 
 ---
 
@@ -25,8 +26,10 @@ Usage: gws gmail list [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--max` | int | 10 | Maximum number of results |
+| `--max` | int | 10 | Maximum number of results (use `--all` for unlimited) |
+| `--all` | bool | false | Fetch all matching results (may take time for large result sets) |
 | `--query` | string | | Gmail search query |
+| `--include-labels` | bool | false | Include Gmail label IDs in output |
 
 ### Output Fields (JSON)
 
@@ -38,6 +41,7 @@ Each thread includes:
 - `from` — Original sender
 - `date` — Date of first message
 - `snippet` — Preview text
+- `labels` — Array of label IDs (only when `--include-labels` is used)
 
 ### Gmail Search Query Syntax
 

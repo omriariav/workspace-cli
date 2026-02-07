@@ -337,6 +337,7 @@ gws slides list <id> --format text    # Human-readable text
 - Positions and sizes are in **points (PT)**: standard slide is 720x405 points
 - Presentation IDs can be extracted from URLs: `docs.google.com/presentation/d/<ID>/edit`
 - For comments on a presentation, use `gws drive comments <presentation-id>`
+- Use `--quiet` on update operations to suppress JSON output in scripts
 
 ### Styling
 - Colors are always hex format with `#` prefix: `--background-color "#005843"`, `--color "#FFFFFF"`
