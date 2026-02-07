@@ -15,7 +15,7 @@
 ## Features
 
 - **10+ Google services** — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Custom Search.
-- **Scriptable output** — `--format json` (default) or `--format text` for human-readable tables.
+- **Scriptable output** — `--format json` (default), `--format text` for human-readable tables, or `--quiet` to suppress output.
 - **OAuth2 + PKCE** — Secure browser-based auth with automatic token refresh and `0600` file permissions.
 - **Single auth flow** — Authenticate once to access all services; all scopes requested upfront.
 - **Lazy clients** — Service clients are initialized on-demand with mutex protection.
@@ -103,6 +103,7 @@ Add `--format text` to any command for human-readable output.
 | `gws gmail labels` | List all labels |
 | `gws gmail label <id>` | Add/remove labels (`--add`, `--remove`) |
 | `gws gmail archive <id>` | Archive message (remove from inbox) |
+| `gws gmail archive-thread <id>` | Archive all messages in thread (archives + marks read) |
 | `gws gmail trash <id>` | Move message to trash |
 
 ### Calendar
@@ -123,6 +124,7 @@ Add `--format text` to any command for human-readable output.
 | `gws tasks lists` | List task lists |
 | `gws tasks list <id>` | List tasks in a list (`--show-completed`) |
 | `gws tasks create` | Create task (`--title`, `--tasklist`, `--due`); accepts YYYY-MM-DD dates |
+| `gws tasks update <list> <task>` | Update task (`--title`, `--notes`, `--due`) |
 | `gws tasks complete <list> <task>` | Mark task as done |
 
 ### Drive
