@@ -1,6 +1,6 @@
 ---
 name: gws-slides
-version: 1.3.0
+version: 1.4.0
 description: "Google Slides CLI operations via gws. Use when users need to create, read, or edit Google Slides presentations. Triggers: slides, presentation, google slides, deck."
 metadata:
   short-description: Google Slides CLI operations
@@ -36,6 +36,7 @@ For initial setup, see the `gws-auth` skill.
 | List all slides | `gws slides list <id>` |
 | Read slide content | `gws slides read <id>` |
 | Read specific slide | `gws slides read <id> 3` |
+| Read with speaker notes | `gws slides read <id> --notes` |
 | Create presentation | `gws slides create --title "My Deck"` |
 | Add a slide | `gws slides add-slide <id> --title "Slide Title" --body "Content"` |
 | Add blank slide | `gws slides add-slide <id> --layout BLANK` |
@@ -45,6 +46,8 @@ For initial setup, see the `gws-auth` skill.
 | Add an image | `gws slides add-image <id> --slide-number 1 --url "https://..."` |
 | Add text to shape | `gws slides add-text <id> --object-id <obj-id> --text "Hello"` |
 | Add text to table cell | `gws slides add-text <id> --table-id <tbl-id> --row 0 --col 0 --text "Cell"` |
+| Add speaker notes | `gws slides add-text <id> --notes --slide-number 1 --text "Notes here"` |
+| Clear speaker notes | `gws slides delete-text <id> --notes --slide-number 1` |
 | Find and replace | `gws slides replace-text <id> --find "old" --replace "new"` |
 | Delete any element | `gws slides delete-object <id> --object-id <obj-id>` |
 | Clear text from shape | `gws slides delete-text <id> --object-id <obj-id>` |
@@ -64,24 +67,33 @@ For initial setup, see the `gws-auth` skill.
 ### info — Get presentation info
 
 ```bash
-gws slides info <presentation-id>
+gws slides info <presentation-id> [--notes]
 ```
+
+**Flags:**
+- `--notes` — Include speaker notes in output
 
 ### list — List all slides
 
 ```bash
-gws slides list <presentation-id>
+gws slides list <presentation-id> [--notes]
 ```
 
 Lists all slides with their content and object IDs.
 
+**Flags:**
+- `--notes` — Include speaker notes in output
+
 ### read — Read slide content
 
 ```bash
-gws slides read <presentation-id> [slide-number]
+gws slides read <presentation-id> [slide-number] [--notes]
 ```
 
 Reads text content. Omit slide number to read all slides. Slide numbers are **1-indexed**.
+
+**Flags:**
+- `--notes` — Include speaker notes in output
 
 ### create — Create a presentation
 
@@ -153,7 +165,7 @@ gws slides add-image <presentation-id> --url <image-url> [flags]
 - `--y float` — Y position in points (default: 100)
 - `--width float` — Width in points (default: 400; height auto-calculated)
 
-### add-text — Add text to shape or table cell
+### add-text — Add text to shape, table cell, or speaker notes
 
 ```bash
 # For shapes/text boxes:
@@ -161,13 +173,19 @@ gws slides add-text <presentation-id> --object-id <id> --text <text> [flags]
 
 # For table cells:
 gws slides add-text <presentation-id> --table-id <id> --row <n> --col <n> --text <text> [flags]
+
+# For speaker notes:
+gws slides add-text <presentation-id> --notes --slide-number <n> --text <text> [flags]
 ```
 
 **Flags:**
-- `--object-id string` — Shape/text box ID (mutually exclusive with --table-id)
+- `--object-id string` — Shape/text box ID (mutually exclusive with --table-id and --notes)
 - `--table-id string` — Table object ID (requires --row and --col)
 - `--row int` — Row index, 0-based (required with --table-id)
 - `--col int` — Column index, 0-based (required with --table-id)
+- `--notes` — Target speaker notes shape (mutually exclusive with --object-id and --table-id)
+- `--slide-id string` — Slide object ID (required with --notes)
+- `--slide-number int` — Slide number, 1-indexed (required with --notes)
 - `--text string` — Text to insert (required)
 - `--at int` — Position to insert at (0 = beginning)
 
@@ -194,14 +212,18 @@ gws slides delete-object <presentation-id> --object-id <id>
 
 Deletes shapes, images, tables, or any page element by object ID.
 
-### delete-text — Clear text from shape
+### delete-text — Clear text from shape or speaker notes
 
 ```bash
 gws slides delete-text <presentation-id> --object-id <id> [flags]
+gws slides delete-text <presentation-id> --notes --slide-number <n> [flags]
 ```
 
 **Flags:**
-- `--object-id string` — Shape containing text (required)
+- `--object-id string` — Shape containing text (required unless --notes)
+- `--notes` — Target speaker notes shape (alternative to --object-id)
+- `--slide-id string` — Slide object ID (required with --notes)
+- `--slide-number int` — Slide number, 1-indexed (required with --notes)
 - `--from int` — Start index (default: 0)
 - `--to int` — End index (if omitted, deletes to end)
 

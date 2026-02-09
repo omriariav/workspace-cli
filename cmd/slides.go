@@ -254,6 +254,11 @@ func init() {
 	slidesCmd.AddCommand(slidesUpdateShapeCmd)
 	slidesCmd.AddCommand(slidesReorderSlidesCmd)
 
+	// Notes flags for read commands
+	slidesInfoCmd.Flags().Bool("notes", false, "Include speaker notes in output")
+	slidesListCmd.Flags().Bool("notes", false, "Include speaker notes in output")
+	slidesReadCmd.Flags().Bool("notes", false, "Include speaker notes in output")
+
 	// Create flags
 	slidesCreateCmd.Flags().String("title", "", "Presentation title (required)")
 	slidesCreateCmd.MarkFlagRequired("title")
@@ -296,6 +301,9 @@ func init() {
 	slidesAddTextCmd.Flags().Int("col", -1, "Column index, 0-based (required with --table-id)")
 	slidesAddTextCmd.Flags().String("text", "", "Text to insert (required)")
 	slidesAddTextCmd.Flags().Int("at", 0, "Position to insert at (0 = beginning)")
+	slidesAddTextCmd.Flags().Bool("notes", false, "Target speaker notes shape (mutually exclusive with --object-id and --table-id)")
+	slidesAddTextCmd.Flags().String("slide-id", "", "Slide object ID (required with --notes)")
+	slidesAddTextCmd.Flags().Int("slide-number", 0, "Slide number, 1-indexed (required with --notes)")
 	slidesAddTextCmd.MarkFlagRequired("text")
 
 	// Replace-text flags
@@ -310,10 +318,12 @@ func init() {
 	slidesDeleteObjectCmd.MarkFlagRequired("object-id")
 
 	// Delete-text flags
-	slidesDeleteTextCmd.Flags().String("object-id", "", "Shape containing text (required)")
+	slidesDeleteTextCmd.Flags().String("object-id", "", "Shape containing text (required unless --notes)")
 	slidesDeleteTextCmd.Flags().Int("from", 0, "Start index (default 0)")
 	slidesDeleteTextCmd.Flags().Int("to", -1, "End index (if omitted, deletes to end)")
-	slidesDeleteTextCmd.MarkFlagRequired("object-id")
+	slidesDeleteTextCmd.Flags().Bool("notes", false, "Target speaker notes shape (alternative to --object-id)")
+	slidesDeleteTextCmd.Flags().String("slide-id", "", "Slide object ID (required with --notes)")
+	slidesDeleteTextCmd.Flags().Int("slide-number", 0, "Slide number, 1-indexed (required with --notes)")
 
 	// Update-text-style flags
 	slidesUpdateTextStyleCmd.Flags().String("object-id", "", "Shape containing text (required)")
@@ -442,6 +452,8 @@ func runSlidesInfo(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	includeNotes, _ := cmd.Flags().GetBool("notes")
+
 	// List slide IDs and titles
 	slideInfo := make([]map[string]interface{}, 0, len(presentation.Slides))
 	for i, slide := range presentation.Slides {
@@ -454,6 +466,13 @@ func runSlidesInfo(cmd *cobra.Command, args []string) error {
 		title := extractSlideTitle(slide)
 		if title != "" {
 			info["title"] = title
+		}
+
+		if includeNotes {
+			notes := extractSpeakerNotes(slide)
+			if notes != "" {
+				info["notes"] = notes
+			}
 		}
 
 		slideInfo = append(slideInfo, info)
@@ -484,6 +503,8 @@ func runSlidesList(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
 	}
 
+	includeNotes, _ := cmd.Flags().GetBool("notes")
+
 	slidesList := make([]map[string]interface{}, 0, len(presentation.Slides))
 	for i, slide := range presentation.Slides {
 		slideData := map[string]interface{}{
@@ -499,6 +520,13 @@ func runSlidesList(cmd *cobra.Command, args []string) error {
 
 		// Count elements
 		slideData["element_count"] = len(slide.PageElements)
+
+		if includeNotes {
+			notes := extractSpeakerNotes(slide)
+			if notes != "" {
+				slideData["notes"] = notes
+			}
+		}
 
 		slidesList = append(slidesList, slideData)
 	}
@@ -531,6 +559,8 @@ func runSlidesRead(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
 	}
 
+	includeNotes, _ := cmd.Flags().GetBool("notes")
+
 	// If slide number provided, read specific slide
 	if len(args) > 1 {
 		var slideNum int
@@ -543,13 +573,22 @@ func runSlidesRead(cmd *cobra.Command, args []string) error {
 		slide := presentation.Slides[slideNum-1]
 		text := extractSlideText(slide)
 
-		return p.Print(map[string]interface{}{
+		result := map[string]interface{}{
 			"slide":  slideNum,
 			"id":     slide.ObjectId,
 			"text":   text,
 			"title":  extractSlideTitle(slide),
 			"layout": slide.SlideProperties.LayoutObjectId,
-		})
+		}
+
+		if includeNotes {
+			notes := extractSpeakerNotes(slide)
+			if notes != "" {
+				result["notes"] = notes
+			}
+		}
+
+		return p.Print(result)
 	}
 
 	// Read all slides
@@ -564,6 +603,13 @@ func runSlidesRead(cmd *cobra.Command, args []string) error {
 		title := extractSlideTitle(slide)
 		if title != "" {
 			slideData["title"] = title
+		}
+
+		if includeNotes {
+			notes := extractSpeakerNotes(slide)
+			if notes != "" {
+				slideData["notes"] = notes
+			}
 		}
 
 		slidesContent = append(slidesContent, slideData)
@@ -647,6 +693,59 @@ func extractTableText(table *slides.Table) string {
 	}
 
 	return strings.Join(rows, "\n")
+}
+
+// extractSpeakerNotes extracts speaker notes text from a slide's notes page.
+func extractSpeakerNotes(slide *slides.Page) string {
+	if slide.SlideProperties == nil {
+		return ""
+	}
+	notesPage := slide.SlideProperties.NotesPage
+	if notesPage == nil {
+		return ""
+	}
+	if notesPage.NotesProperties == nil || notesPage.NotesProperties.SpeakerNotesObjectId == "" {
+		return ""
+	}
+
+	notesObjectID := notesPage.NotesProperties.SpeakerNotesObjectId
+	for _, element := range notesPage.PageElements {
+		if element.ObjectId == notesObjectID && element.Shape != nil {
+			return extractShapeText(element.Shape)
+		}
+	}
+	return ""
+}
+
+// getSpeakerNotesObjectID returns the object ID of the speaker notes shape for a slide.
+func getSpeakerNotesObjectID(slide *slides.Page) (string, error) {
+	if slide.SlideProperties == nil || slide.SlideProperties.NotesPage == nil {
+		return "", fmt.Errorf("slide has no notes page")
+	}
+	notesPage := slide.SlideProperties.NotesPage
+	if notesPage.NotesProperties == nil || notesPage.NotesProperties.SpeakerNotesObjectId == "" {
+		return "", fmt.Errorf("slide has no speaker notes shape")
+	}
+	return notesPage.NotesProperties.SpeakerNotesObjectId, nil
+}
+
+// findSlide resolves a slide from a presentation by --slide-id or --slide-number.
+func findSlide(presentation *slides.Presentation, slideIDFlag string, slideNumber int) (*slides.Page, error) {
+	if slideIDFlag != "" && slideNumber > 0 {
+		return nil, fmt.Errorf("specify only one of --slide-id or --slide-number, not both")
+	}
+	if slideIDFlag != "" {
+		for _, s := range presentation.Slides {
+			if s.ObjectId == slideIDFlag {
+				return s, nil
+			}
+		}
+		return nil, fmt.Errorf("slide with ID '%s' not found", slideIDFlag)
+	}
+	if slideNumber < 1 || slideNumber > len(presentation.Slides) {
+		return nil, fmt.Errorf("slide number %d out of range (1-%d)", slideNumber, len(presentation.Slides))
+	}
+	return presentation.Slides[slideNumber-1], nil
 }
 
 func runSlidesCreate(cmd *cobra.Command, args []string) error {
@@ -1264,13 +1363,26 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 	col, _ := cmd.Flags().GetInt("col")
 	text, _ := cmd.Flags().GetString("text")
 	insertionIndex, _ := cmd.Flags().GetInt("at")
+	notesMode, _ := cmd.Flags().GetBool("notes")
+	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
 
 	// Validate mutually exclusive flags (fail fast before network calls)
-	if objectID != "" && tableID != "" {
-		return p.PrintError(fmt.Errorf("cannot specify both --object-id and --table-id"))
+	modeCount := 0
+	if objectID != "" {
+		modeCount++
 	}
-	if objectID == "" && tableID == "" {
-		return p.PrintError(fmt.Errorf("must specify either --object-id or --table-id"))
+	if tableID != "" {
+		modeCount++
+	}
+	if notesMode {
+		modeCount++
+	}
+	if modeCount > 1 {
+		return p.PrintError(fmt.Errorf("--object-id, --table-id, and --notes are mutually exclusive"))
+	}
+	if modeCount == 0 {
+		return p.PrintError(fmt.Errorf("must specify --object-id, --table-id, or --notes"))
 	}
 
 	// Validate table cell mode requires row and col
@@ -1283,6 +1395,11 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Validate notes mode requires slide targeting
+	if notesMode && slideIDFlag == "" && slideNumber == 0 {
+		return p.PrintError(fmt.Errorf("--notes requires --slide-id or --slide-number"))
+	}
+
 	// Now create the client after validation passes
 	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
@@ -1293,6 +1410,25 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 	svc, err := factory.Slides()
 	if err != nil {
 		return p.PrintError(err)
+	}
+
+	// Resolve notes mode to an object ID
+	if notesMode {
+		presentation, err := svc.Presentations.Get(presentationID).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
+		}
+
+		slide, err := findSlide(presentation, slideIDFlag, slideNumber)
+		if err != nil {
+			return p.PrintError(err)
+		}
+
+		notesObjID, err := getSpeakerNotesObjectID(slide)
+		if err != nil {
+			return p.PrintError(fmt.Errorf("cannot target speaker notes: %w", err))
+		}
+		objectID = notesObjID
 	}
 
 	// Build the InsertText request
@@ -1319,9 +1455,12 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 		result["row"] = row
 		result["col"] = col
 	} else {
-		// Shape/text box mode
+		// Shape/text box mode (including resolved notes mode)
 		insertTextReq.ObjectId = objectID
 		result["object_id"] = objectID
+		if notesMode {
+			result["target"] = "speaker_notes"
+		}
 	}
 
 	requests := []*slides.Request{
@@ -1453,8 +1592,29 @@ func runSlidesDeleteObject(cmd *cobra.Command, args []string) error {
 
 func runSlidesDeleteText(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
-	ctx := context.Background()
 
+	presentationID := args[0]
+	objectID, _ := cmd.Flags().GetString("object-id")
+	fromIndex, _ := cmd.Flags().GetInt("from")
+	toIndex, _ := cmd.Flags().GetInt("to")
+	notesMode, _ := cmd.Flags().GetBool("notes")
+	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
+
+	// Validate: need either --object-id or --notes
+	if objectID == "" && !notesMode {
+		return p.PrintError(fmt.Errorf("must specify --object-id or --notes"))
+	}
+	if objectID != "" && notesMode {
+		return p.PrintError(fmt.Errorf("--object-id and --notes are mutually exclusive"))
+	}
+
+	// Validate notes mode requires slide targeting
+	if notesMode && slideIDFlag == "" && slideNumber == 0 {
+		return p.PrintError(fmt.Errorf("--notes requires --slide-id or --slide-number"))
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -1465,10 +1625,24 @@ func runSlidesDeleteText(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	presentationID := args[0]
-	objectID, _ := cmd.Flags().GetString("object-id")
-	fromIndex, _ := cmd.Flags().GetInt("from")
-	toIndex, _ := cmd.Flags().GetInt("to")
+	// Resolve notes mode to an object ID
+	if notesMode {
+		presentation, err := svc.Presentations.Get(presentationID).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
+		}
+
+		slide, err := findSlide(presentation, slideIDFlag, slideNumber)
+		if err != nil {
+			return p.PrintError(err)
+		}
+
+		notesObjID, err := getSpeakerNotesObjectID(slide)
+		if err != nil {
+			return p.PrintError(fmt.Errorf("cannot target speaker notes: %w", err))
+		}
+		objectID = notesObjID
+	}
 
 	startIdx := int64(fromIndex)
 	textRange := &slides.Range{

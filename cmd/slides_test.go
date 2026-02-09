@@ -732,14 +732,14 @@ func TestSlidesAddTextCommand_ValidationErrors(t *testing.T) {
 				"table-id":  "table-456",
 				"text":      "test",
 			},
-			expectedError: "cannot specify both --object-id and --table-id",
+			expectedError: "--object-id, --table-id, and --notes are mutually exclusive",
 		},
 		{
 			name: "missing both object-id and table-id",
 			flags: map[string]string{
 				"text": "test",
 			},
-			expectedError: "must specify either --object-id or --table-id",
+			expectedError: "must specify --object-id, --table-id, or --notes",
 		},
 		{
 			name: "missing row with table-id",
@@ -775,6 +775,9 @@ func TestSlidesAddTextCommand_ValidationErrors(t *testing.T) {
 			cmd.Flags().Set("col", "-1")
 			cmd.Flags().Set("text", "")
 			cmd.Flags().Set("at", "0")
+			cmd.Flags().Set("notes", "false")
+			cmd.Flags().Set("slide-id", "")
+			cmd.Flags().Set("slide-number", "0")
 
 			// Set test flags
 			for flag, value := range tt.flags {
@@ -801,6 +804,355 @@ func TestSlidesAddTextCommand_ValidationErrors(t *testing.T) {
 				t.Errorf("expected output containing %q, got %q", tt.expectedError, output)
 			}
 		})
+	}
+}
+
+// TestExtractSpeakerNotes tests extracting text from speaker notes
+func TestExtractSpeakerNotes(t *testing.T) {
+	slide := &slides.Page{
+		ObjectId: "slide-1",
+		SlideProperties: &slides.SlideProperties{
+			NotesPage: &slides.Page{
+				NotesProperties: &slides.NotesProperties{
+					SpeakerNotesObjectId: "notes-shape-1",
+				},
+				PageElements: []*slides.PageElement{
+					{
+						ObjectId: "notes-shape-1",
+						Shape: &slides.Shape{
+							Text: &slides.TextContent{
+								TextElements: []*slides.TextElement{
+									{TextRun: &slides.TextRun{Content: "These are my speaker notes"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	notes := extractSpeakerNotes(slide)
+	if notes != "These are my speaker notes" {
+		t.Errorf("expected 'These are my speaker notes', got '%s'", notes)
+	}
+}
+
+// TestExtractSpeakerNotes_Empty tests nil/missing notes page
+func TestExtractSpeakerNotes_Empty(t *testing.T) {
+	tests := []struct {
+		name  string
+		slide *slides.Page
+	}{
+		{"nil SlideProperties", &slides.Page{ObjectId: "s1"}},
+		{"nil NotesPage", &slides.Page{
+			ObjectId:        "s2",
+			SlideProperties: &slides.SlideProperties{},
+		}},
+		{"nil NotesProperties", &slides.Page{
+			ObjectId: "s3",
+			SlideProperties: &slides.SlideProperties{
+				NotesPage: &slides.Page{},
+			},
+		}},
+		{"empty SpeakerNotesObjectId", &slides.Page{
+			ObjectId: "s4",
+			SlideProperties: &slides.SlideProperties{
+				NotesPage: &slides.Page{
+					NotesProperties: &slides.NotesProperties{
+						SpeakerNotesObjectId: "",
+					},
+				},
+			},
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			notes := extractSpeakerNotes(tt.slide)
+			if notes != "" {
+				t.Errorf("expected empty string, got '%s'", notes)
+			}
+		})
+	}
+}
+
+// TestGetSpeakerNotesObjectID tests successful retrieval
+func TestGetSpeakerNotesObjectID(t *testing.T) {
+	slide := &slides.Page{
+		SlideProperties: &slides.SlideProperties{
+			NotesPage: &slides.Page{
+				NotesProperties: &slides.NotesProperties{
+					SpeakerNotesObjectId: "notes-shape-abc",
+				},
+			},
+		},
+	}
+
+	id, err := getSpeakerNotesObjectID(slide)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "notes-shape-abc" {
+		t.Errorf("expected 'notes-shape-abc', got '%s'", id)
+	}
+}
+
+// TestGetSpeakerNotesObjectID_NoNotesPage tests error case
+func TestGetSpeakerNotesObjectID_NoNotesPage(t *testing.T) {
+	tests := []struct {
+		name  string
+		slide *slides.Page
+	}{
+		{"nil SlideProperties", &slides.Page{}},
+		{"nil NotesPage", &slides.Page{
+			SlideProperties: &slides.SlideProperties{},
+		}},
+		{"nil NotesProperties", &slides.Page{
+			SlideProperties: &slides.SlideProperties{
+				NotesPage: &slides.Page{},
+			},
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := getSpeakerNotesObjectID(tt.slide)
+			if err == nil {
+				t.Error("expected error, got nil")
+			}
+		})
+	}
+}
+
+// TestSlidesReadCommand_NotesFlag tests that --notes flag exists on read
+func TestSlidesReadCommand_NotesFlag(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "read")
+	if cmd == nil {
+		t.Fatal("slides read command not found")
+	}
+	if cmd.Flags().Lookup("notes") == nil {
+		t.Error("expected --notes flag on read command")
+	}
+}
+
+// TestSlidesListCommand_NotesFlag tests that --notes flag exists on list
+func TestSlidesListCommand_NotesFlag(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "list")
+	if cmd == nil {
+		t.Fatal("slides list command not found")
+	}
+	if cmd.Flags().Lookup("notes") == nil {
+		t.Error("expected --notes flag on list command")
+	}
+}
+
+// TestSlidesInfoCommand_NotesFlag tests that --notes flag exists on info
+func TestSlidesInfoCommand_NotesFlag(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "info")
+	if cmd == nil {
+		t.Fatal("slides info command not found")
+	}
+	if cmd.Flags().Lookup("notes") == nil {
+		t.Error("expected --notes flag on info command")
+	}
+}
+
+// TestSlidesAddTextCommand_NotesValidation tests notes mode mutual exclusivity
+func TestSlidesAddTextCommand_NotesValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		flags         map[string]string
+		expectedError string
+	}{
+		{
+			name: "notes with object-id",
+			flags: map[string]string{
+				"object-id": "shape-123",
+				"notes":     "true",
+				"text":      "test",
+			},
+			expectedError: "--object-id, --table-id, and --notes are mutually exclusive",
+		},
+		{
+			name: "notes with table-id",
+			flags: map[string]string{
+				"table-id": "table-456",
+				"notes":    "true",
+				"text":     "test",
+			},
+			expectedError: "--object-id, --table-id, and --notes are mutually exclusive",
+		},
+		{
+			name: "notes without slide targeting",
+			flags: map[string]string{
+				"notes": "true",
+				"text":  "test",
+			},
+			expectedError: "--notes requires --slide-id or --slide-number",
+		},
+		{
+			name: "no mode specified",
+			flags: map[string]string{
+				"text": "test",
+			},
+			expectedError: "must specify --object-id, --table-id, or --notes",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := findSubcommand(slidesCmd, "add-text")
+			if cmd == nil {
+				t.Fatal("slides add-text command not found")
+			}
+
+			// Reset flags to defaults
+			cmd.Flags().Set("object-id", "")
+			cmd.Flags().Set("table-id", "")
+			cmd.Flags().Set("row", "-1")
+			cmd.Flags().Set("col", "-1")
+			cmd.Flags().Set("text", "")
+			cmd.Flags().Set("at", "0")
+			cmd.Flags().Set("notes", "false")
+			cmd.Flags().Set("slide-id", "")
+			cmd.Flags().Set("slide-number", "0")
+
+			for flag, value := range tt.flags {
+				if err := cmd.Flags().Set(flag, value); err != nil {
+					t.Fatalf("failed to set flag --%s: %v", flag, err)
+				}
+			}
+
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			_ = cmd.RunE(cmd, []string{"test-presentation-id"})
+
+			w.Close()
+			os.Stdout = oldStdout
+			captured, _ := io.ReadAll(r)
+			output := string(captured)
+
+			if !strings.Contains(output, tt.expectedError) {
+				t.Errorf("expected output containing %q, got %q", tt.expectedError, output)
+			}
+		})
+	}
+}
+
+// TestSlidesDeleteTextCommand_NotesValidation tests delete-text notes validation
+func TestSlidesDeleteTextCommand_NotesValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		flags         map[string]string
+		expectedError string
+	}{
+		{
+			name: "notes with object-id",
+			flags: map[string]string{
+				"object-id": "shape-123",
+				"notes":     "true",
+			},
+			expectedError: "--object-id and --notes are mutually exclusive",
+		},
+		{
+			name: "notes without slide targeting",
+			flags: map[string]string{
+				"notes": "true",
+			},
+			expectedError: "--notes requires --slide-id or --slide-number",
+		},
+		{
+			name:          "no mode specified",
+			flags:         map[string]string{},
+			expectedError: "must specify --object-id or --notes",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := findSubcommand(slidesCmd, "delete-text")
+			if cmd == nil {
+				t.Fatal("slides delete-text command not found")
+			}
+
+			// Reset flags to defaults
+			cmd.Flags().Set("object-id", "")
+			cmd.Flags().Set("from", "0")
+			cmd.Flags().Set("to", "-1")
+			cmd.Flags().Set("notes", "false")
+			cmd.Flags().Set("slide-id", "")
+			cmd.Flags().Set("slide-number", "0")
+
+			for flag, value := range tt.flags {
+				if err := cmd.Flags().Set(flag, value); err != nil {
+					t.Fatalf("failed to set flag --%s: %v", flag, err)
+				}
+			}
+
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			_ = cmd.RunE(cmd, []string{"test-presentation-id"})
+
+			w.Close()
+			os.Stdout = oldStdout
+			captured, _ := io.ReadAll(r)
+			output := string(captured)
+
+			if !strings.Contains(output, tt.expectedError) {
+				t.Errorf("expected output containing %q, got %q", tt.expectedError, output)
+			}
+		})
+	}
+}
+
+// TestFindSlide tests the findSlide helper
+func TestFindSlide(t *testing.T) {
+	pres := &slides.Presentation{
+		Slides: []*slides.Page{
+			{ObjectId: "slide-a"},
+			{ObjectId: "slide-b"},
+		},
+	}
+
+	// By slide ID
+	s, err := findSlide(pres, "slide-b", 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.ObjectId != "slide-b" {
+		t.Errorf("expected slide-b, got %s", s.ObjectId)
+	}
+
+	// By slide number
+	s, err = findSlide(pres, "", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.ObjectId != "slide-a" {
+		t.Errorf("expected slide-a, got %s", s.ObjectId)
+	}
+
+	// Both specified
+	_, err = findSlide(pres, "slide-a", 1)
+	if err == nil {
+		t.Error("expected error when both slide-id and slide-number specified")
+	}
+
+	// Not found
+	_, err = findSlide(pres, "nonexistent", 0)
+	if err == nil {
+		t.Error("expected error for nonexistent slide ID")
+	}
+
+	// Out of range
+	_, err = findSlide(pres, "", 99)
+	if err == nil {
+		t.Error("expected error for out-of-range slide number")
 	}
 }
 

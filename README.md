@@ -182,19 +182,19 @@ Add `--format text` to any command for human-readable output.
 
 | Command | Description |
 |---------|-------------|
-| `gws slides info <id>` | Presentation metadata |
-| `gws slides list <id>` | List slides with text content |
-| `gws slides read <id> [n]` | Read slide text (specific or all) |
+| `gws slides info <id>` | Presentation metadata (`--notes` for speaker notes) |
+| `gws slides list <id>` | List slides with text content (`--notes` for speaker notes) |
+| `gws slides read <id> [n]` | Read slide text (specific or all, `--notes` for speaker notes) |
 | `gws slides create` | Create new presentation (`--title`) |
 | `gws slides add-slide <id>` | Add slide (`--title`, `--body`, `--layout`) |
 | `gws slides delete-slide <id>` | Delete slide (`--slide-id` or `--slide-number`) |
 | `gws slides duplicate-slide <id>` | Duplicate slide (`--slide-id` or `--slide-number`) |
 | `gws slides add-shape <id>` | Add shape (`--slide-id/--slide-number`, `--type`, `--x`, `--y`, `--width`, `--height`) |
 | `gws slides add-image <id>` | Add image (`--slide-id/--slide-number`, `--url`, `--x`, `--y`, `--width`) |
-| `gws slides add-text <id>` | Insert text into shape or table cell (`--object-id` or `--table-id`/`--row`/`--col`, `--text`, `--at`) |
+| `gws slides add-text <id>` | Insert text into shape, table cell, or speaker notes (`--object-id`, `--table-id`/`--row`/`--col`, or `--notes`/`--slide-number`) |
 | `gws slides replace-text <id>` | Find and replace text (`--find`, `--replace`, `--match-case`) |
 | `gws slides delete-object <id>` | Delete any page element (`--object-id`) |
-| `gws slides delete-text <id>` | Clear text from shape (`--object-id`, `--from`, `--to`) |
+| `gws slides delete-text <id>` | Clear text from shape or speaker notes (`--object-id` or `--notes`/`--slide-number`) |
 | `gws slides update-text-style <id>` | Style text (`--object-id`, `--bold`, `--italic`, `--font-size`, `--color`) |
 | `gws slides update-transform <id>` | Move/scale/rotate element (`--object-id`, `--x`, `--y`, `--scale-x`, `--rotate`) |
 | `gws slides create-table <id>` | Add table (`--slide-id/--slide-number`, `--rows`, `--cols`) |
