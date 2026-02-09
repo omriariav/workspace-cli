@@ -19,8 +19,12 @@ Complete flag and option reference for `gws slides` commands.
 Gets metadata about a Google Slides presentation.
 
 ```
-Usage: gws slides info <presentation-id>
+Usage: gws slides info <presentation-id> [flags]
 ```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--notes` | bool | `false` | Include speaker notes in output |
 
 ---
 
@@ -29,8 +33,12 @@ Usage: gws slides info <presentation-id>
 Lists all slides in a presentation with their content and object IDs.
 
 ```
-Usage: gws slides list <presentation-id>
+Usage: gws slides list <presentation-id> [flags]
 ```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--notes` | bool | `false` | Include speaker notes in output |
 
 Returns slide details including object IDs for elements — needed for `add-text`.
 
@@ -41,8 +49,12 @@ Returns slide details including object IDs for elements — needed for `add-text
 Reads the text content of a specific slide or all slides.
 
 ```
-Usage: gws slides read <presentation-id> [slide-number]
+Usage: gws slides read <presentation-id> [slide-number] [flags]
 ```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--notes` | bool | `false` | Include speaker notes in output |
 
 Slide numbers are **1-indexed**. Omit the slide number to read all slides.
 
@@ -178,7 +190,7 @@ Height is automatically calculated to maintain aspect ratio based on width.
 
 ## gws slides add-text
 
-Inserts text into an existing shape or text box.
+Inserts text into an existing shape, text box, table cell, or speaker notes.
 
 ```
 Usage: gws slides add-text <presentation-id> [flags]
@@ -186,11 +198,17 @@ Usage: gws slides add-text <presentation-id> [flags]
 
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
-| `--object-id` | string | | Yes | Object ID to insert text into |
+| `--object-id` | string | | | Object ID to insert text into (mutually exclusive with --table-id and --notes) |
+| `--table-id` | string | | | Table object ID (requires --row and --col) |
+| `--row` | int | -1 | | Row index, 0-based (required with --table-id) |
+| `--col` | int | -1 | | Column index, 0-based (required with --table-id) |
+| `--notes` | bool | false | | Target speaker notes (mutually exclusive with --object-id and --table-id) |
+| `--slide-id` | string | | | Slide object ID (required with --notes) |
+| `--slide-number` | int | 0 | | Slide number, 1-indexed (required with --notes) |
 | `--text` | string | | Yes | Text to insert |
 | `--at` | int | 0 | No | Position to insert at (0 = beginning) |
 
-Get object IDs from `gws slides list <id>` output.
+One of `--object-id`, `--table-id`, or `--notes` is required. Get object IDs from `gws slides list <id>` output.
 
 ---
 
@@ -230,7 +248,7 @@ Get object IDs from `gws slides list <id>` output.
 
 ## gws slides delete-text
 
-Clears text from a shape, optionally within a specific range.
+Clears text from a shape or speaker notes, optionally within a specific range.
 
 ```
 Usage: gws slides delete-text <presentation-id> [flags]
@@ -238,9 +256,14 @@ Usage: gws slides delete-text <presentation-id> [flags]
 
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
-| `--object-id` | string | | Yes | Shape containing text |
+| `--object-id` | string | | | Shape containing text (required unless --notes) |
+| `--notes` | bool | false | | Target speaker notes (alternative to --object-id) |
+| `--slide-id` | string | | | Slide object ID (required with --notes) |
+| `--slide-number` | int | 0 | | Slide number, 1-indexed (required with --notes) |
 | `--from` | int | 0 | No | Start index |
 | `--to` | int | | No | End index (if omitted, deletes to end) |
+
+One of `--object-id` or `--notes` is required.
 
 ---
 

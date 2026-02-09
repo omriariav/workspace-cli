@@ -13,6 +13,10 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 
 ## Completed
 
+### v1.11.0
+- [x] Slides: `--notes` flag on `info`, `list`, `read` to include speaker notes in output
+- [x] Slides: `--notes` mode on `add-text` and `delete-text` to write/clear speaker notes (with `--slide-id` or `--slide-number`)
+
 ### v0.7.0
 - [x] `gws drive create-folder` - Create folder
 - [x] `gws drive move` - Move file to folder

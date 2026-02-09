@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.10.0** - Gmail label support. Adds `--include-labels` flag to `gmail list` for surfacing label IDs in thread output.
+**v1.11.0** - Slides speaker notes support. Adds `--notes` flag to `slides info`, `list`, and `read` for reading speaker notes. Extends `slides add-text` and `delete-text` with `--notes` mode to write/clear speaker notes via `--slide-id` or `--slide-number`.
 
 ## Roadmap
 
