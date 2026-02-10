@@ -209,6 +209,9 @@ gws gmail list --format text    # Human-readable text
 
 ## Tips for AI Agents
 
+- `list` returns the latest `message_id` per thread — reading it may show someone else's reply. To find a specific person's message, use `gws gmail thread <thread-id>` and scan all messages
+- When searching for emails involving a person, use the bare email as a search term (`from:me user@domain.com`) rather than `to:user@domain.com` — the `to:` operator only matches the To header, not CC recipients
+- If using employee lookup tools to get someone's email, use the exact returned address — don't guess the format (e.g., `lior.g@` not `lior.golan@`)
 - Always use `--format json` (the default) for programmatic parsing
 - Use `gws gmail list` to get IDs: `message_id` for `read`/`label`/`archive`/`trash`, `thread_id` for `thread`
 - Use `gws gmail thread <thread-id>` to view full conversations with all messages
