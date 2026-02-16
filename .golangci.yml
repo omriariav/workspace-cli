@@ -1,0 +1,30 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - gofmt
+    - revive
+
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - (*github.com/spf13/cobra.Command).MarkFlagRequired
+      - (*github.com/spf13/viper.Viper).BindPFlag
+      - github.com/spf13/viper.BindPFlag
+      - fmt.Fprintf
+      - fmt.Fprintln
+  revive:
+    rules:
+      - name: exported
+        disabled: true
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck

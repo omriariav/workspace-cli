@@ -61,7 +61,7 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 
 	// Save refreshed token if it changed
 	if newToken.AccessToken != token.AccessToken {
-		auth.SaveToken(newToken)
+		_ = auth.SaveToken(newToken)
 	}
 
 	return &Factory{

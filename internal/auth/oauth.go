@@ -16,11 +16,6 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-const (
-	googleAuthURL  = "https://accounts.google.com/o/oauth2/v2/auth"
-	googleTokenURL = "https://oauth2.googleapis.com/token"
-)
-
 // OAuthClient handles the OAuth2 authentication flow.
 type OAuthClient struct {
 	config *oauth2.Config
@@ -139,18 +134,18 @@ func (c *OAuthClient) Login(ctx context.Context) (*oauth2.Token, error) {
 	case code = <-codeChan:
 		// Success
 	case err := <-errChan:
-		server.Shutdown(ctx)
+		_ = server.Shutdown(ctx)
 		return nil, err
 	case <-time.After(5 * time.Minute):
-		server.Shutdown(ctx)
+		_ = server.Shutdown(ctx)
 		return nil, fmt.Errorf("authorization timeout")
 	case <-ctx.Done():
-		server.Shutdown(ctx)
+		_ = server.Shutdown(ctx)
 		return nil, ctx.Err()
 	}
 
 	// Shutdown callback server
-	server.Shutdown(ctx)
+	_ = server.Shutdown(ctx)
 
 	// Exchange code for token with PKCE verifier
 	token, err := c.config.Exchange(ctx, code,

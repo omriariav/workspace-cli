@@ -141,7 +141,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 
 		// Save refreshed token
-		auth.SaveToken(newToken)
+		_ = auth.SaveToken(newToken)
 		token = newToken
 	}
 

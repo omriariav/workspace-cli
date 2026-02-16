@@ -1246,7 +1246,7 @@ func TestGmailListCommand_AllFlag(t *testing.T) {
 
 	allFlag := cmd.Flags().Lookup("all")
 	if allFlag == nil {
-		t.Error("expected --all flag to exist")
+		t.Fatal("expected --all flag to exist")
 	}
 	if allFlag.DefValue != "false" {
 		t.Errorf("expected --all default 'false', got '%s'", allFlag.DefValue)
@@ -1421,7 +1421,7 @@ func TestGmailListCommand_IncludeLabelsFlag(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("include-labels")
 	if flag == nil {
-		t.Error("expected --include-labels flag to exist")
+		t.Fatal("expected --include-labels flag to exist")
 	}
 	if flag.DefValue != "false" {
 		t.Errorf("expected --include-labels default 'false', got '%s'", flag.DefValue)
@@ -1519,10 +1519,10 @@ func TestGmailList_IncludeLabels_MockServer(t *testing.T) {
 
 	// Verify union of labels from both messages
 	expected := map[string]bool{
-		"INBOX":                true,
-		"UNREAD":               true,
-		"CATEGORY_PROMOTIONS":  true,
-		"STARRED":              true,
+		"INBOX":               true,
+		"UNREAD":              true,
+		"CATEGORY_PROMOTIONS": true,
+		"STARRED":             true,
 	}
 	if len(labels) != len(expected) {
 		t.Errorf("expected %d labels, got %d: %v", len(expected), len(labels), labels)

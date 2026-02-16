@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.11.0** - Slides speaker notes support. Adds `--notes` flag to `slides info`, `list`, and `read` for reading speaker notes. Extends `slides add-text` and `delete-text` with `--notes` mode to write/clear speaker notes via `--slide-id` or `--slide-number`.
+**v1.12.0** - Add golangci-lint for comprehensive static analysis, fix lint findings across codebase, add test coverage for chat/forms/search commands.
 
 ## Roadmap
 

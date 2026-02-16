@@ -25,7 +25,7 @@ func TestDriveCommentsCommand_Flags(t *testing.T) {
 	// Check flags exist
 	maxFlag := cmd.Flags().Lookup("max")
 	if maxFlag == nil {
-		t.Error("expected --max flag to exist")
+		t.Fatal("expected --max flag to exist")
 	}
 	if maxFlag.DefValue != "100" {
 		t.Errorf("expected --max default to be 100, got %s", maxFlag.DefValue)
@@ -741,7 +741,7 @@ func TestDriveDeleteCommand_Flags(t *testing.T) {
 	// Check flags exist
 	permanentFlag := cmd.Flags().Lookup("permanent")
 	if permanentFlag == nil {
-		t.Error("expected --permanent flag to exist")
+		t.Fatal("expected --permanent flag to exist")
 	}
 	if permanentFlag.DefValue != "false" {
 		t.Errorf("expected --permanent default to be false, got %s", permanentFlag.DefValue)
