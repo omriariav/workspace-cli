@@ -33,7 +33,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ~/.config/gws/config.yaml)")
-	rootCmd.PersistentFlags().StringVar(&format, "format", "json", "output format: json or text")
+	rootCmd.PersistentFlags().StringVar(&format, "format", "json", "output format: json, text, or yaml")
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress output (useful for scripted actions)")
 
 	viper.BindPFlag("format", rootCmd.PersistentFlags().Lookup("format"))

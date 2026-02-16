@@ -13,6 +13,9 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 
 ## Completed
 
+### v1.13.0
+- [x] Add YAML output format (`--format yaml`) alongside existing JSON and text
+
 ### v1.12.0
 - [x] Add golangci-lint with `.golangci.yml` config (replaces basic `go vet` in CI and Makefile)
 - [x] Fix lint findings across codebase (unchecked errors, unused consts, gofmt, staticcheck)
@@ -304,14 +307,6 @@ gws apps-script run <script-id> --function "myFunction"
 ## CLI Infrastructure (Competitive Gaps)
 
 Identified from comparison with [jenkins-cli](https://github.com/avivsinai/jenkins-cli) and [bitbucket-cli](https://github.com/avivsinai/bitbucket-cli).
-
-### Add YAML output format (P1, M)
-
-Add `--format yaml` alongside existing JSON and text. Both `jk` and `bkt` support YAML output.
-
-```bash
-gws gmail list --max 5 --format yaml
-```
 
 ### OS keychain token storage (P2, M)
 

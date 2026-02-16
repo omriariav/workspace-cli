@@ -45,7 +45,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.12.0** - Add golangci-lint for comprehensive static analysis, fix lint findings across codebase, add test coverage for chat/forms/search commands.
+**v1.13.0** - Add YAML output format (`--format yaml`) alongside existing JSON and text formats.
 
 ## Roadmap
 
