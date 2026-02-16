@@ -39,6 +39,10 @@ var AllScopes = []string{
 	// Forms
 	"https://www.googleapis.com/auth/forms.responses.readonly",
 
+	// Contacts (People API)
+	"https://www.googleapis.com/auth/contacts.readonly",
+	"https://www.googleapis.com/auth/contacts",
+
 	// User info (for status display)
 	"https://www.googleapis.com/auth/userinfo.email",
 }
