@@ -997,6 +997,10 @@ func TestDocsCommands_Structure_Extended(t *testing.T) {
 	commands := []string{
 		"delete",
 		"add-table",
+		"format",
+		"set-paragraph-style",
+		"add-list",
+		"remove-list",
 	}
 
 	for _, cmdName := range commands {
@@ -1004,6 +1008,365 @@ func TestDocsCommands_Structure_Extended(t *testing.T) {
 			cmd := findSubcommand(docsCmd, cmdName)
 			if cmd == nil {
 				t.Fatalf("command '%s' not found", cmdName)
+			}
+		})
+	}
+}
+
+// TestDocsFormatCommand_Flags tests format command flags
+func TestDocsFormatCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "format")
+	if cmd == nil {
+		t.Fatal("docs format command not found")
+	}
+
+	expectedFlags := []string{"from", "to", "bold", "italic", "font-size", "color"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestDocsSetParagraphStyleCommand_Flags tests set-paragraph-style command flags
+func TestDocsSetParagraphStyleCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "set-paragraph-style")
+	if cmd == nil {
+		t.Fatal("docs set-paragraph-style command not found")
+	}
+
+	expectedFlags := []string{"from", "to", "alignment", "line-spacing"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestDocsAddListCommand_Flags tests add-list command flags
+func TestDocsAddListCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "add-list")
+	if cmd == nil {
+		t.Fatal("docs add-list command not found")
+	}
+
+	expectedFlags := []string{"at", "type", "items"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestDocsRemoveListCommand_Flags tests remove-list command flags
+func TestDocsRemoveListCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "remove-list")
+	if cmd == nil {
+		t.Fatal("docs remove-list command not found")
+	}
+
+	expectedFlags := []string{"from", "to"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestDocsFormat_Success tests formatting text
+func TestDocsFormat_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-format:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			updateStyle := req.Requests[0].UpdateTextStyle
+			if updateStyle == nil {
+				t.Error("expected UpdateTextStyle request")
+			} else {
+				if updateStyle.Range.StartIndex != 10 {
+					t.Errorf("expected start index 10, got %d", updateStyle.Range.StartIndex)
+				}
+				if updateStyle.Range.EndIndex != 50 {
+					t.Errorf("expected end index 50, got %d", updateStyle.Range.EndIndex)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-format",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	_, err = svc.Documents.BatchUpdate("doc-format", &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				UpdateTextStyle: &docs.UpdateTextStyleRequest{
+					TextStyle: &docs.TextStyle{Bold: true},
+					Range: &docs.Range{
+						StartIndex: 10,
+						EndIndex:   50,
+					},
+					Fields: "bold",
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to format text: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestDocsSetParagraphStyle_Success tests setting paragraph style
+func TestDocsSetParagraphStyle_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-para:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			updatePara := req.Requests[0].UpdateParagraphStyle
+			if updatePara == nil {
+				t.Error("expected UpdateParagraphStyle request")
+			} else {
+				if updatePara.ParagraphStyle.Alignment != "CENTER" {
+					t.Errorf("expected alignment CENTER, got %s", updatePara.ParagraphStyle.Alignment)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-para",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	_, err = svc.Documents.BatchUpdate("doc-para", &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				UpdateParagraphStyle: &docs.UpdateParagraphStyleRequest{
+					ParagraphStyle: &docs.ParagraphStyle{Alignment: "CENTER"},
+					Range: &docs.Range{
+						StartIndex: 1,
+						EndIndex:   100,
+					},
+					Fields: "alignment",
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to set paragraph style: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestDocsAddList_Success tests adding a list
+func TestDocsAddList_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-list:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) < 2 {
+				t.Errorf("expected at least 2 requests (insertText + createParagraphBullets), got %d", len(req.Requests))
+			}
+
+			if req.Requests[0].InsertText == nil {
+				t.Error("expected InsertText as first request")
+			}
+
+			if req.Requests[1].CreateParagraphBullets == nil {
+				t.Error("expected CreateParagraphBullets as second request")
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-list",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	insertText := "Item 1\nItem 2\nItem 3\n"
+	_, err = svc.Documents.BatchUpdate("doc-list", &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				InsertText: &docs.InsertTextRequest{
+					Location: &docs.Location{Index: 1},
+					Text:     insertText,
+				},
+			},
+			{
+				CreateParagraphBullets: &docs.CreateParagraphBulletsRequest{
+					Range: &docs.Range{
+						StartIndex: 1,
+						EndIndex:   1 + int64(len(insertText)),
+					},
+					BulletPreset: "BULLET_DISC_CIRCLE_SQUARE",
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to add list: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestDocsRemoveList_Success tests removing list formatting
+func TestDocsRemoveList_Success(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-unlist:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			deleteBullets := req.Requests[0].DeleteParagraphBullets
+			if deleteBullets == nil {
+				t.Error("expected DeleteParagraphBullets request")
+			} else {
+				if deleteBullets.Range.StartIndex != 10 {
+					t.Errorf("expected start index 10, got %d", deleteBullets.Range.StartIndex)
+				}
+				if deleteBullets.Range.EndIndex != 50 {
+					t.Errorf("expected end index 50, got %d", deleteBullets.Range.EndIndex)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-unlist",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	_, err = svc.Documents.BatchUpdate("doc-unlist", &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				DeleteParagraphBullets: &docs.DeleteParagraphBulletsRequest{
+					Range: &docs.Range{
+						StartIndex: 10,
+						EndIndex:   50,
+					},
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to remove list: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+// TestParseDocsHexColor tests the parseDocsHexColor helper
+func TestParseDocsHexColor(t *testing.T) {
+	tests := []struct {
+		name    string
+		hex     string
+		wantR   float64
+		wantG   float64
+		wantB   float64
+		wantErr bool
+	}{
+		{"red", "#FF0000", 1.0, 0.0, 0.0, false},
+		{"green", "#00FF00", 0.0, 1.0, 0.0, false},
+		{"blue", "#0000FF", 0.0, 0.0, 1.0, false},
+		{"invalid - no hash", "FF0000", 0, 0, 0, true},
+		{"invalid - too short", "#FFF", 0, 0, 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			color, err := parseDocsHexColor(tt.hex)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			rgb := color.Color.RgbColor
+			if rgb.Red != tt.wantR {
+				t.Errorf("expected red %f, got %f", tt.wantR, rgb.Red)
+			}
+			if rgb.Green != tt.wantG {
+				t.Errorf("expected green %f, got %f", tt.wantG, rgb.Green)
+			}
+			if rgb.Blue != tt.wantB {
+				t.Errorf("expected blue %f, got %f", tt.wantB, rgb.Blue)
 			}
 		})
 	}

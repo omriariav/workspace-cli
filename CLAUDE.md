@@ -22,10 +22,11 @@
 | `calendar` | list, events, create, update, delete, rsvp |
 | `tasks` | lists, list, create, complete |
 | `drive` | list, search, info, download, upload, create-folder, move, delete, comments |
-| `docs` | read, info, create, append, insert, replace, delete, add-table |
-| `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace |
+| `docs` | read, info, create, append, insert, replace, delete, add-table, format, set-paragraph-style, add-list, remove-list |
+| `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze |
 | `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides |
 | `chat` | list, messages, send (needs Chat App config) |
+| `contacts` | list, search, get, create, delete |
 | `forms` | info, responses |
 | `search` | web search (needs API key) |
 | `version` | Show version info |
@@ -45,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.13.0** - Add YAML output format (`--format yaml`) alongside existing JSON and text formats.
+**v1.14.0** - Add Contacts (People API), Sheets formatting, and Docs formatting & lists.
 
 ## Roadmap
 

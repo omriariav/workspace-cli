@@ -89,6 +89,46 @@ Position is a 1-based index. Use 'gws docs read <id> --include-formatting' to se
 	RunE: runDocsAddTable,
 }
 
+var docsFormatCmd = &cobra.Command{
+	Use:   "format <document-id>",
+	Short: "Format text style",
+	Long: `Applies text formatting to a range of positions in the document.
+
+Positions are 1-based indices. Use 'gws docs read <id> --include-formatting' to see positions.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDocsFormat,
+}
+
+var docsSetParagraphStyleCmd = &cobra.Command{
+	Use:   "set-paragraph-style <document-id>",
+	Short: "Set paragraph style",
+	Long: `Sets paragraph style properties for a range of positions in the document.
+
+Positions are 1-based indices. Use 'gws docs read <id> --include-formatting' to see positions.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDocsSetParagraphStyle,
+}
+
+var docsAddListCmd = &cobra.Command{
+	Use:   "add-list <document-id>",
+	Short: "Add a bullet or numbered list",
+	Long: `Inserts text items as a bullet or numbered list at a specified position.
+
+Items are separated by semicolons. Position is a 1-based index.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDocsAddList,
+}
+
+var docsRemoveListCmd = &cobra.Command{
+	Use:   "remove-list <document-id>",
+	Short: "Remove list formatting",
+	Long: `Removes bullet or numbered list formatting from a range of positions.
+
+Positions are 1-based indices. Use 'gws docs read <id> --include-formatting' to see positions.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDocsRemoveList,
+}
+
 func init() {
 	rootCmd.AddCommand(docsCmd)
 	docsCmd.AddCommand(docsReadCmd)
@@ -99,6 +139,40 @@ func init() {
 	docsCmd.AddCommand(docsReplaceCmd)
 	docsCmd.AddCommand(docsDeleteCmd)
 	docsCmd.AddCommand(docsAddTableCmd)
+	docsCmd.AddCommand(docsFormatCmd)
+	docsCmd.AddCommand(docsSetParagraphStyleCmd)
+	docsCmd.AddCommand(docsAddListCmd)
+	docsCmd.AddCommand(docsRemoveListCmd)
+
+	// Format flags
+	docsFormatCmd.Flags().Int64("from", 0, "Start position (1-based index, required)")
+	docsFormatCmd.Flags().Int64("to", 0, "End position (1-based index, required)")
+	docsFormatCmd.Flags().Bool("bold", false, "Make text bold")
+	docsFormatCmd.Flags().Bool("italic", false, "Make text italic")
+	docsFormatCmd.Flags().Int64("font-size", 0, "Font size in points")
+	docsFormatCmd.Flags().String("color", "", "Text color (hex, e.g., #FF0000)")
+	docsFormatCmd.MarkFlagRequired("from")
+	docsFormatCmd.MarkFlagRequired("to")
+
+	// Set-paragraph-style flags
+	docsSetParagraphStyleCmd.Flags().Int64("from", 0, "Start position (1-based index, required)")
+	docsSetParagraphStyleCmd.Flags().Int64("to", 0, "End position (1-based index, required)")
+	docsSetParagraphStyleCmd.Flags().String("alignment", "", "Paragraph alignment: START, CENTER, END, JUSTIFIED")
+	docsSetParagraphStyleCmd.Flags().Float64("line-spacing", 0, "Line spacing multiplier (e.g., 1.15, 1.5, 2.0)")
+	docsSetParagraphStyleCmd.MarkFlagRequired("from")
+	docsSetParagraphStyleCmd.MarkFlagRequired("to")
+
+	// Add-list flags
+	docsAddListCmd.Flags().Int64("at", 1, "Position to insert at (1-based index)")
+	docsAddListCmd.Flags().String("type", "bullet", "List type: bullet or numbered")
+	docsAddListCmd.Flags().String("items", "", "List items separated by semicolons (required)")
+	docsAddListCmd.MarkFlagRequired("items")
+
+	// Remove-list flags
+	docsRemoveListCmd.Flags().Int64("from", 0, "Start position (1-based index, required)")
+	docsRemoveListCmd.Flags().Int64("to", 0, "End position (1-based index, required)")
+	docsRemoveListCmd.MarkFlagRequired("from")
+	docsRemoveListCmd.MarkFlagRequired("to")
 
 	// Read flags
 	docsReadCmd.Flags().Bool("include-formatting", false, "Include formatting information")
@@ -642,5 +716,326 @@ func runDocsAddTable(cmd *cobra.Command, args []string) error {
 		"rows":        rows,
 		"columns":     cols,
 		"position":    position,
+	})
+}
+
+// parseDocsHexColor parses a hex color string (#RRGGBB) into a Docs OptionalColor.
+func parseDocsHexColor(hex string) (*docs.OptionalColor, error) {
+	if len(hex) != 7 || hex[0] != '#' {
+		return nil, fmt.Errorf("invalid hex color format: %s (expected #RRGGBB)", hex)
+	}
+
+	var r, g, b int64
+	_, err := fmt.Sscanf(hex, "#%02x%02x%02x", &r, &g, &b)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hex color: %s", hex)
+	}
+
+	return &docs.OptionalColor{
+		Color: &docs.Color{
+			RgbColor: &docs.RgbColor{
+				Red:   float64(r) / 255.0,
+				Green: float64(g) / 255.0,
+				Blue:  float64(b) / 255.0,
+			},
+		},
+	}, nil
+}
+
+func runDocsFormat(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	from, _ := cmd.Flags().GetInt64("from")
+	to, _ := cmd.Flags().GetInt64("to")
+	bold, _ := cmd.Flags().GetBool("bold")
+	italic, _ := cmd.Flags().GetBool("italic")
+	fontSize, _ := cmd.Flags().GetInt64("font-size")
+	textColor, _ := cmd.Flags().GetString("color")
+
+	if from < 1 {
+		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+	}
+	if to <= from {
+		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+	}
+
+	textStyle := &docs.TextStyle{}
+	var fields []string
+
+	if cmd.Flags().Changed("bold") {
+		textStyle.Bold = bold
+		if !bold {
+			textStyle.ForceSendFields = append(textStyle.ForceSendFields, "Bold")
+		}
+		fields = append(fields, "bold")
+	}
+
+	if cmd.Flags().Changed("italic") {
+		textStyle.Italic = italic
+		if !italic {
+			textStyle.ForceSendFields = append(textStyle.ForceSendFields, "Italic")
+		}
+		fields = append(fields, "italic")
+	}
+
+	if fontSize > 0 {
+		textStyle.FontSize = &docs.Dimension{
+			Magnitude: float64(fontSize),
+			Unit:      "PT",
+		}
+		fields = append(fields, "fontSize")
+	}
+
+	if textColor != "" {
+		color, err := parseDocsHexColor(textColor)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		textStyle.ForegroundColor = color
+		fields = append(fields, "foregroundColor")
+	}
+
+	if len(fields) == 0 {
+		return p.PrintError(fmt.Errorf("no formatting options specified; use --bold, --italic, --font-size, or --color"))
+	}
+
+	requests := []*docs.Request{
+		{
+			UpdateTextStyle: &docs.UpdateTextStyleRequest{
+				TextStyle: textStyle,
+				Range: &docs.Range{
+					StartIndex: from,
+					EndIndex:   to,
+				},
+				Fields: strings.Join(fields, ","),
+			},
+		},
+	}
+
+	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to format text: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "formatted",
+		"document_id": docID,
+		"from":        from,
+		"to":          to,
+	})
+}
+
+func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	from, _ := cmd.Flags().GetInt64("from")
+	to, _ := cmd.Flags().GetInt64("to")
+	alignment, _ := cmd.Flags().GetString("alignment")
+	lineSpacing, _ := cmd.Flags().GetFloat64("line-spacing")
+
+	if from < 1 {
+		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+	}
+	if to <= from {
+		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+	}
+
+	paraStyle := &docs.ParagraphStyle{}
+	var fields []string
+
+	if alignment != "" {
+		paraStyle.Alignment = alignment
+		fields = append(fields, "alignment")
+	}
+
+	if lineSpacing > 0 {
+		paraStyle.LineSpacing = lineSpacing * 100 // API uses percentage (e.g., 115 for 1.15)
+		fields = append(fields, "lineSpacing")
+	}
+
+	if len(fields) == 0 {
+		return p.PrintError(fmt.Errorf("no style options specified; use --alignment or --line-spacing"))
+	}
+
+	requests := []*docs.Request{
+		{
+			UpdateParagraphStyle: &docs.UpdateParagraphStyleRequest{
+				ParagraphStyle: paraStyle,
+				Range: &docs.Range{
+					StartIndex: from,
+					EndIndex:   to,
+				},
+				Fields: strings.Join(fields, ","),
+			},
+		},
+	}
+
+	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to set paragraph style: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "styled",
+		"document_id": docID,
+		"from":        from,
+		"to":          to,
+	})
+}
+
+func runDocsAddList(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	position, _ := cmd.Flags().GetInt64("at")
+	listType, _ := cmd.Flags().GetString("type")
+	itemsStr, _ := cmd.Flags().GetString("items")
+
+	if position < 1 {
+		return p.PrintError(fmt.Errorf("--at must be >= 1"))
+	}
+
+	// Parse items
+	items := strings.Split(itemsStr, ";")
+	for i := range items {
+		items[i] = strings.TrimSpace(items[i])
+	}
+
+	// Build text to insert: each item on its own line
+	insertText := strings.Join(items, "\n") + "\n"
+
+	// Determine bullet preset
+	var bulletPreset string
+	switch listType {
+	case "bullet":
+		bulletPreset = "BULLET_DISC_CIRCLE_SQUARE"
+	case "numbered":
+		bulletPreset = "NUMBERED_DECIMAL_NESTED"
+	default:
+		return p.PrintError(fmt.Errorf("invalid list type: %s (use 'bullet' or 'numbered')", listType))
+	}
+
+	// Two-step batchUpdate: insert text, then apply bullets
+	requests := []*docs.Request{
+		{
+			InsertText: &docs.InsertTextRequest{
+				Location: &docs.Location{Index: position},
+				Text:     insertText,
+			},
+		},
+		{
+			CreateParagraphBullets: &docs.CreateParagraphBulletsRequest{
+				Range: &docs.Range{
+					StartIndex: position,
+					EndIndex:   position + int64(len(insertText)),
+				},
+				BulletPreset: bulletPreset,
+			},
+		},
+	}
+
+	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add list: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "created",
+		"document_id": docID,
+		"type":        listType,
+		"items":       len(items),
+		"position":    position,
+	})
+}
+
+func runDocsRemoveList(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	from, _ := cmd.Flags().GetInt64("from")
+	to, _ := cmd.Flags().GetInt64("to")
+
+	if from < 1 {
+		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+	}
+	if to <= from {
+		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+	}
+
+	requests := []*docs.Request{
+		{
+			DeleteParagraphBullets: &docs.DeleteParagraphBulletsRequest{
+				Range: &docs.Range{
+					StartIndex: from,
+					EndIndex:   to,
+				},
+			},
+		},
+	}
+
+	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to remove list: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "removed",
+		"document_id": docID,
+		"from":        from,
+		"to":          to,
 	})
 }

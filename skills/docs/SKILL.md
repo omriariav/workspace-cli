@@ -43,6 +43,10 @@ For initial setup, see the `gws-auth` skill.
 | Find and replace | `gws docs replace <doc-id> --find "old" --replace "new"` |
 | Delete content | `gws docs delete <doc-id> --from 5 --to 10` |
 | Add a table | `gws docs add-table <doc-id> --rows 3 --cols 4` |
+| Format text | `gws docs format <doc-id> --from 1 --to 10 --bold` |
+| Set paragraph style | `gws docs set-paragraph-style <doc-id> --from 1 --to 100 --alignment CENTER` |
+| Add a list | `gws docs add-list <doc-id> --at 1 --type bullet --items "A;B;C"` |
+| Remove list | `gws docs remove-list <doc-id> --from 1 --to 50` |
 
 ## Detailed Usage
 
@@ -140,6 +144,53 @@ gws docs add-table <document-id> [flags]
 - `--rows int` — Number of rows (default: 3)
 - `--cols int` — Number of columns (default: 3)
 - `--at int` — Position to insert at (1-based index, default: 1)
+
+### format — Format text style
+
+```bash
+gws docs format <document-id> [flags]
+```
+
+**Flags:**
+- `--from int` — Start position (1-based index, required)
+- `--to int` — End position (1-based index, required)
+- `--bold` — Make text bold
+- `--italic` — Make text italic
+- `--font-size int` — Font size in points
+- `--color string` — Text color (hex, e.g., "#FF0000")
+
+### set-paragraph-style — Set paragraph style
+
+```bash
+gws docs set-paragraph-style <document-id> [flags]
+```
+
+**Flags:**
+- `--from int` — Start position (1-based index, required)
+- `--to int` — End position (1-based index, required)
+- `--alignment string` — Paragraph alignment: START, CENTER, END, JUSTIFIED
+- `--line-spacing float` — Line spacing multiplier (e.g., 1.15, 1.5, 2.0)
+
+### add-list — Add a bullet or numbered list
+
+```bash
+gws docs add-list <document-id> [flags]
+```
+
+**Flags:**
+- `--at int` — Position to insert at (1-based index, default: 1)
+- `--type string` — List type: bullet or numbered (default: bullet)
+- `--items string` — List items separated by semicolons (required)
+
+### remove-list — Remove list formatting
+
+```bash
+gws docs remove-list <document-id> [flags]
+```
+
+**Flags:**
+- `--from int` — Start position (1-based index, required)
+- `--to int` — End position (1-based index, required)
 
 ## Content Formats
 
