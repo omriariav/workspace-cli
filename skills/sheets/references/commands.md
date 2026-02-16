@@ -1,6 +1,6 @@
 # Sheets Commands Reference
 
-Complete flag and option reference for `gws sheets` commands (19 commands).
+Complete flag and option reference for `gws sheets` commands (23 commands).
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
@@ -14,7 +14,7 @@ Complete flag and option reference for `gws sheets` commands (19 commands).
 
 ## Range Format Reference
 
-Ranges are used by `read`, `write`, `append`, `clear`, `merge`, `unmerge`, and `sort`.
+Ranges are used by `read`, `write`, `append`, `clear`, `merge`, `unmerge`, `sort`, and `format`.
 
 | Format | Example | Description |
 |--------|---------|-------------|
@@ -323,3 +323,73 @@ Usage: gws sheets find-replace <spreadsheet-id> [flags]
 | `--sheet` | string | | No | Limit to specific sheet |
 | `--match-case` | bool | false | No | Case-sensitive matching |
 | `--entire-cell` | bool | false | No | Match entire cell contents only |
+
+---
+
+## gws sheets format
+
+Formats cells in a range with text and background styles.
+
+```
+Usage: gws sheets format <spreadsheet-id> <range> [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--bold` | bool | false | Make text bold |
+| `--italic` | bool | false | Make text italic |
+| `--bg-color` | string | | Background color (hex, e.g., `#FFFF00`) |
+| `--color` | string | | Text color (hex, e.g., `#FF0000`) |
+| `--font-size` | int | 0 | Font size in points |
+
+At least one formatting flag is required. Unbounded ranges are not supported.
+
+---
+
+## gws sheets set-column-width
+
+Sets the width of a column in pixels.
+
+```
+Usage: gws sheets set-column-width <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--sheet` | string | | Yes | Sheet name |
+| `--col` | string | | Yes | Column letter (e.g., `A`, `B`, `AA`) |
+| `--width` | int | 100 | No | Column width in pixels |
+
+---
+
+## gws sheets set-row-height
+
+Sets the height of a row in pixels.
+
+```
+Usage: gws sheets set-row-height <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--sheet` | string | | Yes | Sheet name |
+| `--row` | int | 1 | Yes | Row number (1-based) |
+| `--height` | int | 21 | No | Row height in pixels |
+
+---
+
+## gws sheets freeze
+
+Freezes rows and/or columns so they remain visible when scrolling.
+
+```
+Usage: gws sheets freeze <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--sheet` | string | | Yes | Sheet name |
+| `--rows` | int | 0 | No | Number of rows to freeze |
+| `--cols` | int | 0 | No | Number of columns to freeze |
+
+At least one of `--rows` or `--cols` must be specified.

@@ -218,6 +218,44 @@ var sheetsFindReplaceCmd = &cobra.Command{
 	RunE:  runSheetsFindReplace,
 }
 
+var sheetsFormatCmd = &cobra.Command{
+	Use:   "format <spreadsheet-id> <range>",
+	Short: "Format cells",
+	Long: `Formats cells in a range with text and background styles.
+
+Range format examples:
+  Sheet1!A1:D10    - Format range in Sheet1
+  A1:D10           - Format range in first sheet
+
+Note: Unbounded ranges like "A:A" (whole column) or "1:1" (whole row) are not supported.`,
+	Args: cobra.ExactArgs(2),
+	RunE: runSheetsFormat,
+}
+
+var sheetsSetColumnWidthCmd = &cobra.Command{
+	Use:   "set-column-width <spreadsheet-id>",
+	Short: "Set column width",
+	Long:  "Sets the width of a column in pixels.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsSetColumnWidth,
+}
+
+var sheetsSetRowHeightCmd = &cobra.Command{
+	Use:   "set-row-height <spreadsheet-id>",
+	Short: "Set row height",
+	Long:  "Sets the height of a row in pixels.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsSetRowHeight,
+}
+
+var sheetsFreezeCmd = &cobra.Command{
+	Use:   "freeze <spreadsheet-id>",
+	Short: "Freeze rows and columns",
+	Long:  "Freezes rows and/or columns in a sheet so they remain visible when scrolling.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsFreeze,
+}
+
 func init() {
 	rootCmd.AddCommand(sheetsCmd)
 	sheetsCmd.AddCommand(sheetsInfoCmd)
@@ -239,6 +277,37 @@ func init() {
 	sheetsCmd.AddCommand(sheetsUnmergeCmd)
 	sheetsCmd.AddCommand(sheetsSortCmd)
 	sheetsCmd.AddCommand(sheetsFindReplaceCmd)
+	sheetsCmd.AddCommand(sheetsFormatCmd)
+	sheetsCmd.AddCommand(sheetsSetColumnWidthCmd)
+	sheetsCmd.AddCommand(sheetsSetRowHeightCmd)
+	sheetsCmd.AddCommand(sheetsFreezeCmd)
+
+	// Format flags
+	sheetsFormatCmd.Flags().Bool("bold", false, "Make text bold")
+	sheetsFormatCmd.Flags().Bool("italic", false, "Make text italic")
+	sheetsFormatCmd.Flags().String("bg-color", "", "Background color (hex, e.g., #FFFF00)")
+	sheetsFormatCmd.Flags().String("color", "", "Text color (hex, e.g., #FF0000)")
+	sheetsFormatCmd.Flags().Int64("font-size", 0, "Font size in points")
+
+	// Set-column-width flags
+	sheetsSetColumnWidthCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsSetColumnWidthCmd.Flags().String("col", "", "Column letter (e.g., A, B, AA) (required)")
+	sheetsSetColumnWidthCmd.Flags().Int64("width", 100, "Column width in pixels")
+	sheetsSetColumnWidthCmd.MarkFlagRequired("sheet")
+	sheetsSetColumnWidthCmd.MarkFlagRequired("col")
+
+	// Set-row-height flags
+	sheetsSetRowHeightCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsSetRowHeightCmd.Flags().Int64("row", 1, "Row number (1-based) (required)")
+	sheetsSetRowHeightCmd.Flags().Int64("height", 21, "Row height in pixels")
+	sheetsSetRowHeightCmd.MarkFlagRequired("sheet")
+	sheetsSetRowHeightCmd.MarkFlagRequired("row")
+
+	// Freeze flags
+	sheetsFreezeCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsFreezeCmd.Flags().Int64("rows", 0, "Number of rows to freeze")
+	sheetsFreezeCmd.Flags().Int64("cols", 0, "Number of columns to freeze")
+	sheetsFreezeCmd.MarkFlagRequired("sheet")
 
 	// Read flags
 	sheetsReadCmd.Flags().String("output-format", "json", "Output format: json or csv")
@@ -1532,4 +1601,329 @@ func runSheetsFindReplace(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(result)
+}
+
+// parseSheetsHexColor parses a hex color string (#RRGGBB) into a Sheets Color.
+func parseSheetsHexColor(hex string) (*sheets.Color, error) {
+	if len(hex) != 7 || hex[0] != '#' {
+		return nil, fmt.Errorf("invalid hex color format: %s (expected #RRGGBB)", hex)
+	}
+
+	var r, g, b int64
+	_, err := fmt.Sscanf(hex, "#%02x%02x%02x", &r, &g, &b)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hex color: %s", hex)
+	}
+
+	return &sheets.Color{
+		Red:   float64(r) / 255.0,
+		Green: float64(g) / 255.0,
+		Blue:  float64(b) / 255.0,
+	}, nil
+}
+
+func runSheetsFormat(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+
+	bold, _ := cmd.Flags().GetBool("bold")
+	italic, _ := cmd.Flags().GetBool("italic")
+	bgColor, _ := cmd.Flags().GetString("bg-color")
+	textColor, _ := cmd.Flags().GetString("color")
+	fontSize, _ := cmd.Flags().GetInt64("font-size")
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	// Build cell format and field mask
+	cellFormat := &sheets.CellFormat{}
+	var fields []string
+
+	textFormat := &sheets.TextFormat{}
+	hasTextFormat := false
+
+	if cmd.Flags().Changed("bold") {
+		textFormat.Bold = bold
+		if !bold {
+			textFormat.ForceSendFields = append(textFormat.ForceSendFields, "Bold")
+		}
+		fields = append(fields, "userEnteredFormat.textFormat.bold")
+		hasTextFormat = true
+	}
+
+	if cmd.Flags().Changed("italic") {
+		textFormat.Italic = italic
+		if !italic {
+			textFormat.ForceSendFields = append(textFormat.ForceSendFields, "Italic")
+		}
+		fields = append(fields, "userEnteredFormat.textFormat.italic")
+		hasTextFormat = true
+	}
+
+	if fontSize > 0 {
+		textFormat.FontSize = fontSize
+		fields = append(fields, "userEnteredFormat.textFormat.fontSize")
+		hasTextFormat = true
+	}
+
+	if textColor != "" {
+		color, err := parseSheetsHexColor(textColor)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		textFormat.ForegroundColorStyle = &sheets.ColorStyle{RgbColor: color}
+		fields = append(fields, "userEnteredFormat.textFormat.foregroundColorStyle")
+		hasTextFormat = true
+	}
+
+	if hasTextFormat {
+		cellFormat.TextFormat = textFormat
+	}
+
+	if bgColor != "" {
+		color, err := parseSheetsHexColor(bgColor)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		cellFormat.BackgroundColorStyle = &sheets.ColorStyle{RgbColor: color}
+		fields = append(fields, "userEnteredFormat.backgroundColorStyle")
+	}
+
+	if len(fields) == 0 {
+		return p.PrintError(fmt.Errorf("no formatting options specified; use --bold, --italic, --bg-color, --color, or --font-size"))
+	}
+
+	requests := []*sheets.Request{
+		{
+			RepeatCell: &sheets.RepeatCellRequest{
+				Range: gridRange,
+				Cell: &sheets.CellData{
+					UserEnteredFormat: cellFormat,
+				},
+				Fields: strings.Join(fields, ","),
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to format cells: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "formatted",
+		"spreadsheet": spreadsheetID,
+		"range":       rangeStr,
+	})
+}
+
+func runSheetsSetColumnWidth(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	col, _ := cmd.Flags().GetString("col")
+	width, _ := cmd.Flags().GetInt64("width")
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	colIndex := columnLetterToIndex(col)
+
+	requests := []*sheets.Request{
+		{
+			UpdateDimensionProperties: &sheets.UpdateDimensionPropertiesRequest{
+				Range: &sheets.DimensionRange{
+					SheetId:    sheetID,
+					Dimension:  "COLUMNS",
+					StartIndex: colIndex,
+					EndIndex:   colIndex + 1,
+				},
+				Properties: &sheets.DimensionProperties{
+					PixelSize: width,
+				},
+				Fields: "pixelSize",
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to set column width: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "updated",
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+		"column":      col,
+		"width":       width,
+	})
+}
+
+func runSheetsSetRowHeight(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	row, _ := cmd.Flags().GetInt64("row")
+	height, _ := cmd.Flags().GetInt64("height")
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	// Convert 1-based row to 0-based index
+	rowIndex := row - 1
+
+	requests := []*sheets.Request{
+		{
+			UpdateDimensionProperties: &sheets.UpdateDimensionPropertiesRequest{
+				Range: &sheets.DimensionRange{
+					SheetId:    sheetID,
+					Dimension:  "ROWS",
+					StartIndex: rowIndex,
+					EndIndex:   rowIndex + 1,
+				},
+				Properties: &sheets.DimensionProperties{
+					PixelSize: height,
+				},
+				Fields: "pixelSize",
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to set row height: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "updated",
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+		"row":         row,
+		"height":      height,
+	})
+}
+
+func runSheetsFreeze(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	freezeRows, _ := cmd.Flags().GetInt64("rows")
+	freezeCols, _ := cmd.Flags().GetInt64("cols")
+
+	if freezeRows == 0 && freezeCols == 0 {
+		return p.PrintError(fmt.Errorf("specify --rows and/or --cols to freeze"))
+	}
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	gridProps := &sheets.GridProperties{}
+	var fieldParts []string
+
+	if cmd.Flags().Changed("rows") {
+		gridProps.FrozenRowCount = freezeRows
+		if freezeRows == 0 {
+			gridProps.ForceSendFields = append(gridProps.ForceSendFields, "FrozenRowCount")
+		}
+		fieldParts = append(fieldParts, "gridProperties.frozenRowCount")
+	}
+
+	if cmd.Flags().Changed("cols") {
+		gridProps.FrozenColumnCount = freezeCols
+		if freezeCols == 0 {
+			gridProps.ForceSendFields = append(gridProps.ForceSendFields, "FrozenColumnCount")
+		}
+		fieldParts = append(fieldParts, "gridProperties.frozenColumnCount")
+	}
+
+	requests := []*sheets.Request{
+		{
+			UpdateSheetProperties: &sheets.UpdateSheetPropertiesRequest{
+				Properties: &sheets.SheetProperties{
+					SheetId:        sheetID,
+					GridProperties: gridProps,
+				},
+				Fields: strings.Join(fieldParts, ","),
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to freeze panes: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "frozen",
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+		"frozen_rows": freezeRows,
+		"frozen_cols": freezeCols,
+	})
 }

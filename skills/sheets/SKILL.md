@@ -71,6 +71,10 @@ For initial setup, see the `gws-auth` skill.
 | Unmerge cells | `gws sheets unmerge <id> "Sheet1!A1:D4"` |
 | Sort a range | `gws sheets sort <id> "A1:D10" --by B --desc` |
 | Find and replace | `gws sheets find-replace <id> --find "old" --replace "new"` |
+| Format cells | `gws sheets format <id> "A1:D10" --bold --bg-color "#FFFF00"` |
+| Set column width | `gws sheets set-column-width <id> --sheet "Sheet1" --col A --width 200` |
+| Set row height | `gws sheets set-row-height <id> --sheet "Sheet1" --row 1 --height 50` |
+| Freeze panes | `gws sheets freeze <id> --sheet "Sheet1" --rows 1 --cols 1` |
 
 ## Detailed Usage
 
@@ -194,6 +198,52 @@ gws sheets find-replace <id> --find <text> --replace <text> [flags]
 - `--sheet string` — Limit to specific sheet (optional)
 - `--match-case` — Case-sensitive matching
 - `--entire-cell` — Match entire cell contents only
+
+### format — Format cells
+
+```bash
+gws sheets format <id> <range> [flags]
+```
+
+**Flags:**
+- `--bold` — Make text bold
+- `--italic` — Make text italic
+- `--bg-color string` — Background color (hex, e.g., "#FFFF00")
+- `--color string` — Text color (hex, e.g., "#FF0000")
+- `--font-size int` — Font size in points
+
+### set-column-width — Set column width
+
+```bash
+gws sheets set-column-width <id> --sheet <name> --col <letter> --width <pixels>
+```
+
+**Flags:**
+- `--sheet string` — Sheet name (required)
+- `--col string` — Column letter, e.g., A, B, AA (required)
+- `--width int` — Column width in pixels (default: 100)
+
+### set-row-height — Set row height
+
+```bash
+gws sheets set-row-height <id> --sheet <name> --row <number> --height <pixels>
+```
+
+**Flags:**
+- `--sheet string` — Sheet name (required)
+- `--row int` — Row number, 1-based (required)
+- `--height int` — Row height in pixels (default: 21)
+
+### freeze — Freeze rows and columns
+
+```bash
+gws sheets freeze <id> --sheet <name> --rows <n> --cols <n>
+```
+
+**Flags:**
+- `--sheet string` — Sheet name (required)
+- `--rows int` — Number of rows to freeze
+- `--cols int` — Number of columns to freeze
 
 ## Output Modes
 
