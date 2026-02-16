@@ -1872,7 +1872,7 @@ func runSheetsFreeze(cmd *cobra.Command, args []string) error {
 	freezeRows, _ := cmd.Flags().GetInt64("rows")
 	freezeCols, _ := cmd.Flags().GetInt64("cols")
 
-	if freezeRows == 0 && freezeCols == 0 {
+	if !cmd.Flags().Changed("rows") && !cmd.Flags().Changed("cols") {
 		return p.PrintError(fmt.Errorf("specify --rows and/or --cols to freeze"))
 	}
 
