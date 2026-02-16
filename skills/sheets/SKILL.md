@@ -1,7 +1,7 @@
 ---
 name: gws-sheets
-version: 1.0.0
-description: "Google Sheets CLI operations via gws. Use when users need to read, write, or manage Google Sheets spreadsheets including cell values, rows, columns, sheets, sorting, merging, and find-replace. Triggers: sheets, spreadsheet, google sheets, cells, rows, columns, formulas."
+version: 1.1.0
+description: "Google Sheets CLI operations via gws. Use when users need to read, write, or manage Google Sheets spreadsheets including cell values, rows, columns, sheets, sorting, merging, formatting, and find-replace. Triggers: sheets, spreadsheet, google sheets, cells, rows, columns, formulas, formatting."
 metadata:
   short-description: Google Sheets CLI operations
   compatibility: claude-code, codex-cli
@@ -249,6 +249,7 @@ gws sheets freeze <id> --sheet <name> --rows <n> --cols <n>
 
 ```bash
 gws sheets read <id> "A1:D10" --format json    # Structured JSON (default)
+gws sheets read <id> "A1:D10" --format yaml    # YAML format
 gws sheets read <id> "A1:D10" --format text    # Human-readable text
 ```
 

@@ -216,6 +216,7 @@ gws docs create --title "Styled" --text '[{"insertText":{"location":{"index":1},
 
 ```bash
 gws docs read <doc-id> --format json    # Structured JSON (default)
+gws docs read <doc-id> --format yaml    # YAML format
 gws docs read <doc-id> --format text    # Human-readable text
 ```
 

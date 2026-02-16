@@ -122,6 +122,7 @@ gws tasks complete @default dGFzay0xMjM0
 
 ```bash
 gws tasks list @default --format json    # Structured JSON (default)
+gws tasks list @default --format yaml    # YAML format
 gws tasks list @default --format text    # Human-readable text
 ```
 

@@ -192,6 +192,7 @@ gws drive comments 1abc123xyz --include-resolved
 
 ```bash
 gws drive list --format json    # Structured JSON (default)
+gws drive list --format yaml    # YAML format
 gws drive list --format text    # Human-readable text
 ```
 

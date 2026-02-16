@@ -80,6 +80,7 @@ gws chat send --space spaces/AAAA1234 --text "Hello team!"
 
 ```bash
 gws chat list --format json    # Structured JSON (default)
+gws chat list --format yaml    # YAML format
 gws chat list --format text    # Human-readable text
 ```
 

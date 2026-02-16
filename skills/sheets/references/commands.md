@@ -1,6 +1,6 @@
 # Sheets Commands Reference
 
-Complete flag and option reference for `gws sheets` commands (23 commands).
+Complete flag and option reference for `gws sheets` commands — 27 commands total.
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
@@ -9,7 +9,7 @@ Complete flag and option reference for `gws sheets` commands (23 commands).
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--config` | string | `~/.config/gws/config.yaml` | Config file path |
-| `--format` | string | `json` | Output format: `json` or `text` |
+| `--format` | string | `json` | Output format: `json`, `yaml`, or `text` |
 | `--quiet` | bool | `false` | Suppress output (useful for scripted actions) |
 
 ## Range Format Reference
@@ -328,7 +328,7 @@ Usage: gws sheets find-replace <spreadsheet-id> [flags]
 
 ## gws sheets format
 
-Formats cells in a range with text and background styles.
+Formats cells in a range with text and background styles (v1.14.0).
 
 ```
 Usage: gws sheets format <spreadsheet-id> <range> [flags]
@@ -342,13 +342,34 @@ Usage: gws sheets format <spreadsheet-id> <range> [flags]
 | `--color` | string | | Text color (hex, e.g., `#FF0000`) |
 | `--font-size` | int | 0 | Font size in points |
 
-At least one formatting flag is required. Unbounded ranges are not supported.
+### Examples
+
+```bash
+# Make header row bold
+gws sheets format 1abc123xyz "Sheet1!A1:Z1" --bold
+
+# Highlight cells in yellow
+gws sheets format 1abc123xyz "Sheet1!A2:D10" --bg-color "#FFFF00"
+
+# Red text with larger font
+gws sheets format 1abc123xyz "Sheet1!A1:A1" --color "#FF0000" --font-size 14
+
+# Apply multiple styles
+gws sheets format 1abc123xyz "Sheet1!B2:B100" --bold --italic --color "#0000FF"
+```
+
+### Notes
+
+- At least one formatting flag is required
+- Colors must be in hex format: `#RRGGBB`
+- Unbounded ranges (e.g., `A:A`, `1:1`) are not supported
+- Font size is in points (typical sizes: 8, 10, 11, 12, 14, 18)
 
 ---
 
 ## gws sheets set-column-width
 
-Sets the width of a column in pixels.
+Sets the width of a column in pixels (v1.14.0).
 
 ```
 Usage: gws sheets set-column-width <spreadsheet-id> [flags]
@@ -360,11 +381,31 @@ Usage: gws sheets set-column-width <spreadsheet-id> [flags]
 | `--col` | string | | Yes | Column letter (e.g., `A`, `B`, `AA`) |
 | `--width` | int | 100 | No | Column width in pixels |
 
+### Examples
+
+```bash
+# Set column A to 200 pixels wide
+gws sheets set-column-width 1abc123xyz --sheet "Sheet1" --col A --width 200
+
+# Set column B to default width (100 pixels)
+gws sheets set-column-width 1abc123xyz --sheet "Sheet1" --col B
+
+# Set double-letter column width
+gws sheets set-column-width 1abc123xyz --sheet "Data" --col AA --width 150
+```
+
+### Notes
+
+- Column letters are case-insensitive (`A` = `a`)
+- Default width is 100 pixels (Google Sheets standard)
+- Typical widths: narrow (50-80px), standard (100px), wide (150-250px)
+- Multi-letter columns supported (e.g., `AA`, `AB`, `ZZ`)
+
 ---
 
 ## gws sheets set-row-height
 
-Sets the height of a row in pixels.
+Sets the height of a row in pixels (v1.14.0).
 
 ```
 Usage: gws sheets set-row-height <spreadsheet-id> [flags]
@@ -376,11 +417,31 @@ Usage: gws sheets set-row-height <spreadsheet-id> [flags]
 | `--row` | int | 1 | Yes | Row number (1-based) |
 | `--height` | int | 21 | No | Row height in pixels |
 
+### Examples
+
+```bash
+# Set row 1 (header) to 40 pixels tall
+gws sheets set-row-height 1abc123xyz --sheet "Sheet1" --row 1 --height 40
+
+# Set row 5 to default height (21 pixels)
+gws sheets set-row-height 1abc123xyz --sheet "Sheet1" --row 5
+
+# Make row 10 taller for wrapped text
+gws sheets set-row-height 1abc123xyz --sheet "Data" --row 10 --height 60
+```
+
+### Notes
+
+- Row numbers are 1-based (row 1 is the first row)
+- Default height is 21 pixels (Google Sheets standard)
+- Typical heights: compact (15-18px), standard (21px), tall (30-50px)
+- Useful for header rows or cells with wrapped text
+
 ---
 
 ## gws sheets freeze
 
-Freezes rows and/or columns so they remain visible when scrolling.
+Freezes rows and/or columns so they remain visible when scrolling (v1.14.0).
 
 ```
 Usage: gws sheets freeze <spreadsheet-id> [flags]
@@ -392,4 +453,26 @@ Usage: gws sheets freeze <spreadsheet-id> [flags]
 | `--rows` | int | 0 | No | Number of rows to freeze |
 | `--cols` | int | 0 | No | Number of columns to freeze |
 
-At least one of `--rows` or `--cols` must be specified.
+### Examples
+
+```bash
+# Freeze the first row (header row)
+gws sheets freeze 1abc123xyz --sheet "Sheet1" --rows 1
+
+# Freeze the first column
+gws sheets freeze 1abc123xyz --sheet "Sheet1" --cols 1
+
+# Freeze first 2 rows and first column
+gws sheets freeze 1abc123xyz --sheet "Data" --rows 2 --cols 1
+
+# Unfreeze all (set both to 0)
+gws sheets freeze 1abc123xyz --sheet "Sheet1" --rows 0 --cols 0
+```
+
+### Notes
+
+- At least one of `--rows` or `--cols` must be specified (unless both are 0 to unfreeze)
+- Frozen rows remain visible when scrolling vertically
+- Frozen columns remain visible when scrolling horizontally
+- Common pattern: freeze 1 row (header) and/or 1 column (labels)
+- To unfreeze completely, set both `--rows 0 --cols 0`

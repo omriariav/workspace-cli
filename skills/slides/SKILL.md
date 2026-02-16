@@ -347,6 +347,7 @@ gws slides reorder-slides <presentation-id> --slide-ids <ids> --to <position>
 
 ```bash
 gws slides list <id> --format json    # Structured JSON (default)
+gws slides list <id> --format yaml    # YAML format
 gws slides list <id> --format text    # Human-readable text
 ```
 

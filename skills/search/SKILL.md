@@ -69,6 +69,7 @@ gws search "query" --start 11    # Page 2 of results
 
 ```bash
 gws search "query" --format json    # Structured JSON (default)
+gws search "query" --format yaml    # YAML format
 gws search "query" --format text    # Human-readable text
 ```
 

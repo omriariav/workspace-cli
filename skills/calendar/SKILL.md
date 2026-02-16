@@ -166,6 +166,7 @@ gws calendar rsvp abc123 --response tentative
 
 ```bash
 gws calendar events --format json    # Structured JSON (default)
+gws calendar events --format yaml    # YAML format
 gws calendar events --format text    # Human-readable text
 ```
 

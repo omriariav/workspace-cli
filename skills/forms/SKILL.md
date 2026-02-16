@@ -57,6 +57,7 @@ Gets all responses submitted to a form.
 
 ```bash
 gws forms info <form-id> --format json    # Structured JSON (default)
+gws forms info <form-id> --format yaml    # YAML format
 gws forms info <form-id> --format text    # Human-readable text
 ```
 

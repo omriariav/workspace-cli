@@ -204,6 +204,7 @@ gws gmail event-id 19c041be3fcd1b79 | jq -r '.event_id' | xargs -I{} gws calenda
 
 ```bash
 gws gmail list --format json    # Structured JSON (default)
+gws gmail list --format yaml    # YAML format
 gws gmail list --format text    # Human-readable text
 ```
 
