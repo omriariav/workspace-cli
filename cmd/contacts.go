@@ -64,8 +64,7 @@ func init() {
 	contactsCmd.AddCommand(contactsDeleteCmd)
 
 	// List flags
-	contactsListCmd.Flags().Int64("max", 100, "Maximum number of contacts to return")
-	contactsListCmd.Flags().String("query", "", "Filter contacts (applied client-side)")
+	contactsListCmd.Flags().Int64("max", 50, "Maximum number of contacts to return")
 
 	// Create flags
 	contactsCreateCmd.Flags().String("name", "", "Contact name (required)")

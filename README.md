@@ -14,7 +14,7 @@
 
 ## Features
 
-- **10+ Google services** — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Custom Search.
+- **10+ Google services** — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Custom Search.
 - **Scriptable output** — `--format json` (default), `--format yaml`, `--format text` for human-readable tables, or `--quiet` to suppress output.
 - **OAuth2 + PKCE** — Secure browser-based auth with automatic token refresh and `0600` file permissions.
 - **Single auth flow** — Authenticate once to access all services; all scopes requested upfront.
@@ -224,6 +224,16 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 |---------|-------------|
 | `gws forms info <id>` | Form structure and questions |
 | `gws forms responses <id>` | All form responses with answers |
+
+### Contacts
+
+| Command | Description |
+|---------|-------------|
+| `gws contacts list` | List contacts (`--max`) |
+| `gws contacts search <query>` | Search contacts by name/email/phone |
+| `gws contacts get <resource-name>` | Get contact details |
+| `gws contacts create` | Create contact (`--name`, `--email`, `--phone`) |
+| `gws contacts delete <resource-name>` | Delete a contact |
 
 ### Custom Search
 
