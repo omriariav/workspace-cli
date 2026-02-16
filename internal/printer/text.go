@@ -67,7 +67,7 @@ func (p *TextPrinter) printSlice(s []interface{}) error {
 			fmt.Fprintln(p.w, "---")
 		}
 		if m, ok := item.(map[string]interface{}); ok {
-			p.printMap(m)
+			_ = p.printMap(m)
 		} else {
 			fmt.Fprintf(p.w, "%v\n", item)
 		}

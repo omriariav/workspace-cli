@@ -11,7 +11,7 @@ import (
 func TestRootCommand_Flags(t *testing.T) {
 	formatFlag := rootCmd.PersistentFlags().Lookup("format")
 	if formatFlag == nil {
-		t.Error("expected --format flag to exist")
+		t.Fatal("expected --format flag to exist")
 	}
 	if formatFlag.DefValue != "json" {
 		t.Errorf("expected --format default to be 'json', got '%s'", formatFlag.DefValue)
@@ -19,12 +19,12 @@ func TestRootCommand_Flags(t *testing.T) {
 
 	configFlag := rootCmd.PersistentFlags().Lookup("config")
 	if configFlag == nil {
-		t.Error("expected --config flag to exist")
+		t.Fatal("expected --config flag to exist")
 	}
 
 	quietFlag := rootCmd.PersistentFlags().Lookup("quiet")
 	if quietFlag == nil {
-		t.Error("expected --quiet flag to exist")
+		t.Fatal("expected --quiet flag to exist")
 	}
 	if quietFlag.DefValue != "false" {
 		t.Errorf("expected --quiet default to be 'false', got '%s'", quietFlag.DefValue)
@@ -112,9 +112,9 @@ func TestAuthCommands(t *testing.T) {
 // TestGmailCommands tests gmail command structure
 func TestGmailCommands(t *testing.T) {
 	tests := []struct {
-		name     string
-		use      string
-		hasArgs  bool
+		name    string
+		use     string
+		hasArgs bool
 	}{
 		{"list", "list", false},
 		{"read", "read <message-id>", true},

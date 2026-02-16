@@ -710,11 +710,8 @@ func TestSlidesAddTextCommand_TextRequired(t *testing.T) {
 	}
 
 	textFlag := cmd.Flags().Lookup("text")
-	// Check if flag has required annotation
-	if ann := textFlag.Annotations; ann != nil {
-		if _, ok := ann["cobra_annotation_bash_completion_one_required_flag"]; !ok {
-			// This is fine, required is checked differently
-		}
+	if textFlag == nil {
+		t.Fatal("expected --text flag to exist")
 	}
 }
 

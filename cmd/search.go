@@ -102,7 +102,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 				Message string `json:"message"`
 			} `json:"error"`
 		}
-		json.NewDecoder(resp.Body).Decode(&errResp)
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
 		return p.PrintError(fmt.Errorf("search failed: %s", errResp.Error.Message))
 	}
 

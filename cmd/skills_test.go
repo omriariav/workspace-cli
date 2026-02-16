@@ -610,4 +610,3 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}
 }
-

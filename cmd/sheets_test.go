@@ -383,12 +383,8 @@ func TestSheetsCreate_RequiresTitle(t *testing.T) {
 		t.Error("expected --title flag")
 	}
 
-	// Check if it's marked as required
-	annotations := cmd.Flags().Lookup("title").Annotations
-	if annotations == nil {
-		// Flag exists but might use MarkFlagRequired which sets different internals
-		// Just verify the flag exists
-	}
+	// Flag exists - MarkFlagRequired sets internal annotations
+	_ = cmd.Flags().Lookup("title").Annotations
 }
 
 // TestSheetsAddSheetCommand_Flags tests add-sheet command flags

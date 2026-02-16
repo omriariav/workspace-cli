@@ -13,6 +13,11 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 
 ## Completed
 
+### v1.12.0
+- [x] Add golangci-lint with `.golangci.yml` config (replaces basic `go vet` in CI and Makefile)
+- [x] Fix lint findings across codebase (unchecked errors, unused consts, gofmt, staticcheck)
+- [x] Add test coverage for chat, forms, and search commands
+
 ### v1.11.0
 - [x] Slides: `--notes` flag on `info`, `list`, `read` to include speaker notes in output
 - [x] Slides: `--notes` mode on `add-text` and `delete-text` to write/clear speaker notes (with `--slide-id` or `--slide-number`)
@@ -212,18 +217,93 @@ gws tasks move <list-id> <task-id> --parent <parent-task-id>
 
 ---
 
+## New Services (Competitive Gaps — gogcli)
+
+Identified from comparison with [gogcli](https://github.com/steipete/gogcli).
+
+### Contacts / People API (P2, M)
+
+Search and manage Google Contacts via the People API.
+
+```bash
+gws contacts list --max 50
+# API: people.connections.list
+
+gws contacts search "John"
+# API: people.searchContacts
+
+gws contacts create --name "John Doe" --email john@example.com --phone "+1234567890"
+# API: people.createContact
+
+gws contacts get <resource-name>
+# API: people.get
+
+gws contacts delete <resource-name>
+# API: people.deleteContact
+```
+
+### Groups (P3, S) — Workspace only
+
+List and inspect Google Groups.
+
+```bash
+gws groups list
+# API: directory.groups.list (Admin SDK)
+
+gws groups members <group-email>
+# API: directory.members.list
+```
+
+### Keep (P3, M) — Workspace only
+
+Access Google Keep notes (Workspace accounts only).
+
+```bash
+gws keep list --max 20
+# API: notes.list
+
+gws keep get <note-id>
+# API: notes.get
+
+gws keep create --title "TODO" --text "Buy milk"
+# API: notes.create
+```
+
+### Classroom (P3, M)
+
+Access Google Classroom courses and assignments.
+
+```bash
+gws classroom courses
+# API: courses.list
+
+gws classroom assignments <course-id>
+# API: courseWork.list
+
+gws classroom submissions <course-id> <coursework-id>
+# API: studentSubmissions.list
+```
+
+### Apps Script (P3, M)
+
+Inspect and execute Google Apps Script projects.
+
+```bash
+gws apps-script list
+# API: projects.list
+
+gws apps-script get <script-id>
+# API: projects.getContent
+
+gws apps-script run <script-id> --function "myFunction"
+# API: scripts.run
+```
+
+---
+
 ## CLI Infrastructure (Competitive Gaps)
 
 Identified from comparison with [jenkins-cli](https://github.com/avivsinai/jenkins-cli) and [bitbucket-cli](https://github.com/avivsinai/bitbucket-cli).
-
-### Add golangci-lint (P1, S)
-
-Replace basic `go vet` with golangci-lint for comprehensive static analysis. Both `jk` and `bkt` use it.
-
-```makefile
-lint:
-	golangci-lint run ./...
-```
 
 ### Add YAML output format (P1, M)
 
@@ -235,17 +315,42 @@ gws gmail list --max 5 --format yaml
 
 ### OS keychain token storage (P2, M)
 
-Store OAuth tokens in OS keychain (macOS Keychain, Linux Secret Service) instead of plain JSON file at `~/.config/gws/token.json`. `bkt` uses [go-keyring](https://github.com/zalando/go-keyring) for this.
+Store OAuth tokens in OS keychain (macOS Keychain, Linux Secret Service) instead of plain JSON file at `~/.config/gws/token.json`. Both `bkt` ([go-keyring](https://github.com/zalando/go-keyring)) and `gogcli` use keyring-based credential storage.
 
 ### Multi-account support (P2, C)
 
-Support multiple Google accounts with context switching, similar to `jk context use` and `bkt context create`.
+Support multiple Google accounts with context switching, similar to `jk context use`, `bkt context create`, and `gogcli`'s email alias system.
 
 ```bash
 gws context add work --client-id=xxx
 gws context add personal --client-id=yyy
 gws context use work
 # or: GWS_CONTEXT=personal gws gmail list
+```
+
+### Scoped authentication (P2, S)
+
+Least-privilege auth with `--readonly` and `--drive-scope` flags to request only necessary permissions during login. gogcli implements this to avoid over-scoping. Currently gws requests all scopes upfront.
+
+```bash
+gws auth login --readonly                    # read-only access
+gws auth login --scopes gmail,calendar       # specific services only
+```
+
+### Homebrew distribution (P2, S)
+
+Publish gws via Homebrew tap for easy installation. gogcli uses `brew install steipete/tap/gogcli`.
+
+```bash
+brew install omriariav/tap/gws
+```
+
+### Service account support (P3, M)
+
+Support Google Workspace domain-wide delegation via service accounts, enabling server-side automation without interactive OAuth. gogcli supports this for Workspace admins.
+
+```bash
+gws auth login --service-account key.json --subject admin@company.com
 ```
 
 ### jq / Go template filtering (P3, M)

@@ -409,7 +409,7 @@ func runSheetsRead(cmd *cobra.Command, args []string) error {
 			for i, cell := range row {
 				record[i] = fmt.Sprintf("%v", cell)
 			}
-			writer.Write(record)
+			_ = writer.Write(record)
 		}
 		writer.Flush()
 
@@ -730,12 +730,12 @@ func runSheetsAddSheet(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(map[string]interface{}{
-		"status":       "added",
-		"spreadsheet":  spreadsheetID,
-		"sheet_name":   sheetName,
-		"sheet_id":     sheetID,
-		"rows":         rows,
-		"cols":         cols,
+		"status":      "added",
+		"spreadsheet": spreadsheetID,
+		"sheet_name":  sheetName,
+		"sheet_id":    sheetID,
+		"rows":        rows,
+		"cols":        cols,
 	})
 }
 
@@ -829,9 +829,9 @@ func runSheetsClear(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(map[string]interface{}{
-		"status":       "cleared",
-		"spreadsheet":  resp.SpreadsheetId,
-		"range":        resp.ClearedRange,
+		"status":      "cleared",
+		"spreadsheet": resp.SpreadsheetId,
+		"range":       resp.ClearedRange,
 	})
 }
 
@@ -1181,11 +1181,11 @@ func runSheetsDuplicateSheet(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(map[string]interface{}{
-		"status":           "duplicated",
-		"spreadsheet":      spreadsheetID,
-		"source_sheet":     sheetName,
-		"new_sheet_name":   actualNewName,
-		"new_sheet_id":     newSheetID,
+		"status":         "duplicated",
+		"spreadsheet":    spreadsheetID,
+		"source_sheet":   sheetName,
+		"new_sheet_name": actualNewName,
+		"new_sheet_id":   newSheetID,
 	})
 }
 
@@ -1482,11 +1482,11 @@ func runSheetsFindReplace(cmd *cobra.Command, args []string) error {
 	entireCell, _ := cmd.Flags().GetBool("entire-cell")
 
 	findReplaceReq := &sheets.FindReplaceRequest{
-		Find:        findText,
-		Replacement: replaceText,
-		MatchCase:   matchCase,
+		Find:            findText,
+		Replacement:     replaceText,
+		MatchCase:       matchCase,
 		MatchEntireCell: entireCell,
-		AllSheets:   sheetName == "",
+		AllSheets:       sheetName == "",
 	}
 
 	// If specific sheet, set sheet ID
@@ -1520,12 +1520,12 @@ func runSheetsFindReplace(cmd *cobra.Command, args []string) error {
 	}
 
 	result := map[string]interface{}{
-		"status":            "replaced",
-		"spreadsheet":       spreadsheetID,
-		"find":              findText,
-		"replace":           replaceText,
+		"status":              "replaced",
+		"spreadsheet":         spreadsheetID,
+		"find":                findText,
+		"replace":             replaceText,
 		"occurrences_changed": occurrences,
-		"sheets_changed":    sheetsChanged,
+		"sheets_changed":      sheetsChanged,
 	}
 	if sheetName != "" {
 		result["sheet"] = sheetName

@@ -129,7 +129,7 @@ func TestJSONPrinter_Print_Map(t *testing.T) {
 	p := NewJSONPrinter(&buf)
 
 	data := map[string]interface{}{
-		"name": "test",
+		"name":  "test",
 		"count": 42,
 	}
 
