@@ -5,13 +5,13 @@
     "email": "omri.ariav@gmail.com"
   },
   "metadata": {
-    "description": "Unofficial Google Workspace CLI skills — teach Claude how to use gws for Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search. Not affiliated with Google.",
+    "description": "Unofficial Google Workspace CLI skills — teach Claude how to use gws for Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, and Search. Not affiliated with Google.",
     "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "gws",
-      "description": "Unofficial Google Workspace CLI — manage Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, and Search from the terminal. Not affiliated with Google.",
+      "description": "Unofficial Google Workspace CLI — manage Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, and Search from the terminal. Not affiliated with Google.",
       "source": "./",
       "strict": false,
       "skills": [
@@ -25,7 +25,8 @@
         "./skills/chat",
         "./skills/forms",
         "./skills/search",
-        "./skills/auth"
+        "./skills/auth",
+        "./skills/contacts"
       ]
     }
   ]
