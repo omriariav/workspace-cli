@@ -13,6 +13,11 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 
 ## Completed
 
+### v1.14.0
+- [x] Contacts / People API: list, search, get, create, delete
+- [x] Sheets Formatting: format cells, set-column-width, set-row-height, freeze panes
+- [x] Docs Formatting & Lists: format text, set-paragraph-style, add-list, remove-list
+
 ### v1.13.0
 - [x] Add YAML output format (`--format yaml`) alongside existing JSON and text
 
@@ -48,24 +53,6 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 ---
 
 ## Planned Features
-
-### Sheets Formatting (P2, M)
-
-Cell and range formatting capabilities.
-
-```bash
-gws sheets format <id> <range> --bold --italic --bg-color "#FFFF00"
-# API: batchUpdate → repeatCell with CellFormat
-
-gws sheets set-column-width <id> --sheet "Sheet1" --col A --width 200
-# API: batchUpdate → updateDimensionProperties
-
-gws sheets set-row-height <id> --sheet "Sheet1" --row 1 --height 50
-# API: batchUpdate → updateDimensionProperties
-
-gws sheets freeze <id> --sheet "Sheet1" --rows 1 --cols 1
-# API: batchUpdate → updateSheetProperties (gridProperties.frozenRowCount/frozenColumnCount)
-```
 
 ### Sheets Charts (P2, C)
 
@@ -126,30 +113,6 @@ gws sheets list-conditional-formats <id> --sheet "Sheet1"
 
 gws sheets delete-conditional-format <id> --index 0 --sheet "Sheet1"
 # API: batchUpdate → deleteConditionalFormatRule
-```
-
-### Docs Formatting (P2, M)
-
-Text formatting in documents.
-
-```bash
-gws docs format <id> --from 10 --to 50 --bold --italic --font-size 14
-# API: batchUpdate → updateTextStyle
-
-gws docs set-paragraph-style <id> --from 10 --to 100 --alignment CENTER --line-spacing 1.5
-# API: batchUpdate → updateParagraphStyle
-```
-
-### Docs Lists (P2, M)
-
-Create and manage lists.
-
-```bash
-gws docs add-list <id> --at 10 --type bullet --items "Item1;Item2;Item3"
-# API: batchUpdate → insertText + createParagraphBullets
-
-gws docs remove-list <id> --from 10 --to 50
-# API: batchUpdate → deleteParagraphBullets
 ```
 
 ### Slides Advanced (P2, M)
@@ -223,27 +186,6 @@ gws tasks move <list-id> <task-id> --parent <parent-task-id>
 ## New Services (Competitive Gaps — gogcli)
 
 Identified from comparison with [gogcli](https://github.com/steipete/gogcli).
-
-### Contacts / People API (P2, M)
-
-Search and manage Google Contacts via the People API.
-
-```bash
-gws contacts list --max 50
-# API: people.connections.list
-
-gws contacts search "John"
-# API: people.searchContacts
-
-gws contacts create --name "John Doe" --email john@example.com --phone "+1234567890"
-# API: people.createContact
-
-gws contacts get <resource-name>
-# API: people.get
-
-gws contacts delete <resource-name>
-# API: people.deleteContact
-```
 
 ### Groups (P3, S) — Workspace only
 

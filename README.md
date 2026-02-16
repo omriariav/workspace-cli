@@ -153,6 +153,10 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws docs replace <id>` | Find and replace text (`--find`, `--replace`, `--match-case`) |
 | `gws docs delete <id>` | Delete content range (`--from`, `--to`) |
 | `gws docs add-table <id>` | Insert table (`--rows`, `--cols`, `--at`) |
+| `gws docs format <id>` | Format text (`--from`, `--to`, `--bold`, `--italic`, `--font-size`, `--color`) |
+| `gws docs set-paragraph-style <id>` | Paragraph style (`--from`, `--to`, `--alignment`, `--line-spacing`) |
+| `gws docs add-list <id>` | Add bullet/numbered list (`--at`, `--type`, `--items`) |
+| `gws docs remove-list <id>` | Remove list formatting (`--from`, `--to`) |
 
 ### Sheets
 
@@ -177,6 +181,10 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws sheets unmerge <id> <range>` | Unmerge cells |
 | `gws sheets sort <id> <range>` | Sort data (`--by`, `--desc`, `--has-header`) |
 | `gws sheets find-replace <id>` | Find and replace (`--find`, `--replace`, `--sheet`, `--match-case`) |
+| `gws sheets format <id> <range>` | Format cells (`--bold`, `--italic`, `--bg-color`, `--color`, `--font-size`) |
+| `gws sheets set-column-width <id>` | Set column width (`--sheet`, `--col`, `--width`) |
+| `gws sheets set-row-height <id>` | Set row height (`--sheet`, `--row`, `--height`) |
+| `gws sheets freeze <id>` | Freeze panes (`--sheet`, `--rows`, `--cols`) |
 
 ### Slides
 

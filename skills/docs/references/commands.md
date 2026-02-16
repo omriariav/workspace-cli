@@ -157,6 +157,77 @@ Use `gws docs read <id> --include-formatting` to determine correct positions.
 
 ---
 
+## gws docs format
+
+Applies text formatting to a range of positions in the document.
+
+```
+Usage: gws docs format <document-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--from` | int | | Yes | Start position (1-based index) |
+| `--to` | int | | Yes | End position (1-based index) |
+| `--bold` | bool | false | No | Make text bold |
+| `--italic` | bool | false | No | Make text italic |
+| `--font-size` | int | 0 | No | Font size in points |
+| `--color` | string | | No | Text color (hex, e.g., `#FF0000`) |
+
+At least one formatting flag is required.
+
+---
+
+## gws docs set-paragraph-style
+
+Sets paragraph style properties for a range of positions.
+
+```
+Usage: gws docs set-paragraph-style <document-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--from` | int | | Yes | Start position (1-based index) |
+| `--to` | int | | Yes | End position (1-based index) |
+| `--alignment` | string | | No | Paragraph alignment: `START`, `CENTER`, `END`, `JUSTIFIED` |
+| `--line-spacing` | float | 0 | No | Line spacing multiplier (e.g., 1.15, 1.5, 2.0) |
+
+At least one of `--alignment` or `--line-spacing` is required.
+
+---
+
+## gws docs add-list
+
+Inserts text items as a bullet or numbered list at a specified position.
+
+```
+Usage: gws docs add-list <document-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--at` | int | 1 | No | Position to insert at (1-based index) |
+| `--type` | string | `bullet` | No | List type: `bullet` or `numbered` |
+| `--items` | string | | Yes | List items separated by semicolons |
+
+---
+
+## gws docs remove-list
+
+Removes bullet or numbered list formatting from a range.
+
+```
+Usage: gws docs remove-list <document-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--from` | int | | Yes | Start position (1-based index) |
+| `--to` | int | | Yes | End position (1-based index) |
+
+---
+
 ## Content Formats
 
 The `--content-format` flag is available on `create`, `append`, and `insert` commands.
