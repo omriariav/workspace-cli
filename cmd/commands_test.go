@@ -319,6 +319,10 @@ func TestSheetsCommands(t *testing.T) {
 		{"add-sheet"},
 		{"delete-sheet"},
 		{"clear"},
+		{"format"},
+		{"set-column-width"},
+		{"set-row-height"},
+		{"freeze"},
 	}
 
 	for _, tt := range tests {

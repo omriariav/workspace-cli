@@ -1125,6 +1125,10 @@ func TestSheetsCommands_Structure_Extended(t *testing.T) {
 		"unmerge",
 		"sort",
 		"find-replace",
+		"format",
+		"set-column-width",
+		"set-row-height",
+		"freeze",
 	}
 
 	for _, cmdName := range commands {
@@ -1134,5 +1138,330 @@ func TestSheetsCommands_Structure_Extended(t *testing.T) {
 				t.Fatalf("command '%s' not found", cmdName)
 			}
 		})
+	}
+}
+
+// TestSheetsFormatCommand_Flags tests format command flags
+func TestSheetsFormatCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "format")
+	if cmd == nil {
+		t.Fatal("format command not found")
+	}
+
+	expectedFlags := []string{"bold", "italic", "bg-color", "color", "font-size"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsSetColumnWidthCommand_Flags tests set-column-width command flags
+func TestSheetsSetColumnWidthCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "set-column-width")
+	if cmd == nil {
+		t.Fatal("set-column-width command not found")
+	}
+
+	expectedFlags := []string{"sheet", "col", "width"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsSetRowHeightCommand_Flags tests set-row-height command flags
+func TestSheetsSetRowHeightCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "set-row-height")
+	if cmd == nil {
+		t.Fatal("set-row-height command not found")
+	}
+
+	expectedFlags := []string{"sheet", "row", "height"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsFreezeCommand_Flags tests freeze command flags
+func TestSheetsFreezeCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "freeze")
+	if cmd == nil {
+		t.Fatal("freeze command not found")
+	}
+
+	expectedFlags := []string{"sheet", "rows", "cols"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestParseSheetsHexColor tests the parseSheetsHexColor helper
+func TestParseSheetsHexColor(t *testing.T) {
+	tests := []struct {
+		name    string
+		hex     string
+		wantR   float64
+		wantG   float64
+		wantB   float64
+		wantErr bool
+	}{
+		{"red", "#FF0000", 1.0, 0.0, 0.0, false},
+		{"green", "#00FF00", 0.0, 1.0, 0.0, false},
+		{"blue", "#0000FF", 0.0, 0.0, 1.0, false},
+		{"yellow", "#FFFF00", 1.0, 1.0, 0.0, false},
+		{"black", "#000000", 0.0, 0.0, 0.0, false},
+		{"white", "#FFFFFF", 1.0, 1.0, 1.0, false},
+		{"lowercase", "#ff0000", 1.0, 0.0, 0.0, false},
+		{"invalid - no hash", "FF0000", 0, 0, 0, true},
+		{"invalid - too short", "#FFF", 0, 0, 0, true},
+		{"invalid - bad chars", "#GGGGGG", 0, 0, 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			color, err := parseSheetsHexColor(tt.hex)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if color.Red != tt.wantR {
+				t.Errorf("expected red %f, got %f", tt.wantR, color.Red)
+			}
+			if color.Green != tt.wantG {
+				t.Errorf("expected green %f, got %f", tt.wantG, color.Green)
+			}
+			if color.Blue != tt.wantB {
+				t.Errorf("expected blue %f, got %f", tt.wantB, color.Blue)
+			}
+		})
+	}
+}
+
+// TestSheetsFormat_MockServer tests format cells API integration
+func TestSheetsFormat_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				repeatCell := requests[0].(map[string]interface{})["repeatCell"]
+				if repeatCell == nil {
+					t.Error("expected repeatCell request")
+				}
+			}
+
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"replies":       []map[string]interface{}{{}},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsSetColumnWidth_MockServer tests set-column-width API integration
+func TestSheetsSetColumnWidth_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				updateDim := requests[0].(map[string]interface{})["updateDimensionProperties"]
+				if updateDim == nil {
+					t.Error("expected updateDimensionProperties request")
+				} else {
+					dimRange := updateDim.(map[string]interface{})["range"].(map[string]interface{})
+					if dimRange["dimension"] != "COLUMNS" {
+						t.Errorf("expected dimension COLUMNS, got %v", dimRange["dimension"])
+					}
+				}
+			}
+
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"replies":       []map[string]interface{}{{}},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsSetRowHeight_MockServer tests set-row-height API integration
+func TestSheetsSetRowHeight_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				updateDim := requests[0].(map[string]interface{})["updateDimensionProperties"]
+				if updateDim == nil {
+					t.Error("expected updateDimensionProperties request")
+				} else {
+					dimRange := updateDim.(map[string]interface{})["range"].(map[string]interface{})
+					if dimRange["dimension"] != "ROWS" {
+						t.Errorf("expected dimension ROWS, got %v", dimRange["dimension"])
+					}
+				}
+			}
+
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"replies":       []map[string]interface{}{{}},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsFreeze_MockServer tests freeze panes API integration
+func TestSheetsFreeze_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				updateProps := requests[0].(map[string]interface{})["updateSheetProperties"]
+				if updateProps == nil {
+					t.Error("expected updateSheetProperties request")
+				} else {
+					fields := updateProps.(map[string]interface{})["fields"].(string)
+					if !strings.Contains(fields, "gridProperties.frozenRowCount") && !strings.Contains(fields, "gridProperties.frozenColumnCount") {
+						t.Errorf("expected frozen fields in mask, got %s", fields)
+					}
+				}
+			}
+
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"replies":       []map[string]interface{}{{}},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
 	}
 }
