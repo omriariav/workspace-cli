@@ -15,6 +15,7 @@ import (
 	"google.golang.org/api/forms/v1"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
+	"google.golang.org/api/people/v1"
 	"google.golang.org/api/sheets/v4"
 	"google.golang.org/api/slides/v1"
 	"google.golang.org/api/tasks/v1"
@@ -35,6 +36,7 @@ type Factory struct {
 	tasks    *tasks.Service
 	chat     *chat.Service
 	forms    *forms.Service
+	people   *people.Service
 }
 
 // NewFactory creates a new client factory.
@@ -229,5 +231,23 @@ func (f *Factory) Forms() (*forms.Service, error) {
 	}
 
 	f.forms = svc
+	return svc, nil
+}
+
+// People returns the People API service client.
+func (f *Factory) People() (*people.Service, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.people != nil {
+		return f.people, nil
+	}
+
+	svc, err := people.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create People client: %w", err)
+	}
+
+	f.people = svc
 	return svc, nil
 }
