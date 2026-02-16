@@ -114,6 +114,101 @@ func TestNullPrinter_HandlesLargeData(t *testing.T) {
 	}
 }
 
+func TestNew_YAML(t *testing.T) {
+	var buf bytes.Buffer
+	p := New(&buf, "yaml")
+
+	if _, ok := p.(*YAMLPrinter); !ok {
+		t.Error("expected YAMLPrinter for 'yaml' format")
+	}
+}
+
+func TestYAMLPrinter_Print_Map(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewYAMLPrinter(&buf)
+
+	data := map[string]interface{}{
+		"name":  "test",
+		"count": 42,
+	}
+
+	if err := p.Print(data); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "name: test") {
+		t.Errorf("expected 'name: test' in output: %s", output)
+	}
+	if !strings.Contains(output, "count: 42") {
+		t.Errorf("expected 'count: 42' in output: %s", output)
+	}
+}
+
+func TestYAMLPrinter_Print_Slice(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewYAMLPrinter(&buf)
+
+	data := []string{"a", "b", "c"}
+
+	if err := p.Print(data); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "- a") {
+		t.Errorf("expected '- a' in output: %s", output)
+	}
+	if !strings.Contains(output, "- b") {
+		t.Errorf("expected '- b' in output: %s", output)
+	}
+}
+
+func TestYAMLPrinter_Print_Nested(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewYAMLPrinter(&buf)
+
+	data := map[string]interface{}{
+		"user": map[string]interface{}{
+			"name":  "John",
+			"email": "john@example.com",
+		},
+		"items": []int{1, 2, 3},
+	}
+
+	if err := p.Print(data); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "name: John") {
+		t.Errorf("expected nested name in output: %s", output)
+	}
+	if !strings.Contains(output, "email: john@example.com") {
+		t.Errorf("expected nested email in output: %s", output)
+	}
+}
+
+func TestYAMLPrinter_PrintError(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewYAMLPrinter(&buf)
+
+	err := errors.New("something went wrong")
+	if printErr := p.PrintError(err); printErr != nil {
+		t.Fatalf("unexpected error: %v", printErr)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "error: something went wrong") {
+		t.Errorf("expected error message in output: %s", output)
+	}
+}
+
+func TestYAMLPrinter_ImplementsPrinter(t *testing.T) {
+	var p Printer = NewYAMLPrinter(&bytes.Buffer{})
+	_ = p // Verify interface compliance
+}
+
 func TestNew_UnknownFormat(t *testing.T) {
 	var buf bytes.Buffer
 	p := New(&buf, "xml")

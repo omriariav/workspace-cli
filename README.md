@@ -8,14 +8,14 @@
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.23+-00ADD8.svg" alt="Go Version"></a>
 </p>
 
-`gws` gives developers and AI agents a structured, token-efficient interface to 10+ Google Workspace services. Every command returns consistent JSON (or human-readable text), making it ideal for scripting, automation, and agent toolchains.
+`gws` gives developers and AI agents a structured, token-efficient interface to 10+ Google Workspace services. Every command returns consistent JSON (or YAML or human-readable text), making it ideal for scripting, automation, and agent toolchains.
 
 **Built for AI & automation:** Drop `gws` into Claude Code, Codex, or shell scripts and they inherit structured output, predictable flags, and safe defaults — no wrapper code required.
 
 ## Features
 
 - **10+ Google services** — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Custom Search.
-- **Scriptable output** — `--format json` (default), `--format text` for human-readable tables, or `--quiet` to suppress output.
+- **Scriptable output** — `--format json` (default), `--format yaml`, `--format text` for human-readable tables, or `--quiet` to suppress output.
 - **OAuth2 + PKCE** — Secure browser-based auth with automatic token refresh and `0600` file permissions.
 - **Single auth flow** — Authenticate once to access all services; all scopes requested upfront.
 - **Lazy clients** — Service clients are initialized on-demand with mutex protection.
@@ -78,7 +78,7 @@ gws sheets read <spreadsheet-id> "Sheet1!A1:D10"
 gws tasks lists
 ```
 
-Add `--format text` to any command for human-readable output.
+Add `--format text` for human-readable output, or `--format yaml` for YAML.
 
 ## Commands
 
@@ -258,7 +258,7 @@ internal/
   auth/           # OAuth2 + PKCE flow, token management
   client/         # Lazy-initialized Google API service factory
   config/         # Viper configuration and path resolution
-  printer/        # JSON and text output formatters
+  printer/        # JSON, YAML, and text output formatters
 main.go           # Entry point
 ```
 

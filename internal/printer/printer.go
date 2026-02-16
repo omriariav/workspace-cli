@@ -15,6 +15,8 @@ func New(w io.Writer, format string) Printer {
 	switch format {
 	case "text":
 		return NewTextPrinter(w)
+	case "yaml":
+		return NewYAMLPrinter(w)
 	default:
 		return NewJSONPrinter(w)
 	}

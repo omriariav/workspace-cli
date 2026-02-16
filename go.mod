@@ -7,6 +7,7 @@ require (
 	github.com/spf13/viper v1.19.0
 	golang.org/x/oauth2 v0.25.0
 	google.golang.org/api v0.214.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -48,5 +49,4 @@ require (
 	google.golang.org/grpc v1.67.1 // indirect
 	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
