@@ -1,5 +1,25 @@
 # Releases
 
+## v1.16.0
+
+**Security Hardening + Scoped Auth**
+
+### Security
+- Atomic token writes: temp-file + `os.Rename` prevents partial/corrupt token files
+- File locking: `.lock` file with `O_CREATE|O_EXCL`, age-based stale lock cleanup (30s)
+- Refresh token preservation: `MergeToken()` keeps existing refresh token when re-auth omits it
+- Server-side token revocation on logout via Google's `/revoke` endpoint (best-effort)
+
+### Scoped Authorization
+- New `--services` flag on `gws auth login` — request only the scopes you need (e.g. `--services gmail,calendar,chat`)
+- Service-to-scope mapping in `ServiceScopes` map with helpers (`ScopesForServices`, `ServiceForScope`)
+- Config file support: set default services in `config.yaml` (`services: [gmail, calendar]`)
+- Lazy scope detection: warns at runtime if a command needs scopes not yet authorized
+- Backward compatible: omitting `--services` requests all scopes (existing behavior)
+
+### New Scope
+- Added `chat.memberships.readonly` — enables future `gws chat members` command
+
 ## v1.0.0
 
 **Claude Code Plugin — Workspace Skills**

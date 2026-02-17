@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
@@ -23,9 +25,11 @@ import (
 
 // Factory provides lazy-initialized Google API service clients.
 type Factory struct {
-	mu          sync.Mutex
-	ctx         context.Context
-	tokenSource oauth2.TokenSource
+	mu              sync.Mutex
+	ctx             context.Context
+	tokenSource     oauth2.TokenSource
+	grantedServices []string        // services granted at login time
+	scopeWarned     map[string]bool // track warnings to avoid repeats
 
 	gmail    *gmail.Service
 	calendar *calendar.Service
@@ -67,15 +71,43 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 	}
 
 	return &Factory{
-		ctx:         ctx,
-		tokenSource: ts,
+		ctx:             ctx,
+		tokenSource:     ts,
+		grantedServices: auth.LoadGrantedServices(),
+		scopeWarned:     make(map[string]bool),
 	}, nil
+}
+
+// checkServiceScopes checks if the required service was granted during login.
+// Prints a warning to stderr if the service was not included in the scoped login.
+func (f *Factory) checkServiceScopes(service string) {
+	if len(f.grantedServices) == 0 {
+		return // Full auth or no metadata — skip check
+	}
+
+	for _, s := range f.grantedServices {
+		if s == service {
+			return // Granted
+		}
+	}
+
+	// Only warn once per service per session
+	if f.scopeWarned[service] {
+		return
+	}
+	f.scopeWarned[service] = true
+
+	allServices := append(f.grantedServices, service)
+	fmt.Fprintf(os.Stderr, "%s requires additional permissions. Re-authorize with:\n  gws auth login --services %s\n",
+		service, strings.Join(allServices, ","))
 }
 
 // Gmail returns the Gmail service client.
 func (f *Factory) Gmail() (*gmail.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	f.checkServiceScopes("gmail")
 
 	if f.gmail != nil {
 		return f.gmail, nil
@@ -95,6 +127,8 @@ func (f *Factory) Calendar() (*calendar.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	f.checkServiceScopes("calendar")
+
 	if f.calendar != nil {
 		return f.calendar, nil
 	}
@@ -112,6 +146,8 @@ func (f *Factory) Calendar() (*calendar.Service, error) {
 func (f *Factory) Drive() (*drive.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	f.checkServiceScopes("drive")
 
 	if f.drive != nil {
 		return f.drive, nil
@@ -131,6 +167,8 @@ func (f *Factory) Docs() (*docs.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	f.checkServiceScopes("docs")
+
 	if f.docs != nil {
 		return f.docs, nil
 	}
@@ -148,6 +186,8 @@ func (f *Factory) Docs() (*docs.Service, error) {
 func (f *Factory) Sheets() (*sheets.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	f.checkServiceScopes("sheets")
 
 	if f.sheets != nil {
 		return f.sheets, nil
@@ -167,6 +207,8 @@ func (f *Factory) Slides() (*slides.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	f.checkServiceScopes("slides")
+
 	if f.slides != nil {
 		return f.slides, nil
 	}
@@ -184,6 +226,8 @@ func (f *Factory) Slides() (*slides.Service, error) {
 func (f *Factory) Tasks() (*tasks.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	f.checkServiceScopes("tasks")
 
 	if f.tasks != nil {
 		return f.tasks, nil
@@ -203,6 +247,8 @@ func (f *Factory) Chat() (*chat.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	f.checkServiceScopes("chat")
+
 	if f.chat != nil {
 		return f.chat, nil
 	}
@@ -221,6 +267,8 @@ func (f *Factory) Forms() (*forms.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	f.checkServiceScopes("forms")
+
 	if f.forms != nil {
 		return f.forms, nil
 	}
@@ -238,6 +286,8 @@ func (f *Factory) Forms() (*forms.Service, error) {
 func (f *Factory) People() (*people.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	f.checkServiceScopes("contacts")
 
 	if f.people != nil {
 		return f.people, nil

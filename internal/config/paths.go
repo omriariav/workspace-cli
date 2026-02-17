@@ -6,10 +6,11 @@ import (
 )
 
 const (
-	appName       = "gws"
-	configDirName = "gws"
-	tokenFileName = "token.json"
-	configName    = "config.yaml"
+	appName             = "gws"
+	configDirName       = "gws"
+	tokenFileName       = "token.json"
+	configName          = "config.yaml"
+	grantedServicesFile = "granted_services.json"
 )
 
 // GetConfigDir returns the configuration directory path.
@@ -36,6 +37,11 @@ func GetTokenPath() string {
 // GetConfigPath returns the full path to the config file.
 func GetConfigPath() string {
 	return filepath.Join(GetConfigDir(), configName)
+}
+
+// GetGrantedServicesPath returns the full path to the granted services file.
+func GetGrantedServicesPath() string {
+	return filepath.Join(GetConfigDir(), grantedServicesFile)
 }
 
 // EnsureConfigDir creates the configuration directory if it doesn't exist.

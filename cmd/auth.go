@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
@@ -15,6 +16,8 @@ import (
 	oauth2api "google.golang.org/api/oauth2/v2"
 	"google.golang.org/api/option"
 )
+
+const revokeTimeout = 10 * time.Second
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
@@ -52,6 +55,7 @@ func init() {
 	// Login flags for credentials (can also come from config/env)
 	loginCmd.Flags().String("client-id", "", "OAuth client ID")
 	loginCmd.Flags().String("client-secret", "", "OAuth client secret")
+	loginCmd.Flags().String("services", "", "Comma-separated list of services to authorize (e.g. gmail,calendar,chat)")
 	viper.BindPFlag("client_id", loginCmd.Flags().Lookup("client-id"))
 	viper.BindPFlag("client_secret", loginCmd.Flags().Lookup("client-secret"))
 }
@@ -66,7 +70,17 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("missing credentials: set GWS_CLIENT_ID and GWS_CLIENT_SECRET environment variables, or use --client-id and --client-secret flags"))
 	}
 
-	client := auth.NewOAuthClient(clientID, clientSecret)
+	// Determine scopes and services based on --services flag, config, or all
+	scopes, grantedServices := resolveScopes(cmd)
+
+	// Validate service names
+	if unknown := auth.ValidateServices(grantedServices); len(unknown) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: unknown service(s): %s\nValid services: %s\n",
+			strings.Join(unknown, ", "),
+			strings.Join(auth.ValidServiceNames(), ", "))
+	}
+
+	client := auth.NewOAuthClient(clientID, clientSecret, scopes)
 
 	ctx := context.Background()
 	token, err := client.Login(ctx)
@@ -74,8 +88,19 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
+	// Merge with existing token to preserve refresh token
+	existing, _ := auth.LoadToken()
+	token = auth.MergeToken(existing, token)
+
 	if err := auth.SaveToken(token); err != nil {
 		return p.PrintError(err)
+	}
+
+	// Persist granted services for lazy scope detection
+	if len(grantedServices) > 0 {
+		if err := auth.SaveGrantedServices(grantedServices); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save granted services: %v\n", err)
+		}
 	}
 
 	return p.Print(map[string]interface{}{
@@ -93,6 +118,16 @@ func runLogout(cmd *cobra.Command, args []string) error {
 			"status":  "success",
 			"message": "Not authenticated (no token found)",
 		})
+	}
+
+	// Best-effort server-side revocation with timeout before deleting local token
+	token, err := auth.LoadToken()
+	if err == nil && token != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), revokeTimeout)
+		defer cancel()
+		if revokeErr := auth.RevokeToken(ctx, token); revokeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to revoke token server-side: %v\n", revokeErr)
+		}
 	}
 
 	if err := auth.DeleteToken(); err != nil {
@@ -174,4 +209,25 @@ func getUserInfo(token *oauth2.Token) (*oauth2api.Userinfo, error) {
 	}
 
 	return svc.Userinfo.Get().Do()
+}
+
+// resolveScopes determines which scopes to request based on the --services flag,
+// config file, or defaults to all scopes. Returns scopes and the service list used.
+func resolveScopes(cmd *cobra.Command) ([]string, []string) {
+	// 1. Check --services flag
+	if servicesFlag, _ := cmd.Flags().GetString("services"); servicesFlag != "" {
+		services := strings.Split(servicesFlag, ",")
+		for i := range services {
+			services[i] = strings.TrimSpace(services[i])
+		}
+		return auth.ScopesForServices(services), services
+	}
+
+	// 2. Check config file
+	if configServices := config.GetServices(); len(configServices) > 0 {
+		return auth.ScopesForServices(configServices), configServices
+	}
+
+	// 3. Default: all scopes (no service list = full auth)
+	return auth.AllScopes, nil
 }
