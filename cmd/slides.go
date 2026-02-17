@@ -768,6 +768,10 @@ func extractPageElements(slide *slides.Page) []map[string]interface{} {
 			if len(el.Table.TableRows) > 0 {
 				elem["cols"] = len(el.Table.TableRows[0].TableCells)
 			}
+			text := extractTableText(el.Table)
+			if text != "" {
+				elem["text"] = text
+			}
 		} else if el.Image != nil {
 			elem["type"] = "image"
 			if el.Image.SourceUrl != "" {
@@ -1568,12 +1572,17 @@ func runSlidesReplaceText(cmd *cobra.Command, args []string) error {
 
 		// Find the element and its text
 		var elementText string
+		var found bool
 		for _, slide := range presentation.Slides {
 			for _, el := range slide.PageElements {
 				if el.ObjectId == objectID && el.Shape != nil {
 					elementText = extractShapeText(el.Shape)
+					found = true
 					break
 				}
+			}
+			if found {
+				break
 			}
 		}
 
@@ -1581,7 +1590,8 @@ func runSlidesReplaceText(cmd *cobra.Command, args []string) error {
 			return p.PrintError(fmt.Errorf("element '%s' not found or has no text", objectID))
 		}
 
-		// Find occurrence in text
+		// Find occurrence in text, preserving original findText for output
+		originalFind := findText
 		searchText := elementText
 		if !matchCase {
 			searchText = strings.ToLower(elementText)
@@ -1594,15 +1604,15 @@ func runSlidesReplaceText(cmd *cobra.Command, args []string) error {
 				"status":              "replaced",
 				"presentation_id":     presentationID,
 				"object_id":           objectID,
-				"find":                findText,
+				"find":                originalFind,
 				"replace":             replaceText,
 				"occurrences_changed": 0,
 			})
 		}
 
-		// Build delete + insert requests
+		// Build delete + insert requests — use original text length for correct byte range
 		startIdx := int64(idx)
-		endIdx := int64(idx + len(findText))
+		endIdx := int64(idx + len(originalFind))
 		requests := []*slides.Request{
 			{
 				DeleteText: &slides.DeleteTextRequest{
@@ -1634,7 +1644,7 @@ func runSlidesReplaceText(cmd *cobra.Command, args []string) error {
 			"status":              "replaced",
 			"presentation_id":     presentationID,
 			"object_id":           objectID,
-			"find":                findText,
+			"find":                originalFind,
 			"replace":             replaceText,
 			"occurrences_changed": 1,
 		})
