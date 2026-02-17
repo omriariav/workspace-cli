@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
@@ -23,9 +25,10 @@ import (
 
 // Factory provides lazy-initialized Google API service clients.
 type Factory struct {
-	mu          sync.Mutex
-	ctx         context.Context
-	tokenSource oauth2.TokenSource
+	mu             sync.Mutex
+	ctx            context.Context
+	tokenSource    oauth2.TokenSource
+	RequiredScopes []string // Set by service commands to declare needed scopes
 
 	gmail    *gmail.Service
 	calendar *calendar.Service
@@ -70,6 +73,47 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 		ctx:         ctx,
 		tokenSource: ts,
 	}, nil
+}
+
+// CheckScopes verifies that required scopes are available in the current token.
+// Prints a message to stderr if missing scopes are detected.
+func (f *Factory) CheckScopes() {
+	if len(f.RequiredScopes) == 0 {
+		return
+	}
+
+	// Load granted scopes from token metadata (best-effort)
+	granted := config.GetServices()
+	if len(granted) == 0 {
+		return // No scope metadata stored, skip check
+	}
+
+	// Build set of granted scopes
+	grantedScopes := make(map[string]bool)
+	for _, svc := range granted {
+		for _, s := range auth.ScopesForServices([]string{svc}) {
+			grantedScopes[s] = true
+		}
+	}
+
+	// Check for missing scopes
+	var missingServices []string
+	seen := make(map[string]bool)
+	for _, scope := range f.RequiredScopes {
+		if !grantedScopes[scope] {
+			svc := auth.ServiceForScope(scope)
+			if svc != "" && !seen[svc] {
+				seen[svc] = true
+				missingServices = append(missingServices, svc)
+			}
+		}
+	}
+
+	if len(missingServices) > 0 {
+		fmt.Fprintf(os.Stderr, "%s requires additional permissions. Re-authorize with:\n  gws auth login --services %s\n",
+			strings.Join(missingServices, ", "),
+			strings.Join(append(granted, missingServices...), ","))
+	}
 }
 
 // Gmail returns the Gmail service client.

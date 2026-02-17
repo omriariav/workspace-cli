@@ -21,14 +21,14 @@ type OAuthClient struct {
 	config *oauth2.Config
 }
 
-// NewOAuthClient creates a new OAuth client with the given credentials.
-func NewOAuthClient(clientID, clientSecret string) *OAuthClient {
+// NewOAuthClient creates a new OAuth client with the given credentials and scopes.
+func NewOAuthClient(clientID, clientSecret string, scopes []string) *OAuthClient {
 	return &OAuthClient{
 		config: &oauth2.Config{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 			Endpoint:     google.Endpoint,
-			Scopes:       AllScopes,
+			Scopes:       scopes,
 		},
 	}
 }

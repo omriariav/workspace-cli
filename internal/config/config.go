@@ -6,9 +6,10 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	ClientID     string `mapstructure:"client_id"`
-	ClientSecret string `mapstructure:"client_secret"`
-	Format       string `mapstructure:"format"`
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	Format       string   `mapstructure:"format"`
+	Services     []string `mapstructure:"services"`
 }
 
 // Keys for configuration values.
@@ -16,6 +17,7 @@ const (
 	KeyClientID     = "client_id"
 	KeyClientSecret = "client_secret"
 	KeyFormat       = "format"
+	KeyServices     = "services"
 )
 
 // GetClientID returns the OAuth client ID from config or environment.
@@ -35,6 +37,11 @@ func GetFormat() string {
 		return "json"
 	}
 	return format
+}
+
+// GetServices returns the list of services from config.
+func GetServices() []string {
+	return viper.GetStringSlice(KeyServices)
 }
 
 // SetDefaults sets default configuration values.

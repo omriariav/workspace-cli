@@ -1,48 +1,81 @@
 package auth
 
-// AllScopes contains all Google API scopes required by gws.
-// We request all scopes upfront so users only need to authenticate once.
-var AllScopes = []string{
-	// Gmail
-	"https://www.googleapis.com/auth/gmail.readonly",
-	"https://www.googleapis.com/auth/gmail.send",
-	"https://www.googleapis.com/auth/gmail.modify",
+import "strings"
 
-	// Calendar
-	"https://www.googleapis.com/auth/calendar.readonly",
-	"https://www.googleapis.com/auth/calendar.events",
+const scopePrefix = "https://www.googleapis.com/auth/"
 
-	// Drive
-	"https://www.googleapis.com/auth/drive.readonly",
-	"https://www.googleapis.com/auth/drive.file",
+// ServiceScopes maps each service to its required Google API scopes.
+var ServiceScopes = map[string][]string{
+	"gmail":    {"gmail.readonly", "gmail.send", "gmail.modify"},
+	"calendar": {"calendar.readonly", "calendar.events"},
+	"drive":    {"drive.readonly", "drive.file"},
+	"docs":     {"documents.readonly", "documents"},
+	"sheets":   {"spreadsheets"},
+	"slides":   {"presentations.readonly", "presentations"},
+	"tasks":    {"tasks.readonly", "tasks"},
+	"chat":     {"chat.spaces.readonly", "chat.messages", "chat.messages.create", "chat.memberships.readonly"},
+	"forms":    {"forms.responses.readonly"},
+	"contacts": {"contacts.readonly", "contacts"},
+	"userinfo": {"userinfo.email"},
+}
 
-	// Docs
-	"https://www.googleapis.com/auth/documents.readonly",
-	"https://www.googleapis.com/auth/documents",
+// AllScopes is the union of all service scopes. Computed at init time for backward compat.
+var AllScopes = computeAllScopes()
 
-	// Sheets (full access includes read)
-	"https://www.googleapis.com/auth/spreadsheets",
+func computeAllScopes() []string {
+	seen := make(map[string]bool)
+	var scopes []string
+	// Deterministic order: iterate known service names
+	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "userinfo"}
+	for _, svc := range order {
+		for _, s := range ServiceScopes[svc] {
+			full := scopePrefix + s
+			if !seen[full] {
+				seen[full] = true
+				scopes = append(scopes, full)
+			}
+		}
+	}
+	return scopes
+}
 
-	// Slides
-	"https://www.googleapis.com/auth/presentations.readonly",
-	"https://www.googleapis.com/auth/presentations",
+// ScopesForServices returns the full scope URLs for the given service names.
+// Always includes userinfo scopes.
+func ScopesForServices(services []string) []string {
+	seen := make(map[string]bool)
+	var scopes []string
 
-	// Tasks
-	"https://www.googleapis.com/auth/tasks.readonly",
-	"https://www.googleapis.com/auth/tasks",
+	// Always include userinfo
+	addService := func(svc string) {
+		if ss, ok := ServiceScopes[svc]; ok {
+			for _, s := range ss {
+				full := scopePrefix + s
+				if !seen[full] {
+					seen[full] = true
+					scopes = append(scopes, full)
+				}
+			}
+		}
+	}
 
-	// Chat (requires additional setup)
-	"https://www.googleapis.com/auth/chat.spaces.readonly",
-	"https://www.googleapis.com/auth/chat.messages",
-	"https://www.googleapis.com/auth/chat.messages.create",
+	addService("userinfo")
+	for _, svc := range services {
+		addService(svc)
+	}
 
-	// Forms
-	"https://www.googleapis.com/auth/forms.responses.readonly",
+	return scopes
+}
 
-	// Contacts (People API)
-	"https://www.googleapis.com/auth/contacts.readonly",
-	"https://www.googleapis.com/auth/contacts",
-
-	// User info (for status display)
-	"https://www.googleapis.com/auth/userinfo.email",
+// ServiceForScope returns the service name for a given full scope URL.
+// Returns empty string if the scope is not recognized.
+func ServiceForScope(scope string) string {
+	short := strings.TrimPrefix(scope, scopePrefix)
+	for svc, ss := range ServiceScopes {
+		for _, s := range ss {
+			if s == short {
+				return svc
+			}
+		}
+	}
+	return ""
 }
