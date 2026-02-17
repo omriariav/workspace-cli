@@ -61,6 +61,13 @@ For initial setup, see the `gws-auth` skill.
 | Paragraph style | `gws slides update-paragraph-style <id> --object-id <obj-id> --alignment CENTER` |
 | Shape properties | `gws slides update-shape <id> --object-id <obj-id> --background-color "#0000FF"` |
 | Reorder slides | `gws slides reorder-slides <id> --slide-ids "slide1,slide2" --to 0` |
+| Set slide background color | `gws slides update-slide-background <id> --slide-number 1 --color "#005843"` |
+| Set slide background image | `gws slides update-slide-background <id> --slide-number 1 --image-url "https://..."` |
+| List available layouts | `gws slides list-layouts <id>` |
+| Add slide with custom layout | `gws slides add-slide <id> --layout-id <layout-id>` |
+| Add a line | `gws slides add-line <id> --slide-number 1 --start-x 50 --start-y 50 --end-x 300 --end-y 200` |
+| Group elements | `gws slides group <id> --object-ids "obj1,obj2,obj3"` |
+| Ungroup elements | `gws slides ungroup <id> --group-id <group-id>` |
 
 ## Detailed Usage
 
@@ -111,8 +118,11 @@ gws slides add-slide <presentation-id> [flags]
 - `--title string` — Slide title
 - `--body string` — Slide body text
 - `--layout string` — Layout type (default: "TITLE_AND_BODY")
+- `--layout-id string` — Custom layout ID from presentation's masters (overrides --layout)
 
-**Available layouts:** `TITLE_AND_BODY`, `TITLE_ONLY`, `BLANK`, `SECTION_HEADER`, `TITLE`, `ONE_COLUMN_TEXT`, `MAIN_POINT`, `BIG_NUMBER`
+**Available predefined layouts:** `TITLE_AND_BODY`, `TITLE_ONLY`, `BLANK`, `SECTION_HEADER`, `TITLE`, `ONE_COLUMN_TEXT`, `MAIN_POINT`, `BIG_NUMBER`
+
+For custom layouts, use `gws slides list-layouts <id>` to discover layout IDs.
 
 ### delete-slide — Delete a slide
 
@@ -343,6 +353,77 @@ gws slides reorder-slides <presentation-id> --slide-ids <ids> --to <position>
 - `--slide-ids string` — Comma-separated slide IDs to move (required)
 - `--to int` — Target position, 0-indexed (required)
 
+### update-slide-background — Set slide background
+
+```bash
+gws slides update-slide-background <presentation-id> [flags]
+```
+
+Sets the background of a slide to a solid color or an image URL.
+
+**Flags:**
+- `--slide-number int` — Slide number (1-indexed)
+- `--slide-id string` — Slide object ID
+- `--color string` — Background color as hex `#RRGGBB`
+- `--image-url string` — Background image URL
+
+One of `--color` or `--image-url` is required (mutually exclusive).
+
+### list-layouts — List available slide layouts
+
+```bash
+gws slides list-layouts <presentation-id>
+```
+
+Lists all available slide layouts from the presentation's masters. Use the returned layout IDs with `add-slide --layout-id`.
+
+### add-slide with custom layout
+
+The `add-slide` command also supports `--layout-id` for custom master layouts:
+
+```bash
+gws slides add-slide <presentation-id> --layout-id <layout-object-id>
+```
+
+Use `list-layouts` to discover available layout IDs.
+
+### add-line — Add a line or connector
+
+```bash
+gws slides add-line <presentation-id> [flags]
+```
+
+**Flags:**
+- `--slide-number int` — Slide number (1-indexed)
+- `--slide-id string` — Slide object ID
+- `--type string` — Line type (default: "STRAIGHT_CONNECTOR_1")
+- `--start-x float` — Start X position in points
+- `--start-y float` — Start Y position in points
+- `--end-x float` — End X position in points (default: 200)
+- `--end-y float` — End Y position in points (default: 200)
+- `--color string` — Line color as hex `#RRGGBB`
+- `--weight float` — Line thickness in points (default: 1)
+
+**Line categories:** Prefix determines routing: `STRAIGHT_*` for straight lines, `BENT_*` for bent connectors, `CURVED_*` for curved connectors.
+
+### group — Group elements together
+
+```bash
+gws slides group <presentation-id> --object-ids <ids>
+```
+
+**Flags:**
+- `--object-ids string` — Comma-separated element IDs to group (required, minimum 2)
+
+### ungroup — Ungroup elements
+
+```bash
+gws slides ungroup <presentation-id> --group-id <id>
+```
+
+**Flags:**
+- `--group-id string` — Object ID of the group to ungroup (required)
+
 ## Output Modes
 
 ```bash
@@ -369,7 +450,7 @@ gws slides list <id> --format text    # Human-readable text
 - `update-text-style` sets font properties (bold, italic, size, color) on text within shapes
 
 ### Gotchas & Workarounds
-- `add-slide --layout` may fail on presentations with custom slide masters; use `duplicate-slide` + modify as workaround
+- `add-slide --layout` may fail on presentations with custom slide masters; use `list-layouts` to get layout IDs and `add-slide --layout-id` instead
 - `replace-text` operates across ALL slides in the presentation — cannot target specific slides
 - Image URLs must be publicly accessible — Google Slides fetches them server-side
 - `add-text` inserts into shapes/text boxes or table cells; use `add-shape --type TEXT_BOX` to create a text container first

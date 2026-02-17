@@ -382,6 +382,8 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 				"update-table-cell", "update-table-border",
 				"update-paragraph-style", "update-shape",
 				"reorder-slides",
+				"update-slide-background", "list-layouts",
+				"add-line", "group", "ungroup",
 			},
 		},
 		"tasks": {

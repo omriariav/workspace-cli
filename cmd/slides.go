@@ -228,6 +228,46 @@ var slidesReorderSlidesCmd = &cobra.Command{
 	RunE:  runSlidesReorderSlides,
 }
 
+var slidesUpdateSlideBackgroundCmd = &cobra.Command{
+	Use:   "update-slide-background <presentation-id>",
+	Short: "Set slide background",
+	Long:  "Sets the background of a slide to a solid color or an image URL.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesUpdateSlideBackground,
+}
+
+var slidesListLayoutsCmd = &cobra.Command{
+	Use:   "list-layouts <presentation-id>",
+	Short: "List slide layouts",
+	Long:  "Lists all available slide layouts from the presentation's masters.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesListLayouts,
+}
+
+var slidesAddLineCmd = &cobra.Command{
+	Use:   "add-line <presentation-id>",
+	Short: "Add a line to a slide",
+	Long:  "Creates a line or connector on a slide.\n\nLine types: STRAIGHT_CONNECTOR_1, BENT_CONNECTOR_2, CURVED_CONNECTOR_2, etc.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesAddLine,
+}
+
+var slidesGroupCmd = &cobra.Command{
+	Use:   "group <presentation-id>",
+	Short: "Group elements together",
+	Long:  "Groups multiple page elements into a single group.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesGroup,
+}
+
+var slidesUngroupCmd = &cobra.Command{
+	Use:   "ungroup <presentation-id>",
+	Short: "Ungroup elements",
+	Long:  "Ungroups a group element back into individual elements.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesUngroup,
+}
+
 func init() {
 	rootCmd.AddCommand(slidesCmd)
 	slidesCmd.AddCommand(slidesInfoCmd)
@@ -253,6 +293,11 @@ func init() {
 	slidesCmd.AddCommand(slidesUpdateParagraphStyleCmd)
 	slidesCmd.AddCommand(slidesUpdateShapeCmd)
 	slidesCmd.AddCommand(slidesReorderSlidesCmd)
+	slidesCmd.AddCommand(slidesUpdateSlideBackgroundCmd)
+	slidesCmd.AddCommand(slidesListLayoutsCmd)
+	slidesCmd.AddCommand(slidesAddLineCmd)
+	slidesCmd.AddCommand(slidesGroupCmd)
+	slidesCmd.AddCommand(slidesUngroupCmd)
 
 	// Notes flags for read commands
 	slidesInfoCmd.Flags().Bool("notes", false, "Include speaker notes in output")
@@ -267,6 +312,7 @@ func init() {
 	slidesAddSlideCmd.Flags().String("title", "", "Slide title")
 	slidesAddSlideCmd.Flags().String("body", "", "Slide body text")
 	slidesAddSlideCmd.Flags().String("layout", "TITLE_AND_BODY", "Slide layout (TITLE_AND_BODY, TITLE_ONLY, BLANK, etc.)")
+	slidesAddSlideCmd.Flags().String("layout-id", "", "Custom layout ID from presentation's masters (overrides --layout)")
 
 	// Delete-slide flags
 	slidesDeleteSlideCmd.Flags().String("slide-id", "", "Slide object ID to delete")
@@ -415,6 +461,31 @@ func init() {
 	slidesReorderSlidesCmd.Flags().Int("to", 0, "Target position (0-indexed, required)")
 	slidesReorderSlidesCmd.MarkFlagRequired("slide-ids")
 	slidesReorderSlidesCmd.MarkFlagRequired("to")
+
+	// Update-slide-background flags
+	slidesUpdateSlideBackgroundCmd.Flags().String("slide-id", "", "Slide object ID")
+	slidesUpdateSlideBackgroundCmd.Flags().Int("slide-number", 0, "Slide number (1-indexed)")
+	slidesUpdateSlideBackgroundCmd.Flags().String("color", "", "Background color as hex #RRGGBB")
+	slidesUpdateSlideBackgroundCmd.Flags().String("image-url", "", "Background image URL")
+
+	// Add-line flags
+	slidesAddLineCmd.Flags().String("slide-id", "", "Slide object ID")
+	slidesAddLineCmd.Flags().Int("slide-number", 0, "Slide number (1-indexed)")
+	slidesAddLineCmd.Flags().String("type", "STRAIGHT_CONNECTOR_1", "Line type (STRAIGHT_CONNECTOR_1, BENT_CONNECTOR_2, CURVED_CONNECTOR_2, etc.)")
+	slidesAddLineCmd.Flags().Float64("start-x", 0, "Start X position in points")
+	slidesAddLineCmd.Flags().Float64("start-y", 0, "Start Y position in points")
+	slidesAddLineCmd.Flags().Float64("end-x", 200, "End X position in points")
+	slidesAddLineCmd.Flags().Float64("end-y", 200, "End Y position in points")
+	slidesAddLineCmd.Flags().String("color", "", "Line color as hex #RRGGBB")
+	slidesAddLineCmd.Flags().Float64("weight", 1, "Line thickness in points")
+
+	// Group flags
+	slidesGroupCmd.Flags().String("object-ids", "", "Comma-separated element IDs to group (required)")
+	slidesGroupCmd.MarkFlagRequired("object-ids")
+
+	// Ungroup flags
+	slidesUngroupCmd.Flags().String("group-id", "", "Object ID of the group to ungroup (required)")
+	slidesUngroupCmd.MarkFlagRequired("group-id")
 }
 
 func runSlidesInfo(cmd *cobra.Command, args []string) error {
@@ -798,32 +869,43 @@ func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
 	slideTitle, _ := cmd.Flags().GetString("title")
 	slideBody, _ := cmd.Flags().GetString("body")
 	layout, _ := cmd.Flags().GetString("layout")
+	layoutID, _ := cmd.Flags().GetString("layout-id")
 
-	// Validate layout
-	validLayouts := map[string]bool{
-		"BLANK":                         true,
-		"CAPTION_ONLY":                  true,
-		"TITLE":                         true,
-		"TITLE_AND_BODY":                true,
-		"TITLE_AND_TWO_COLUMNS":         true,
-		"TITLE_ONLY":                    true,
-		"SECTION_HEADER":                true,
-		"SECTION_TITLE_AND_DESCRIPTION": true,
-		"ONE_COLUMN_TEXT":               true,
-		"MAIN_POINT":                    true,
-		"BIG_NUMBER":                    true,
-	}
-	if !validLayouts[layout] {
-		return p.PrintError(fmt.Errorf("invalid layout '%s'. Valid layouts: BLANK, TITLE, TITLE_AND_BODY, TITLE_AND_TWO_COLUMNS, TITLE_ONLY, SECTION_HEADER, CAPTION_ONLY, MAIN_POINT, BIG_NUMBER", layout))
+	// Build layout reference
+	var layoutRef *slides.LayoutReference
+	if layoutID != "" {
+		// Use custom layout ID from presentation's masters
+		layoutRef = &slides.LayoutReference{
+			LayoutId: layoutID,
+		}
+	} else {
+		// Validate predefined layout
+		validLayouts := map[string]bool{
+			"BLANK":                         true,
+			"CAPTION_ONLY":                  true,
+			"TITLE":                         true,
+			"TITLE_AND_BODY":                true,
+			"TITLE_AND_TWO_COLUMNS":         true,
+			"TITLE_ONLY":                    true,
+			"SECTION_HEADER":                true,
+			"SECTION_TITLE_AND_DESCRIPTION": true,
+			"ONE_COLUMN_TEXT":               true,
+			"MAIN_POINT":                    true,
+			"BIG_NUMBER":                    true,
+		}
+		if !validLayouts[layout] {
+			return p.PrintError(fmt.Errorf("invalid layout '%s'. Valid layouts: BLANK, TITLE, TITLE_AND_BODY, TITLE_AND_TWO_COLUMNS, TITLE_ONLY, SECTION_HEADER, CAPTION_ONLY, MAIN_POINT, BIG_NUMBER", layout))
+		}
+		layoutRef = &slides.LayoutReference{
+			PredefinedLayout: layout,
+		}
 	}
 
 	// Create requests for adding a slide (let API generate the ID)
 	requests := []*slides.Request{
 		{
 			CreateSlide: &slides.CreateSlideRequest{
-				SlideLayoutReference: &slides.LayoutReference{
-					PredefinedLayout: layout,
-				},
+				SlideLayoutReference: layoutRef,
 			},
 		},
 	}
@@ -2451,5 +2533,383 @@ func runSlidesReorderSlides(cmd *cobra.Command, args []string) error {
 		"presentation_id": presentationID,
 		"slide_ids":       slideIDs,
 		"new_position":    toPosition,
+	})
+}
+
+func runSlidesUpdateSlideBackground(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+
+	presentationID := args[0]
+	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
+	colorHex, _ := cmd.Flags().GetString("color")
+	imageURL, _ := cmd.Flags().GetString("image-url")
+
+	// Validate: must specify exactly one of --color or --image-url
+	if colorHex == "" && imageURL == "" {
+		return p.PrintError(fmt.Errorf("must specify --color or --image-url"))
+	}
+	if colorHex != "" && imageURL != "" {
+		return p.PrintError(fmt.Errorf("--color and --image-url are mutually exclusive"))
+	}
+
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	slideID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	pageProps := &slides.PageProperties{
+		PageBackgroundFill: &slides.PageBackgroundFill{},
+	}
+	fields := "pageBackgroundFill"
+
+	if colorHex != "" {
+		color, err := parseHexColor(colorHex)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		pageProps.PageBackgroundFill.SolidFill = &slides.SolidFill{
+			Color: &slides.OpaqueColor{
+				RgbColor: color,
+			},
+		}
+	} else {
+		pageProps.PageBackgroundFill.StretchedPictureFill = &slides.StretchedPictureFill{
+			ContentUrl: imageURL,
+		}
+	}
+
+	requests := []*slides.Request{
+		{
+			UpdatePageProperties: &slides.UpdatePagePropertiesRequest{
+				ObjectId:       slideID,
+				PageProperties: pageProps,
+				Fields:         fields,
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update slide background: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":          "updated",
+		"presentation_id": presentationID,
+		"slide_id":        slideID,
+	}
+	if colorHex != "" {
+		result["background_color"] = colorHex
+	} else {
+		result["background_image"] = imageURL
+	}
+
+	return p.Print(result)
+}
+
+func runSlidesListLayouts(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+
+	presentation, err := svc.Presentations.Get(presentationID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
+	}
+
+	layouts := make([]map[string]interface{}, 0, len(presentation.Layouts))
+	for _, layout := range presentation.Layouts {
+		info := map[string]interface{}{
+			"id": layout.ObjectId,
+		}
+		if layout.LayoutProperties != nil {
+			if layout.LayoutProperties.Name != "" {
+				info["name"] = layout.LayoutProperties.Name
+			}
+			if layout.LayoutProperties.DisplayName != "" {
+				info["display_name"] = layout.LayoutProperties.DisplayName
+			}
+			if layout.LayoutProperties.MasterObjectId != "" {
+				info["master_id"] = layout.LayoutProperties.MasterObjectId
+			}
+		}
+		layouts = append(layouts, info)
+	}
+
+	return p.Print(map[string]interface{}{
+		"presentation_id": presentationID,
+		"layouts":         layouts,
+		"count":           len(layouts),
+	})
+}
+
+func runSlidesAddLine(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
+	lineType, _ := cmd.Flags().GetString("type")
+	startX, _ := cmd.Flags().GetFloat64("start-x")
+	startY, _ := cmd.Flags().GetFloat64("start-y")
+	endX, _ := cmd.Flags().GetFloat64("end-x")
+	endY, _ := cmd.Flags().GetFloat64("end-y")
+	colorHex, _ := cmd.Flags().GetString("color")
+	weight, _ := cmd.Flags().GetFloat64("weight")
+
+	slideID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	// Map line type to category
+	category := "STRAIGHT"
+	if strings.HasPrefix(lineType, "BENT") {
+		category = "BENT"
+	} else if strings.HasPrefix(lineType, "CURVED") {
+		category = "CURVED"
+	}
+
+	// Calculate size and position from start/end coordinates
+	width := endX - startX
+	height := endY - startY
+
+	// Handle negative dimensions by adjusting position
+	translateX := startX
+	translateY := startY
+	scaleX := 1.0
+	scaleY := 1.0
+	if width < 0 {
+		width = -width
+		translateX = endX
+		scaleX = -1.0
+	}
+	if height < 0 {
+		height = -height
+		translateY = endY
+		scaleY = -1.0
+	}
+
+	requests := []*slides.Request{
+		{
+			CreateLine: &slides.CreateLineRequest{
+				Category: category,
+				ElementProperties: &slides.PageElementProperties{
+					PageObjectId: slideID,
+					Size: &slides.Size{
+						Width:  &slides.Dimension{Magnitude: width, Unit: "PT"},
+						Height: &slides.Dimension{Magnitude: height, Unit: "PT"},
+					},
+					Transform: &slides.AffineTransform{
+						ScaleX:     scaleX,
+						ScaleY:     scaleY,
+						TranslateX: translateX,
+						TranslateY: translateY,
+						Unit:       "PT",
+					},
+				},
+			},
+		},
+	}
+
+	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add line: %w", err))
+	}
+
+	var lineObjectID string
+	if len(resp.Replies) > 0 && resp.Replies[0].CreateLine != nil {
+		lineObjectID = resp.Replies[0].CreateLine.ObjectId
+	}
+
+	// Apply line styling if color or weight specified
+	if lineObjectID != "" && (colorHex != "" || cmd.Flags().Changed("weight")) {
+		lineProps := &slides.LineProperties{}
+		var fields []string
+
+		if colorHex != "" {
+			color, err := parseHexColor(colorHex)
+			if err != nil {
+				return p.PrintError(err)
+			}
+			lineProps.LineFill = &slides.LineFill{
+				SolidFill: &slides.SolidFill{
+					Color: &slides.OpaqueColor{
+						RgbColor: color,
+					},
+				},
+			}
+			fields = append(fields, "lineFill")
+		}
+
+		if cmd.Flags().Changed("weight") {
+			lineProps.Weight = &slides.Dimension{
+				Magnitude: weight,
+				Unit:      "PT",
+			}
+			fields = append(fields, "weight")
+		}
+
+		if len(fields) > 0 {
+			styleRequests := []*slides.Request{
+				{
+					UpdateLineProperties: &slides.UpdateLinePropertiesRequest{
+						ObjectId:       lineObjectID,
+						LineProperties: lineProps,
+						Fields:         strings.Join(fields, ","),
+					},
+				},
+			}
+
+			_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+				Requests: styleRequests,
+			}).Do()
+			if err != nil {
+				return p.PrintError(fmt.Errorf("line created but failed to apply styling: %w", err))
+			}
+		}
+	}
+
+	result := map[string]interface{}{
+		"status":          "created",
+		"presentation_id": presentationID,
+		"slide_id":        slideID,
+		"line_id":         lineObjectID,
+		"line_type":       lineType,
+		"start":           map[string]float64{"x": startX, "y": startY},
+		"end":             map[string]float64{"x": endX, "y": endY},
+	}
+
+	return p.Print(result)
+}
+
+func runSlidesGroup(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	objectIDsStr, _ := cmd.Flags().GetString("object-ids")
+
+	objectIDs := strings.Split(objectIDsStr, ",")
+	for i, id := range objectIDs {
+		objectIDs[i] = strings.TrimSpace(id)
+	}
+
+	if len(objectIDs) < 2 {
+		return p.PrintError(fmt.Errorf("at least 2 element IDs are required for grouping"))
+	}
+
+	requests := []*slides.Request{
+		{
+			GroupObjects: &slides.GroupObjectsRequest{
+				ChildrenObjectIds: objectIDs,
+			},
+		},
+	}
+
+	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to group objects: %w", err))
+	}
+
+	var groupID string
+	if len(resp.Replies) > 0 && resp.Replies[0].GroupObjects != nil {
+		groupID = resp.Replies[0].GroupObjects.ObjectId
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "grouped",
+		"presentation_id": presentationID,
+		"group_id":        groupID,
+		"children":        objectIDs,
+	})
+}
+
+func runSlidesUngroup(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	groupID, _ := cmd.Flags().GetString("group-id")
+
+	requests := []*slides.Request{
+		{
+			UngroupObjects: &slides.UngroupObjectsRequest{
+				ObjectIds: []string{groupID},
+			},
+		},
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to ungroup objects: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "ungrouped",
+		"presentation_id": presentationID,
+		"group_id":        groupID,
 	})
 }
