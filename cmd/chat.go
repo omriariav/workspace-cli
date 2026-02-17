@@ -8,6 +8,7 @@ import (
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
+	"github.com/omriariav/workspace-cli/internal/usercache"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/chat/v1"
 )
@@ -210,6 +211,43 @@ func runChatMembers(cmd *cobra.Command, args []string) error {
 	})
 	if err != nil && !errors.Is(err, errDone) {
 		return p.PrintError(fmt.Errorf("failed to list members: %w", err))
+	}
+
+	// Resolve display names via People API + local cache
+	cache, cacheErr := usercache.New()
+	if cacheErr == nil {
+		// Collect human user IDs missing display_name (skip bots)
+		var toResolve []string
+		for _, r := range results {
+			if _, hasName := r["display_name"]; !hasName {
+				if memberType, _ := r["type"].(string); memberType == "BOT" {
+					continue
+				}
+				if uid, ok := r["user"].(string); ok {
+					toResolve = append(toResolve, uid)
+				}
+			}
+		}
+
+		if len(toResolve) > 0 {
+			// Try People API resolution
+			peopleSvc, pErr := factory.People()
+			if pErr == nil {
+				cache.ResolveMany(peopleSvc, toResolve)
+			}
+		}
+
+		// Enrich results from cache
+		for _, r := range results {
+			if uid, ok := r["user"].(string); ok {
+				if info, found := cache.Get(uid); found {
+					r["display_name"] = info.DisplayName
+					if info.Email != "" {
+						r["email"] = info.Email
+					}
+				}
+			}
+		}
 	}
 
 	return p.Print(map[string]interface{}{
