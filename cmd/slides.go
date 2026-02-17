@@ -247,7 +247,7 @@ var slidesListLayoutsCmd = &cobra.Command{
 var slidesAddLineCmd = &cobra.Command{
 	Use:   "add-line <presentation-id>",
 	Short: "Add a line to a slide",
-	Long:  "Creates a line or connector on a slide.\n\nLine types: STRAIGHT_CONNECTOR_1, BENT_CONNECTOR_2, CURVED_CONNECTOR_2, etc.",
+	Long:  "Creates a line or connector on a slide.\n\nLine categories: STRAIGHT, BENT, CURVED.\nYou can also use connector names like STRAIGHT_CONNECTOR_1 (the category is extracted from the prefix).",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runSlidesAddLine,
 }
@@ -471,7 +471,7 @@ func init() {
 	// Add-line flags
 	slidesAddLineCmd.Flags().String("slide-id", "", "Slide object ID")
 	slidesAddLineCmd.Flags().Int("slide-number", 0, "Slide number (1-indexed)")
-	slidesAddLineCmd.Flags().String("type", "STRAIGHT_CONNECTOR_1", "Line type (STRAIGHT_CONNECTOR_1, BENT_CONNECTOR_2, CURVED_CONNECTOR_2, etc.)")
+	slidesAddLineCmd.Flags().String("type", "STRAIGHT", "Line category: STRAIGHT, BENT, or CURVED")
 	slidesAddLineCmd.Flags().Float64("start-x", 0, "Start X position in points")
 	slidesAddLineCmd.Flags().Float64("start-y", 0, "Start Y position in points")
 	slidesAddLineCmd.Flags().Float64("end-x", 200, "End X position in points")
