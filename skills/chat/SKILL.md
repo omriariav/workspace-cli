@@ -1,6 +1,6 @@
 ---
 name: gws-chat
-version: 1.0.1
+version: 1.1.0
 description: "Google Chat CLI operations via gws. Use when users need to list chat spaces, read messages, or send messages in Google Chat. Triggers: google chat, gchat, chat spaces, chat messages."
 metadata:
   short-description: Google Chat CLI operations
@@ -40,6 +40,7 @@ For initial setup, see the `gws-auth` skill.
 | List chat spaces | `gws chat list` |
 | Read messages | `gws chat messages <space-id>` |
 | Read recent messages | `gws chat messages <space-id> --max 10` |
+| List space members | `gws chat members <space-id>` |
 | Send a message | `gws chat send --space <space-id> --text "Hello"` |
 
 ## Detailed Usage
@@ -60,6 +61,24 @@ gws chat messages <space-id> [flags]
 
 **Flags:**
 - `--max int` — Maximum number of messages to return (default 25)
+
+### members — List space members
+
+```bash
+gws chat members <space-id> [flags]
+```
+
+Lists all members of a Chat space with display names, roles, and user types.
+
+**Flags:**
+- `--max int` — Maximum number of members to return (default 100)
+
+**Output includes:**
+- `display_name` — Member's display name
+- `user` — User resource name (e.g., `users/123456789`)
+- `type` — `HUMAN` or `BOT`
+- `role` — `ROLE_MEMBER` or `ROLE_MANAGER`
+- `joined` — When the member joined the space
 
 ### send — Send a message
 

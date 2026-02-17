@@ -1,5 +1,16 @@
 # Releases
 
+## v1.18.0
+
+**Chat Members**
+
+### Chat
+- `gws chat members <space-id>` — List all members of a Chat space with display names, roles, and user types
+  - Uses `chat.memberships.readonly` scope (added in v1.16.0)
+  - Returns `display_name`, `user` (resource name), `type` (HUMAN/BOT), `role`, `joined` (fields omitted when empty)
+  - Paginates automatically; `--max` caps total results
+  - `--max` flag for pagination (default 100)
+
 ## v1.17.0
 
 **Full Calendar Event Fields**

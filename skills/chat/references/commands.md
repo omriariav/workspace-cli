@@ -57,6 +57,34 @@ The space ID format is `spaces/AAAA1234` (get from `gws chat list`).
 
 ---
 
+## gws chat members
+
+Lists all members of a Chat space with display names.
+
+```
+Usage: gws chat members <space-id> [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--max` | int | 100 | Maximum number of members to return |
+
+The space ID format is `spaces/AAAA1234` (get from `gws chat list`).
+
+Requires the `chat.memberships.readonly` scope (included by default since v1.16.0).
+
+### Output Fields (JSON)
+
+Each member includes (optional fields omitted when empty):
+- `name` — Membership resource name (e.g., `spaces/AAAA/members/111`)
+- `role` — `ROLE_MEMBER` or `ROLE_MANAGER`
+- `display_name` — Member's display name (if available)
+- `user` — User resource name, e.g., `users/123456789` (if available)
+- `type` — User type: `HUMAN` or `BOT` (if available)
+- `joined` — Membership creation timestamp (if available)
+
+---
+
 ## gws chat send
 
 Sends a text message to a Chat space.
