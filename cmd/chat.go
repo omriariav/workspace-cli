@@ -134,7 +134,12 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 			"create_time": msg.CreateTime,
 		}
 		if msg.Sender != nil {
-			msgInfo["sender"] = msg.Sender.DisplayName
+			senderName := msg.Sender.DisplayName
+			if senderName == "" {
+				senderName = msg.Sender.Name
+			}
+			msgInfo["sender"] = senderName
+			msgInfo["sender_type"] = msg.Sender.Type
 		}
 		results = append(results, msgInfo)
 	}
