@@ -1,6 +1,6 @@
 ---
 name: gws-auth
-version: 1.0.0
+version: 1.1.0
 description: "Google Workspace CLI authentication setup and management. Use when users need to set up OAuth credentials, authenticate with Google APIs, or troubleshoot authentication issues. Triggers: gws auth, google workspace setup, oauth, credentials, client id, api setup."
 metadata:
   short-description: Google Workspace CLI authentication
@@ -27,9 +27,10 @@ If not found, install: `go install github.com/omriariav/workspace-cli/cmd/gws@la
 | Task | Command |
 |------|---------|
 | Check auth status | `gws auth status` |
-| Login (browser OAuth) | `gws auth login` |
+| Login (all scopes) | `gws auth login` |
+| Login (specific services) | `gws auth login --services gmail,calendar,chat` |
 | Login with credentials | `gws auth login --client-id <id> --client-secret <secret>` |
-| Logout | `gws auth logout` |
+| Logout (revokes token) | `gws auth logout` |
 
 ## First-Time Setup
 
@@ -62,8 +63,11 @@ gws auth login [flags]
 **Flags:**
 - `--client-id string` — OAuth client ID (overrides env/config)
 - `--client-secret string` — OAuth client secret (overrides env/config)
+- `--services string` — Comma-separated services to authorize (e.g. `gmail,calendar,chat`). Omit for all scopes.
 
 Opens a browser for Google OAuth consent. The token is stored at `~/.config/gws/token.json`.
+
+**Available services:** gmail, calendar, drive, docs, sheets, slides, tasks, chat, forms, contacts
 
 **Credential sources (in priority order):**
 1. Command-line flags (`--client-id`, `--client-secret`)
@@ -76,7 +80,7 @@ Opens a browser for Google OAuth consent. The token is stored at `~/.config/gws/
 gws auth logout
 ```
 
-Deletes the stored OAuth token at `~/.config/gws/token.json`.
+Revokes the token server-side with Google, then deletes the local token at `~/.config/gws/token.json`.
 
 ## Configuration
 
@@ -92,14 +96,21 @@ export GWS_CLIENT_SECRET="your-client-secret"
 ```yaml
 client_id: "your-client-id.apps.googleusercontent.com"
 client_secret: "your-client-secret"
+services:
+  - gmail
+  - calendar
+  - chat
 ```
 
 ## Token Management
 
-- Token stored at: `~/.config/gws/token.json`
-- Tokens auto-refresh when expired
-- All scopes are requested upfront during login
-- To re-authenticate with different scopes, run `gws auth logout` then `gws auth login`
+- Token stored at: `~/.config/gws/token.json` (atomic writes, file-locked)
+- Granted services tracked in: `~/.config/gws/granted_services.json`
+- Tokens auto-refresh when expired; refresh tokens preserved across re-auth
+- Scoped login: use `--services` to request only needed scopes (smaller consent screen)
+- Default services can be set in config.yaml: `services: [gmail, calendar, chat]`
+- To add more scopes, re-run `gws auth login --services gmail,calendar,chat,drive`
+- Logout revokes the token server-side before deleting locally
 
 ## Tips for AI Agents
 
