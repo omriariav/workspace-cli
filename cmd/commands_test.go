@@ -268,6 +268,7 @@ func TestDriveCommands(t *testing.T) {
 		{"create-folder"},
 		{"move"},
 		{"delete"},
+		{"copy"},
 	}
 
 	for _, tt := range tests {

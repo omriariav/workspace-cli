@@ -258,6 +258,7 @@ func init() {
 	slidesInfoCmd.Flags().Bool("notes", false, "Include speaker notes in output")
 	slidesListCmd.Flags().Bool("notes", false, "Include speaker notes in output")
 	slidesReadCmd.Flags().Bool("notes", false, "Include speaker notes in output")
+	slidesReadCmd.Flags().Bool("elements", false, "Include element IDs and types for each slide")
 
 	// Create flags
 	slidesCreateCmd.Flags().String("title", "", "Presentation title (required)")
@@ -310,6 +311,9 @@ func init() {
 	slidesReplaceTextCmd.Flags().String("find", "", "Text to find (required)")
 	slidesReplaceTextCmd.Flags().String("replace", "", "Replacement text (required)")
 	slidesReplaceTextCmd.Flags().Bool("match-case", true, "Case-sensitive matching")
+	slidesReplaceTextCmd.Flags().String("slide-id", "", "Scope replacement to a specific slide by object ID")
+	slidesReplaceTextCmd.Flags().Int("slide-number", 0, "Scope replacement to a specific slide by number (1-indexed)")
+	slidesReplaceTextCmd.Flags().String("object-id", "", "Scope replacement to a specific element by object ID (uses delete+insert)")
 	slidesReplaceTextCmd.MarkFlagRequired("find")
 	slidesReplaceTextCmd.MarkFlagRequired("replace")
 
@@ -560,6 +564,7 @@ func runSlidesRead(cmd *cobra.Command, args []string) error {
 	}
 
 	includeNotes, _ := cmd.Flags().GetBool("notes")
+	includeElements, _ := cmd.Flags().GetBool("elements")
 
 	// If slide number provided, read specific slide
 	if len(args) > 1 {
@@ -588,6 +593,10 @@ func runSlidesRead(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		if includeElements {
+			result["elements"] = extractPageElements(slide)
+		}
+
 		return p.Print(result)
 	}
 
@@ -610,6 +619,10 @@ func runSlidesRead(cmd *cobra.Command, args []string) error {
 			if notes != "" {
 				slideData["notes"] = notes
 			}
+		}
+
+		if includeElements {
+			slideData["elements"] = extractPageElements(slide)
 		}
 
 		slidesContent = append(slidesContent, slideData)
@@ -727,6 +740,55 @@ func getSpeakerNotesObjectID(slide *slides.Page) (string, error) {
 		return "", fmt.Errorf("slide has no speaker notes shape")
 	}
 	return notesPage.NotesProperties.SpeakerNotesObjectId, nil
+}
+
+// extractPageElements returns element metadata (id, type, text) for each element on a slide.
+func extractPageElements(slide *slides.Page) []map[string]interface{} {
+	elements := make([]map[string]interface{}, 0, len(slide.PageElements))
+	for _, el := range slide.PageElements {
+		elem := map[string]interface{}{
+			"id": el.ObjectId,
+		}
+
+		if el.Shape != nil {
+			elem["type"] = "shape"
+			if el.Shape.ShapeType != "" {
+				elem["shape_type"] = el.Shape.ShapeType
+			}
+			if el.Shape.Placeholder != nil {
+				elem["placeholder"] = el.Shape.Placeholder.Type
+			}
+			text := extractShapeText(el.Shape)
+			if text != "" {
+				elem["text"] = text
+			}
+		} else if el.Table != nil {
+			elem["type"] = "table"
+			elem["rows"] = len(el.Table.TableRows)
+			if len(el.Table.TableRows) > 0 {
+				elem["cols"] = len(el.Table.TableRows[0].TableCells)
+			}
+			text := extractTableText(el.Table)
+			if text != "" {
+				elem["text"] = text
+			}
+		} else if el.Image != nil {
+			elem["type"] = "image"
+			if el.Image.SourceUrl != "" {
+				elem["source_url"] = el.Image.SourceUrl
+			}
+		} else if el.Line != nil {
+			elem["type"] = "line"
+		} else if el.ElementGroup != nil {
+			elem["type"] = "group"
+			elem["child_count"] = len(el.ElementGroup.Children)
+		} else {
+			elem["type"] = "unknown"
+		}
+
+		elements = append(elements, elem)
+	}
+	return elements
 }
 
 // findSlide resolves a slide from a presentation by --slide-id or --slide-number.
@@ -1497,16 +1559,118 @@ func runSlidesReplaceText(cmd *cobra.Command, args []string) error {
 	findText, _ := cmd.Flags().GetString("find")
 	replaceText, _ := cmd.Flags().GetString("replace")
 	matchCase, _ := cmd.Flags().GetBool("match-case")
+	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
+	slideNumber, _ := cmd.Flags().GetInt("slide-number")
+	objectID, _ := cmd.Flags().GetString("object-id")
+
+	// Object-level replacement: read text, find match, delete+insert
+	if objectID != "" {
+		presentation, err := svc.Presentations.Get(presentationID).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
+		}
+
+		// Find the element and its text
+		var elementText string
+		var found bool
+		for _, slide := range presentation.Slides {
+			for _, el := range slide.PageElements {
+				if el.ObjectId == objectID && el.Shape != nil {
+					elementText = extractShapeText(el.Shape)
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+
+		if elementText == "" {
+			return p.PrintError(fmt.Errorf("element '%s' not found or has no text", objectID))
+		}
+
+		// Find occurrence in text, preserving original findText for output
+		originalFind := findText
+		searchText := elementText
+		if !matchCase {
+			searchText = strings.ToLower(elementText)
+			findText = strings.ToLower(findText)
+		}
+
+		idx := strings.Index(searchText, findText)
+		if idx < 0 {
+			return p.Print(map[string]interface{}{
+				"status":              "replaced",
+				"presentation_id":     presentationID,
+				"object_id":           objectID,
+				"find":                originalFind,
+				"replace":             replaceText,
+				"occurrences_changed": 0,
+			})
+		}
+
+		// Build delete + insert requests — use original text length for correct byte range
+		startIdx := int64(idx)
+		endIdx := int64(idx + len(originalFind))
+		requests := []*slides.Request{
+			{
+				DeleteText: &slides.DeleteTextRequest{
+					ObjectId: objectID,
+					TextRange: &slides.Range{
+						StartIndex: &startIdx,
+						EndIndex:   &endIdx,
+						Type:       "FIXED_RANGE",
+					},
+				},
+			},
+			{
+				InsertText: &slides.InsertTextRequest{
+					ObjectId:       objectID,
+					InsertionIndex: startIdx,
+					Text:           replaceText,
+				},
+			},
+		}
+
+		_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+			Requests: requests,
+		}).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to replace text in element: %w", err))
+		}
+
+		return p.Print(map[string]interface{}{
+			"status":              "replaced",
+			"presentation_id":     presentationID,
+			"object_id":           objectID,
+			"find":                originalFind,
+			"replace":             replaceText,
+			"occurrences_changed": 1,
+		})
+	}
+
+	// Build ReplaceAllText request
+	replaceReq := &slides.ReplaceAllTextRequest{
+		ContainsText: &slides.SubstringMatchCriteria{
+			Text:      findText,
+			MatchCase: matchCase,
+		},
+		ReplaceText: replaceText,
+	}
+
+	// Scope to specific slide if requested
+	if slideIDFlag != "" || slideNumber > 0 {
+		pageID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		replaceReq.PageObjectIds = []string{pageID}
+	}
 
 	requests := []*slides.Request{
 		{
-			ReplaceAllText: &slides.ReplaceAllTextRequest{
-				ContainsText: &slides.SubstringMatchCriteria{
-					Text:      findText,
-					MatchCase: matchCase,
-				},
-				ReplaceText: replaceText,
-			},
+			ReplaceAllText: replaceReq,
 		},
 	}
 
@@ -1523,13 +1687,22 @@ func runSlidesReplaceText(cmd *cobra.Command, args []string) error {
 		occurrences = resp.Replies[0].ReplaceAllText.OccurrencesChanged
 	}
 
-	return p.Print(map[string]interface{}{
+	result := map[string]interface{}{
 		"status":              "replaced",
 		"presentation_id":     presentationID,
 		"find":                findText,
 		"replace":             replaceText,
 		"occurrences_changed": occurrences,
-	})
+	}
+	if slideIDFlag != "" || slideNumber > 0 {
+		if slideIDFlag != "" {
+			result["slide_id"] = slideIDFlag
+		} else {
+			result["slide_number"] = slideNumber
+		}
+	}
+
+	return p.Print(result)
 }
 
 // parseHexColor converts "#RRGGBB" to slides.RgbColor

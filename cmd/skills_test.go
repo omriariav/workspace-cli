@@ -354,7 +354,7 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 		},
 		"drive": {
 			parentCmd:   driveCmd,
-			subcommands: []string{"list", "search", "info", "download", "upload", "create-folder", "move", "delete", "comments"},
+			subcommands: []string{"list", "search", "info", "download", "upload", "create-folder", "move", "delete", "comments", "copy"},
 		},
 		"docs": {
 			parentCmd:   docsCmd,
