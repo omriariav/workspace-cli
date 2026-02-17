@@ -157,6 +157,23 @@ By default, files are moved to trash (recoverable for 30 days). Use `--permanent
 
 ---
 
+## gws drive copy
+
+Creates a copy of a file in Google Drive.
+
+```
+Usage: gws drive copy <file-id> [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--name` | string | "Copy of <original>" | Name for the copy |
+| `--folder` | string | same as original | Destination folder ID |
+
+Useful for duplicating template files (Docs, Sheets, Slides, etc.).
+
+---
+
 ## gws drive comments
 
 Lists all comments and replies on a Google Drive file.

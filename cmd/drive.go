@@ -115,6 +115,21 @@ Examples:
 	RunE: runDriveDelete,
 }
 
+var driveCopyCmd = &cobra.Command{
+	Use:   "copy <file-id>",
+	Short: "Copy a file",
+	Long: `Creates a copy of a file in Google Drive.
+
+Useful for duplicating template files (Docs, Sheets, Slides, etc.).
+
+Examples:
+  gws drive copy 1abc123xyz
+  gws drive copy 1abc123xyz --name "My Copy"
+  gws drive copy 1abc123xyz --name "Project Deck" --folder 2def456uvw`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDriveCopy,
+}
+
 func init() {
 	rootCmd.AddCommand(driveCmd)
 	driveCmd.AddCommand(driveListCmd)
@@ -126,6 +141,7 @@ func init() {
 	driveCmd.AddCommand(driveCreateFolderCmd)
 	driveCmd.AddCommand(driveMoveCmd)
 	driveCmd.AddCommand(driveDeleteCmd)
+	driveCmd.AddCommand(driveCopyCmd)
 
 	// List flags
 	driveListCmd.Flags().String("folder", "root", "Folder ID to list (default: root)")
@@ -159,6 +175,10 @@ func init() {
 
 	// Delete flags
 	driveDeleteCmd.Flags().Bool("permanent", false, "Permanently delete (skip trash)")
+
+	// Copy flags
+	driveCopyCmd.Flags().String("name", "", "Name for the copy (default: 'Copy of <original>')")
+	driveCopyCmd.Flags().String("folder", "", "Destination folder ID")
 }
 
 func runDriveList(cmd *cobra.Command, args []string) error {
@@ -779,5 +799,48 @@ func runDriveDelete(cmd *cobra.Command, args []string) error {
 		"status": "trashed",
 		"id":     fileID,
 		"name":   file.Name,
+	})
+}
+
+func runDriveCopy(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID := args[0]
+	name, _ := cmd.Flags().GetString("name")
+	folderID, _ := cmd.Flags().GetString("folder")
+
+	copyFile := &drive.File{}
+	if name != "" {
+		copyFile.Name = name
+	}
+	if folderID != "" {
+		copyFile.Parents = []string{folderID}
+	}
+
+	copied, err := svc.Files.Copy(fileID, copyFile).
+		SupportsAllDrives(true).
+		Fields("id,name,mimeType,webViewLink").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to copy file: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":    "copied",
+		"id":        copied.Id,
+		"name":      copied.Name,
+		"mime_type": copied.MimeType,
+		"web_link":  copied.WebViewLink,
 	})
 }

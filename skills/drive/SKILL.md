@@ -43,6 +43,7 @@ For initial setup, see the `gws-auth` skill.
 | Move a file | `gws drive move <file-id> --to <folder-id>` |
 | Delete a file | `gws drive delete <file-id>` |
 | Permanently delete | `gws drive delete <file-id> --permanent` |
+| Copy a file | `gws drive copy <file-id>` |
 | List comments | `gws drive comments <file-id>` |
 
 ## Detailed Usage
@@ -167,6 +168,25 @@ By default, moves the file to trash. Use `--permanent` to permanently delete.
 ```bash
 gws drive delete 1abc123xyz
 gws drive delete 1abc123xyz --permanent
+```
+
+### copy — Copy a file
+
+```bash
+gws drive copy <file-id> [flags]
+```
+
+Creates a copy of a file in Google Drive. Useful for duplicating template files (Docs, Sheets, Slides).
+
+**Flags:**
+- `--name string` — Name for the copy (default: "Copy of <original>")
+- `--folder string` — Destination folder ID
+
+**Examples:**
+```bash
+gws drive copy 1abc123xyz
+gws drive copy 1abc123xyz --name "Q1 OKR Deck"
+gws drive copy 1abc123xyz --name "Project Plan" --folder 2def456uvw
 ```
 
 ### comments — List comments on a file
