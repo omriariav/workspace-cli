@@ -206,46 +206,10 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 
 	results := make([]map[string]interface{}, 0, len(resp.Items))
 	for _, event := range resp.Items {
-		eventInfo := map[string]interface{}{
-			"id":      event.Id,
-			"summary": event.Summary,
-			"status":  event.Status,
+		if event == nil {
+			continue
 		}
-
-		// Handle all-day events vs timed events
-		if event.Start != nil {
-			if event.Start.DateTime != "" {
-				eventInfo["start"] = event.Start.DateTime
-			} else {
-				eventInfo["start"] = event.Start.Date
-				eventInfo["all_day"] = true
-			}
-		}
-		if event.End != nil {
-			if event.End.DateTime != "" {
-				eventInfo["end"] = event.End.DateTime
-			} else {
-				eventInfo["end"] = event.End.Date
-			}
-		}
-
-		if event.Location != "" {
-			eventInfo["location"] = event.Location
-		}
-		if event.HangoutLink != "" {
-			eventInfo["hangout_link"] = event.HangoutLink
-		}
-
-		if event.Organizer != nil && event.Organizer.Email != "" {
-			eventInfo["organizer"] = event.Organizer.Email
-		}
-
-		for _, attendee := range event.Attendees {
-			if attendee.Self {
-				eventInfo["response_status"] = attendee.ResponseStatus
-				break
-			}
-		}
+		eventInfo := mapEventToOutput(event)
 
 		if pending {
 			rs, _ := eventInfo["response_status"].(string)
@@ -546,6 +510,202 @@ func runCalendarRsvp(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(result)
+}
+
+// mapEventToOutput converts a Google Calendar event into a map for JSON output.
+// Fields are omitted when empty/nil to keep output clean.
+func mapEventToOutput(event *calendar.Event) map[string]interface{} {
+	eventInfo := map[string]interface{}{
+		"id":      event.Id,
+		"summary": event.Summary,
+		"status":  event.Status,
+	}
+
+	// Time fields
+	if event.Start != nil {
+		if event.Start.DateTime != "" {
+			eventInfo["start"] = event.Start.DateTime
+		} else {
+			eventInfo["start"] = event.Start.Date
+			eventInfo["all_day"] = true
+		}
+	}
+	if event.End != nil {
+		if event.End.DateTime != "" {
+			eventInfo["end"] = event.End.DateTime
+		} else {
+			eventInfo["end"] = event.End.Date
+		}
+	}
+
+	// String fields (omit if empty)
+	if event.Description != "" {
+		eventInfo["description"] = event.Description
+	}
+	if event.Location != "" {
+		eventInfo["location"] = event.Location
+	}
+	if event.HangoutLink != "" {
+		eventInfo["hangout_link"] = event.HangoutLink
+	}
+	if event.HtmlLink != "" {
+		eventInfo["html_link"] = event.HtmlLink
+	}
+	if event.Created != "" {
+		eventInfo["created"] = event.Created
+	}
+	if event.Updated != "" {
+		eventInfo["updated"] = event.Updated
+	}
+	if event.ColorId != "" {
+		eventInfo["color_id"] = event.ColorId
+	}
+	if event.Visibility != "" {
+		eventInfo["visibility"] = event.Visibility
+	}
+	if event.Transparency != "" {
+		eventInfo["transparency"] = event.Transparency
+	}
+	if event.EventType != "" {
+		eventInfo["event_type"] = event.EventType
+	}
+
+	// People
+	if event.Organizer != nil && event.Organizer.Email != "" {
+		eventInfo["organizer"] = event.Organizer.Email
+	}
+	if event.Creator != nil && event.Creator.Email != "" {
+		eventInfo["creator"] = event.Creator.Email
+	}
+
+	// Self RSVP status
+	for _, attendee := range event.Attendees {
+		if attendee != nil && attendee.Self {
+			eventInfo["response_status"] = attendee.ResponseStatus
+			break
+		}
+	}
+
+	// Full attendee list
+	if len(event.Attendees) > 0 {
+		attendees := make([]map[string]interface{}, 0, len(event.Attendees))
+		for _, a := range event.Attendees {
+			if a == nil || a.Email == "" {
+				continue
+			}
+			entry := map[string]interface{}{
+				"email":           a.Email,
+				"response_status": a.ResponseStatus,
+			}
+			if a.Optional {
+				entry["optional"] = true
+			}
+			if a.Organizer {
+				entry["organizer"] = true
+			}
+			if a.Self {
+				entry["self"] = true
+			}
+			attendees = append(attendees, entry)
+		}
+		if len(attendees) > 0 {
+			eventInfo["attendees"] = attendees
+		}
+	}
+
+	// Conference data
+	if event.ConferenceData != nil {
+		conf := map[string]interface{}{}
+		if event.ConferenceData.ConferenceId != "" {
+			conf["conference_id"] = event.ConferenceData.ConferenceId
+		}
+		if event.ConferenceData.ConferenceSolution != nil && event.ConferenceData.ConferenceSolution.Name != "" {
+			conf["solution"] = event.ConferenceData.ConferenceSolution.Name
+		}
+		if len(event.ConferenceData.EntryPoints) > 0 {
+			eps := make([]map[string]interface{}, 0, len(event.ConferenceData.EntryPoints))
+			for _, ep := range event.ConferenceData.EntryPoints {
+				if ep == nil {
+					continue
+				}
+				entry := map[string]interface{}{}
+				if ep.EntryPointType != "" {
+					entry["type"] = ep.EntryPointType
+				}
+				if ep.Uri != "" {
+					entry["uri"] = ep.Uri
+				}
+				if len(entry) > 0 {
+					eps = append(eps, entry)
+				}
+			}
+			if len(eps) > 0 {
+				conf["entry_points"] = eps
+			}
+		}
+		if len(conf) > 0 {
+			eventInfo["conference"] = conf
+		}
+	}
+
+	// Attachments
+	if len(event.Attachments) > 0 {
+		attachments := make([]map[string]interface{}, 0, len(event.Attachments))
+		for _, att := range event.Attachments {
+			if att == nil {
+				continue
+			}
+			entry := map[string]interface{}{}
+			if att.FileUrl != "" {
+				entry["file_url"] = att.FileUrl
+			}
+			if att.Title != "" {
+				entry["title"] = att.Title
+			}
+			if att.MimeType != "" {
+				entry["mime_type"] = att.MimeType
+			}
+			if att.FileId != "" {
+				entry["file_id"] = att.FileId
+			}
+			if len(entry) > 0 {
+				attachments = append(attachments, entry)
+			}
+		}
+		if len(attachments) > 0 {
+			eventInfo["attachments"] = attachments
+		}
+	}
+
+	// Recurrence
+	if len(event.Recurrence) > 0 {
+		eventInfo["recurrence"] = event.Recurrence
+	}
+
+	// Reminders
+	if event.Reminders != nil {
+		reminders := map[string]interface{}{
+			"use_default": event.Reminders.UseDefault,
+		}
+		if len(event.Reminders.Overrides) > 0 {
+			overrides := make([]map[string]interface{}, 0, len(event.Reminders.Overrides))
+			for _, o := range event.Reminders.Overrides {
+				if o == nil || o.Method == "" {
+					continue
+				}
+				overrides = append(overrides, map[string]interface{}{
+					"method":  o.Method,
+					"minutes": o.Minutes,
+				})
+			}
+			if len(overrides) > 0 {
+				reminders["overrides"] = overrides
+			}
+		}
+		eventInfo["reminders"] = reminders
+	}
+
+	return eventInfo
 }
 
 // parseTime parses a time string in RFC3339 or "YYYY-MM-DD HH:MM" format.

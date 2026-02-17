@@ -17,7 +17,7 @@
 - **10+ Google services** — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Custom Search.
 - **Scriptable output** — `--format json` (default), `--format yaml`, `--format text` for human-readable tables, or `--quiet` to suppress output.
 - **OAuth2 + PKCE** — Secure browser-based auth with automatic token refresh and `0600` file permissions.
-- **Single auth flow** — Authenticate once to access all services; all scopes requested upfront.
+- **Single auth flow** — Authenticate once to access all services; scopes based on `--services` flag, config, or all by default.
 - **Lazy clients** — Service clients are initialized on-demand with mutex protection.
 
 ## Installation
@@ -111,7 +111,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | Command | Description |
 |---------|-------------|
 | `gws calendar list` | List all calendars |
-| `gws calendar events` | List upcoming events (`--days`, `--calendar-id`, `--max`) |
+| `gws calendar events` | List upcoming events with expanded details (`--days`, `--calendar-id`, `--max`, `--pending`) |
 | `gws calendar create` | Create event (`--title`, `--start`, `--end`, `--attendees`) |
 | `gws calendar update <id>` | Update event (`--title`, `--start`, `--end`, `--add-attendees`) |
 | `gws calendar delete <id>` | Delete event |

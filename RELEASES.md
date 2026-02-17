@@ -1,5 +1,24 @@
 # Releases
 
+## v1.17.0
+
+**Full Calendar Event Fields**
+
+### Calendar
+- `gws calendar events` now returns expanded Google Calendar API fields
+  - New fields: `description`, `html_link`, `created`, `updated`, `color_id`, `visibility`, `transparency`, `event_type`, `creator`
+  - Full `attendees[]` list with `email`, `response_status`, `optional`, `organizer`, `self`
+  - `conference` data with `conference_id`, `solution`, `entry_points[]`
+  - `attachments[]` with `file_url`, `title`, `mime_type`, `file_id`
+  - `recurrence[]` RRULE strings
+  - `reminders` with `use_default` and `overrides[]`
+- Extracted `mapEventToOutput()` helper for consistent event serialization
+- All optional fields use omit-if-empty pattern to keep output compact
+
+### Docs
+- Updated calendar skill docs (SKILL.md v1.1.0, commands.md) with full field reference
+- Fixed auth setup guide: "all scopes upfront" → scoped auth description (v1.16.0 follow-up)
+
 ## v1.16.0
 
 **Security Hardening + Scoped Auth**

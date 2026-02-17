@@ -29,8 +29,8 @@ No additional flags.
 Returns an array of calendars with:
 - `id` — Calendar ID (e.g., `primary`, `user@group.calendar.google.com`)
 - `summary` — Calendar name
-- `description` — Calendar description
-- `accessRole` — Your access level (`owner`, `writer`, `reader`)
+- `primary` — `true` if this is the user's primary calendar
+- `description` — Calendar description (if set)
 
 ---
 
@@ -51,17 +51,49 @@ Usage: gws calendar events [flags]
 
 ### Output Fields (JSON)
 
-Each event includes:
+Fields are omitted when empty/nil to keep output compact.
+
+**Core:**
 - `id` — Event ID (used for update/delete/rsvp)
 - `summary` — Event title
+- `status` — Event status (`confirmed`, `tentative`, `cancelled`)
+
+**Time:**
 - `start` — Start time (dateTime or date for all-day events)
 - `end` — End time
-- `status` — Event status (confirmed, tentative, cancelled)
-- `location` — Event location (if set)
-- `hangout_link` — Google Meet link (if set)
-- `organizer` — Organizer email address (if set)
-- `response_status` — User's RSVP status: `accepted`, `declined`, `tentative`, `needsAction` (if user is an attendee)
 - `all_day` — `true` for all-day events (omitted for timed events)
+
+**Details:**
+- `description` — Event description (HTML allowed by Google)
+- `location` — Event location
+- `hangout_link` — Legacy Hangouts link
+- `html_link` — Link to event in Google Calendar web UI
+- `created` — Creation timestamp
+- `updated` — Last-modified timestamp
+- `color_id` — Calendar color ID
+- `visibility` — `default`, `public`, `private`, `confidential`
+- `transparency` — `opaque` (busy) or `transparent` (free)
+- `event_type` — `default`, `outOfOffice`, `focusTime`, `workingLocation`
+
+**People:**
+- `organizer` — Organizer email address
+- `creator` — Event creator email address
+- `response_status` — Current user's RSVP status: `accepted`, `declined`, `tentative`, `needsAction`
+
+**Attendees:**
+- `attendees[]` — Full attendee list, each with: `email`, `response_status`, `optional` (bool), `organizer` (bool), `self` (bool)
+
+**Conference:**
+- `conference` — `{ conference_id, solution, entry_points[]: { type, uri } }`
+
+**Attachments:**
+- `attachments[]` — `{ file_url, title, mime_type, file_id }`
+
+**Recurrence:**
+- `recurrence[]` — RRULE/EXRULE/RDATE/EXDATE strings
+
+**Reminders:**
+- `reminders` — `{ use_default (bool), overrides[]: { method, minutes } }`
 
 ---
 
