@@ -145,13 +145,13 @@ func TestChatMessages_MockServer(t *testing.T) {
 						"name":       "spaces/AAAA/messages/msg1",
 						"text":       "Hello world",
 						"createTime": "2026-02-16T10:00:00Z",
-						"sender":     map[string]interface{}{"displayName": "Alice"},
+						"sender":     map[string]interface{}{"displayName": "Alice", "type": "HUMAN", "name": "users/111"},
 					},
 					{
 						"name":       "spaces/AAAA/messages/msg2",
 						"text":       "Hi there",
 						"createTime": "2026-02-16T10:01:00Z",
-						"sender":     map[string]interface{}{"displayName": "Bob"},
+						"sender":     map[string]interface{}{"displayName": "Bob", "type": "HUMAN", "name": "users/222"},
 					},
 				},
 			}
@@ -180,6 +180,51 @@ func TestChatMessages_MockServer(t *testing.T) {
 	}
 	if resp.Messages[1].Sender.DisplayName != "Bob" {
 		t.Errorf("expected second sender 'Bob', got '%s'", resp.Messages[1].Sender.DisplayName)
+	}
+	if resp.Messages[0].Sender.Type != "HUMAN" {
+		t.Errorf("expected sender type 'HUMAN', got '%s'", resp.Messages[0].Sender.Type)
+	}
+}
+
+func TestChatMessages_SenderFallback(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/messages": func(w http.ResponseWriter, r *http.Request) {
+			resp := map[string]interface{}{
+				"messages": []map[string]interface{}{
+					{
+						"name":       "spaces/AAAA/messages/msg1",
+						"text":       "Bot message",
+						"createTime": "2026-02-16T10:00:00Z",
+						"sender":     map[string]interface{}{"name": "users/999", "type": "BOT"},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	resp, err := svc.Spaces.Messages.List("spaces/AAAA").PageSize(25).Do()
+	if err != nil {
+		t.Fatalf("failed to list messages: %v", err)
+	}
+
+	if len(resp.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(resp.Messages))
+	}
+	// When displayName is empty, should fall back to resource name
+	if resp.Messages[0].Sender.DisplayName != "" {
+		t.Errorf("expected empty displayName for fallback test, got '%s'", resp.Messages[0].Sender.DisplayName)
+	}
+	if resp.Messages[0].Sender.Name != "users/999" {
+		t.Errorf("expected sender name 'users/999', got '%s'", resp.Messages[0].Sender.Name)
 	}
 }
 
