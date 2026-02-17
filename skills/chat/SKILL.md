@@ -1,6 +1,6 @@
 ---
 name: gws-chat
-version: 1.1.0
+version: 1.2.0
 description: "Google Chat CLI operations via gws. Use when users need to list chat spaces, read messages, or send messages in Google Chat. Triggers: google chat, gchat, chat spaces, chat messages."
 metadata:
   short-description: Google Chat CLI operations
@@ -68,13 +68,16 @@ gws chat messages <space-id> [flags]
 gws chat members <space-id> [flags]
 ```
 
-Lists all members of a Chat space with display names, roles, and user types.
+Lists all members of a Chat space with display names, emails, roles, and user types.
+
+Display names and emails are auto-resolved via the People API and cached locally at `~/.config/gws/user-cache.json`. The cache grows over time, avoiding repeat API calls.
 
 **Flags:**
 - `--max int` — Maximum number of members to return (default 100)
 
 **Output includes:**
-- `display_name` — Member's display name
+- `display_name` — Member's display name (resolved via People API)
+- `email` — Member's email address (resolved via People API, if available)
 - `user` — User resource name (e.g., `users/123456789`)
 - `type` — `HUMAN` or `BOT`
 - `role` — `ROLE_MEMBER` or `ROLE_MANAGER`
@@ -108,4 +111,5 @@ gws chat list --format text    # Human-readable text
 - Always use `--format json` (the default) for programmatic parsing
 - Use `gws chat list` first to get space IDs
 - Space IDs are in the format `spaces/AAAA1234`
+- `members` auto-resolves display names via People API — first call may be slower, subsequent calls use cache
 - Chat API requires additional GCP setup beyond standard OAuth — see the `gws-auth` skill
