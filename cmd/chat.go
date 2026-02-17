@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -37,6 +38,14 @@ var chatMessagesCmd = &cobra.Command{
 	RunE:  runChatMessages,
 }
 
+var chatMembersCmd = &cobra.Command{
+	Use:   "members <space-id>",
+	Short: "List members of a space",
+	Long:  "Lists all members (users and bots) in a Chat space with display names.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runChatMembers,
+}
+
 var chatSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send a message to a space",
@@ -49,6 +58,10 @@ func init() {
 	chatCmd.AddCommand(chatListCmd)
 	chatCmd.AddCommand(chatMessagesCmd)
 	chatCmd.AddCommand(chatSendCmd)
+	chatCmd.AddCommand(chatMembersCmd)
+
+	// Members flags
+	chatMembersCmd.Flags().Int64("max", 100, "Maximum number of members to return")
 
 	// Messages flags
 	chatMessagesCmd.Flags().Int64("max", 25, "Maximum number of messages to return")
@@ -148,6 +161,85 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 		"messages": results,
 		"count":    len(results),
 	})
+}
+
+func runChatMembers(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Chat()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spaceID := args[0]
+	maxResults, _ := cmd.Flags().GetInt64("max")
+
+	spaceName := spaceID
+	if len(spaceName) < 7 || spaceName[:7] != "spaces/" {
+		spaceName = "spaces/" + spaceName
+	}
+
+	// Page size per request (Google caps at 100)
+	pageSize := maxResults
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	var results []map[string]interface{}
+	errDone := errors.New("done")
+	err = svc.Spaces.Members.List(spaceName).PageSize(pageSize).Pages(ctx, func(resp *chat.ListMembershipsResponse) error {
+		for _, m := range resp.Memberships {
+			if m == nil {
+				continue
+			}
+			if int64(len(results)) >= maxResults {
+				return errDone
+			}
+			results = append(results, mapMemberToOutput(m))
+		}
+		if int64(len(results)) >= maxResults {
+			return errDone
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errDone) {
+		return p.PrintError(fmt.Errorf("failed to list members: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"members": results,
+		"count":   len(results),
+		"space":   spaceName,
+	})
+}
+
+// mapMemberToOutput converts a Chat membership into a map for JSON output.
+func mapMemberToOutput(m *chat.Membership) map[string]interface{} {
+	entry := map[string]interface{}{
+		"name": m.Name,
+		"role": m.Role,
+	}
+	if m.Member != nil {
+		if m.Member.DisplayName != "" {
+			entry["display_name"] = m.Member.DisplayName
+		}
+		if m.Member.Name != "" {
+			entry["user"] = m.Member.Name
+		}
+		if m.Member.Type != "" {
+			entry["type"] = m.Member.Type
+		}
+	}
+	if m.CreateTime != "" {
+		entry["joined"] = m.CreateTime
+	}
+	return entry
 }
 
 func runChatSend(cmd *cobra.Command, args []string) error {
