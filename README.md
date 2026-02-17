@@ -227,7 +227,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 |---------|-------------|
 | `gws chat list` | List spaces |
 | `gws chat messages <space>` | List messages in a space |
-| `gws chat members <space>` | List members with display names (`--max`) |
+| `gws chat members <space>` | List members with display names + emails via People API, cached locally (`--max`) |
 | `gws chat send` | Send message (`--space`, `--text`) |
 
 ### Forms
