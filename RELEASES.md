@@ -6,7 +6,7 @@
 
 ### Security
 - Atomic token writes: temp-file + `os.Rename` prevents partial/corrupt token files
-- File locking: `.lock` file with `O_CREATE|O_EXCL`, stale lock cleanup (30s), PID tracking
+- File locking: `.lock` file with `O_CREATE|O_EXCL`, age-based stale lock cleanup (30s)
 - Refresh token preservation: `MergeToken()` keeps existing refresh token when re-auth omits it
 - Server-side token revocation on logout via Google's `/revoke` endpoint (best-effort)
 

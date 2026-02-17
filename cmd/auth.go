@@ -98,7 +98,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	// Persist granted services for lazy scope detection
 	if len(grantedServices) > 0 {
-		_ = auth.SaveGrantedServices(grantedServices)
+		if err := auth.SaveGrantedServices(grantedServices); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save granted services: %v\n", err)
+		}
 	}
 
 	return p.Print(map[string]interface{}{

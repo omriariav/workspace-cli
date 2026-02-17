@@ -115,22 +115,20 @@ func MergeToken(existing, incoming *oauth2.Token) *oauth2.Token {
 func DeleteToken() error {
 	tokenPath := config.GetTokenPath()
 
+	// Check if the token file even exists before locking
+	if _, err := os.Stat(tokenPath); os.IsNotExist(err) {
+		return nil // Already gone
+	}
+
 	unlock, err := acquireLock(tokenPath)
 	if err != nil {
-		// If we can't lock (e.g. config dir doesn't exist), try direct removal
-		if removeErr := os.Remove(tokenPath); removeErr != nil {
-			if os.IsNotExist(removeErr) {
-				return nil
-			}
-			return fmt.Errorf("failed to delete token: %w", removeErr)
-		}
-		return nil
+		return fmt.Errorf("failed to acquire lock for deletion: %w", err)
 	}
 	defer unlock()
 
 	if err := os.Remove(tokenPath); err != nil {
 		if os.IsNotExist(err) {
-			return nil // Already gone, that's fine
+			return nil // Removed between stat and lock
 		}
 		return fmt.Errorf("failed to delete token: %w", err)
 	}
