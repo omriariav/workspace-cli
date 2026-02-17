@@ -448,24 +448,30 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to get file info: %w", err))
 	}
 
-	// List comments with all fields
+	// List comments with full field specification including anchor and reply subfields
 	commentsCall := svc.Comments.List(fileID).
 		PageSize(maxResults).
-		Fields("comments(id, content, author, createdTime, modifiedTime, resolved, quotedFileContent, replies)")
+		Fields("nextPageToken,comments(id,content,anchor,author(displayName,emailAddress,photoLink),createdTime,modifiedTime,resolved,quotedFileContent(mimeType,value),replies(id,content,author(displayName,emailAddress),createdTime,modifiedTime,action))")
 
 	if includeDeleted {
 		commentsCall = commentsCall.IncludeDeleted(true)
 	}
 
-	resp, err := commentsCall.Do()
-	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to list comments: %w", err))
+	var allComments []*drive.Comment
+	for {
+		resp, err := commentsCall.Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to list comments: %w", err))
+		}
+		allComments = append(allComments, resp.Comments...)
+		if resp.NextPageToken == "" || int64(len(allComments)) >= maxResults {
+			break
+		}
+		commentsCall = commentsCall.PageToken(resp.NextPageToken)
 	}
 
-	// TODO: Handle pagination via resp.NextPageToken for files with many comments
-
 	comments := make([]map[string]interface{}, 0)
-	for _, comment := range resp.Comments {
+	for _, comment := range allComments {
 		// Skip resolved comments unless explicitly requested
 		if comment.Resolved && !includeResolved {
 			continue
@@ -496,6 +502,11 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 			c["modified"] = comment.ModifiedTime
 		}
 
+		// Anchor info (e.g., slide or element location for presentations)
+		if comment.Anchor != "" {
+			c["anchor"] = comment.Anchor
+		}
+
 		// Author info
 		if comment.Author != nil {
 			c["author"] = map[string]interface{}{
@@ -524,6 +535,9 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 						"email": reply.Author.EmailAddress,
 					}
 				}
+				if reply.Action != "" {
+					r["action"] = reply.Action
+				}
 				replies = append(replies, r)
 			}
 			c["replies"] = replies
@@ -532,13 +546,20 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 		comments = append(comments, c)
 	}
 
-	return p.Print(map[string]interface{}{
+	result := map[string]interface{}{
 		"file_id":   fileID,
 		"file_name": file.Name,
 		"mime_type": file.MimeType,
 		"comments":  comments,
 		"count":     len(comments),
-	})
+	}
+
+	// Add note for presentations when no comments found
+	if len(comments) == 0 && file.MimeType == "application/vnd.google-apps.presentation" {
+		result["note"] = "No comments returned. Google Slides comments made via 'Insert > Comment' are stored in the Drive comments API. If you see comments in the UI but not here, they may be resolved (use --include-resolved) or may be suggestion-type annotations not exposed via this API."
+	}
+
+	return p.Print(result)
 }
 
 func runDriveUpload(cmd *cobra.Command, args []string) error {
