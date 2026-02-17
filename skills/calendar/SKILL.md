@@ -1,6 +1,6 @@
 ---
 name: gws-calendar
-version: 1.0.0
+version: 1.1.0
 description: "Google Calendar CLI operations via gws. Use when users need to list calendars, view events, create/update/delete events, or RSVP to invitations. Triggers: calendar, events, meetings, schedule, rsvp, invite."
 metadata:
   short-description: Google Calendar CLI operations
@@ -65,9 +65,19 @@ Lists upcoming events from a calendar.
 - `--max int` — Maximum number of events (default 50)
 - `--pending` — Only show events with pending RSVP (needsAction). Tip: increase `--max` when using `--pending` over long date ranges, since `--max` limits the API fetch before client-side filtering.
 
-**Output includes:**
-- `response_status` — User's RSVP status (`accepted`, `declined`, `tentative`, `needsAction`) when user is an attendee
-- `organizer` — Organizer's email address
+**Output includes** (fields omitted when empty):
+
+| Category | Fields |
+|----------|--------|
+| **Core** | `id`, `summary`, `status` |
+| **Time** | `start`, `end`, `all_day` |
+| **Details** | `description`, `location`, `hangout_link`, `html_link`, `created`, `updated`, `color_id`, `visibility`, `transparency`, `event_type` |
+| **People** | `organizer` (email), `creator` (email), `response_status` (your RSVP) |
+| **Attendees** | `attendees[]` — `{ email, response_status, optional, organizer, self }` |
+| **Conference** | `conference` — `{ conference_id, solution, entry_points[]: { type, uri } }` |
+| **Attachments** | `attachments[]` — `{ file_url, title, mime_type, file_id }` |
+| **Recurrence** | `recurrence[]` — RRULE strings |
+| **Reminders** | `reminders` — `{ use_default, overrides[]: { method, minutes } }` |
 
 **Examples:**
 ```bash

@@ -537,17 +537,43 @@ func TestCalendarEvents_MockServer_ResponseStatus(t *testing.T) {
 			resp := &calendar.Events{
 				Items: []*calendar.Event{
 					{
-						Id:      "evt-pending",
-						Summary: "Pending Meeting",
-						Status:  "confirmed",
-						Start:   &calendar.EventDateTime{DateTime: "2026-02-01T10:00:00Z"},
-						End:     &calendar.EventDateTime{DateTime: "2026-02-01T11:00:00Z"},
+						Id:          "evt-pending",
+						Summary:     "Pending Meeting",
+						Status:      "confirmed",
+						Description: "Discuss Q1 planning",
+						Start:       &calendar.EventDateTime{DateTime: "2026-02-01T10:00:00Z"},
+						End:         &calendar.EventDateTime{DateTime: "2026-02-01T11:00:00Z"},
+						HtmlLink:    "https://calendar.google.com/event?id=evt-pending",
+						Created:     "2026-01-15T08:00:00Z",
+						Updated:     "2026-01-20T10:00:00Z",
 						Organizer: &calendar.EventOrganizer{
 							Email: "boss@example.com",
 						},
+						Creator: &calendar.EventCreator{
+							Email: "boss@example.com",
+						},
 						Attendees: []*calendar.EventAttendee{
-							{Email: "boss@example.com", ResponseStatus: "accepted"},
+							{Email: "boss@example.com", ResponseStatus: "accepted", Organizer: true},
 							{Email: "me@example.com", Self: true, ResponseStatus: "needsAction"},
+							{Email: "optional@example.com", ResponseStatus: "needsAction", Optional: true},
+						},
+						ConferenceData: &calendar.ConferenceData{
+							ConferenceId: "meet-abc-123",
+							ConferenceSolution: &calendar.ConferenceSolution{
+								Name: "Google Meet",
+							},
+							EntryPoints: []*calendar.EntryPoint{
+								{EntryPointType: "video", Uri: "https://meet.google.com/abc-123"},
+							},
+						},
+						Attachments: []*calendar.EventAttachment{
+							{FileUrl: "https://drive.google.com/file/d/abc", Title: "Agenda.pdf", MimeType: "application/pdf", FileId: "abc"},
+						},
+						Reminders: &calendar.EventReminders{
+							UseDefault: false,
+							Overrides: []*calendar.EventReminder{
+								{Method: "popup", Minutes: 10},
+							},
 						},
 					},
 					{
@@ -723,5 +749,361 @@ func TestCalendarEvents_PendingFilter(t *testing.T) {
 	}
 	if filtered[0] != "evt-1" || filtered[1] != "evt-3" {
 		t.Errorf("unexpected filtered events: %v", filtered)
+	}
+}
+
+// TestMapEventToOutput_AllFields verifies all new fields appear in output when set
+func TestMapEventToOutput_AllFields(t *testing.T) {
+	event := &calendar.Event{
+		Id:           "evt-full",
+		Summary:      "Full Event",
+		Status:       "confirmed",
+		Description:  "A detailed description",
+		Start:        &calendar.EventDateTime{DateTime: "2026-03-01T09:00:00Z"},
+		End:          &calendar.EventDateTime{DateTime: "2026-03-01T10:00:00Z"},
+		Location:     "Room 42",
+		HangoutLink:  "https://hangouts.google.com/call/abc",
+		HtmlLink:     "https://calendar.google.com/event?id=evt-full",
+		Created:      "2026-02-01T08:00:00Z",
+		Updated:      "2026-02-15T12:00:00Z",
+		ColorId:      "9",
+		Visibility:   "default",
+		Transparency: "opaque",
+		EventType:    "default",
+		Organizer:    &calendar.EventOrganizer{Email: "org@example.com"},
+		Creator:      &calendar.EventCreator{Email: "creator@example.com"},
+		Attendees: []*calendar.EventAttendee{
+			{Email: "org@example.com", ResponseStatus: "accepted", Organizer: true},
+			{Email: "me@example.com", Self: true, ResponseStatus: "tentative"},
+			{Email: "opt@example.com", ResponseStatus: "needsAction", Optional: true},
+		},
+		ConferenceData: &calendar.ConferenceData{
+			ConferenceId: "conf-xyz",
+			ConferenceSolution: &calendar.ConferenceSolution{
+				Name: "Google Meet",
+			},
+			EntryPoints: []*calendar.EntryPoint{
+				{EntryPointType: "video", Uri: "https://meet.google.com/xyz"},
+				{EntryPointType: "phone", Uri: "tel:+1234567890"},
+			},
+		},
+		Attachments: []*calendar.EventAttachment{
+			{FileUrl: "https://drive.google.com/file/d/123", Title: "Notes.docx", MimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", FileId: "123"},
+		},
+		Recurrence: []string{"RRULE:FREQ=WEEKLY;BYDAY=MO"},
+		Reminders: &calendar.EventReminders{
+			UseDefault: false,
+			Overrides: []*calendar.EventReminder{
+				{Method: "email", Minutes: 30},
+				{Method: "popup", Minutes: 10},
+			},
+		},
+	}
+
+	result := mapEventToOutput(event)
+
+	// Always-present fields
+	if result["id"] != "evt-full" {
+		t.Errorf("expected id 'evt-full', got %v", result["id"])
+	}
+	if result["summary"] != "Full Event" {
+		t.Errorf("expected summary 'Full Event', got %v", result["summary"])
+	}
+	if result["status"] != "confirmed" {
+		t.Errorf("expected status 'confirmed', got %v", result["status"])
+	}
+
+	// String fields
+	stringFields := map[string]string{
+		"description":  "A detailed description",
+		"location":     "Room 42",
+		"hangout_link": "https://hangouts.google.com/call/abc",
+		"html_link":    "https://calendar.google.com/event?id=evt-full",
+		"created":      "2026-02-01T08:00:00Z",
+		"updated":      "2026-02-15T12:00:00Z",
+		"color_id":     "9",
+		"visibility":   "default",
+		"transparency": "opaque",
+		"event_type":   "default",
+		"organizer":    "org@example.com",
+		"creator":      "creator@example.com",
+	}
+	for field, expected := range stringFields {
+		val, ok := result[field].(string)
+		if !ok {
+			t.Errorf("field %q missing or not a string", field)
+			continue
+		}
+		if val != expected {
+			t.Errorf("field %q: expected %q, got %q", field, expected, val)
+		}
+	}
+
+	// Time
+	if result["start"] != "2026-03-01T09:00:00Z" {
+		t.Errorf("expected start time, got %v", result["start"])
+	}
+	if result["end"] != "2026-03-01T10:00:00Z" {
+		t.Errorf("expected end time, got %v", result["end"])
+	}
+
+	// Response status (self)
+	if result["response_status"] != "tentative" {
+		t.Errorf("expected response_status 'tentative', got %v", result["response_status"])
+	}
+
+	// Attendees
+	attendees, ok := result["attendees"].([]map[string]interface{})
+	if !ok {
+		t.Fatal("expected attendees to be a slice of maps")
+	}
+	if len(attendees) != 3 {
+		t.Errorf("expected 3 attendees, got %d", len(attendees))
+	}
+	// Check optional flag on third attendee
+	if opt, ok := attendees[2]["optional"].(bool); !ok || !opt {
+		t.Error("expected third attendee to have optional=true")
+	}
+
+	// Conference
+	conf, ok := result["conference"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected conference to be a map")
+	}
+	if conf["conference_id"] != "conf-xyz" {
+		t.Errorf("expected conference_id 'conf-xyz', got %v", conf["conference_id"])
+	}
+	if conf["solution"] != "Google Meet" {
+		t.Errorf("expected solution 'Google Meet', got %v", conf["solution"])
+	}
+	eps, ok := conf["entry_points"].([]map[string]interface{})
+	if !ok || len(eps) != 2 {
+		t.Errorf("expected 2 entry points, got %v", conf["entry_points"])
+	}
+
+	// Attachments
+	atts, ok := result["attachments"].([]map[string]interface{})
+	if !ok || len(atts) != 1 {
+		t.Fatal("expected 1 attachment")
+	}
+	if atts[0]["title"] != "Notes.docx" {
+		t.Errorf("expected attachment title 'Notes.docx', got %v", atts[0]["title"])
+	}
+
+	// Recurrence
+	recurrence, ok := result["recurrence"].([]string)
+	if !ok || len(recurrence) != 1 {
+		t.Fatal("expected 1 recurrence rule")
+	}
+	if recurrence[0] != "RRULE:FREQ=WEEKLY;BYDAY=MO" {
+		t.Errorf("unexpected recurrence: %v", recurrence[0])
+	}
+
+	// Reminders
+	reminders, ok := result["reminders"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected reminders to be a map")
+	}
+	if reminders["use_default"] != false {
+		t.Errorf("expected use_default false, got %v", reminders["use_default"])
+	}
+	overrides, ok := reminders["overrides"].([]map[string]interface{})
+	if !ok || len(overrides) != 2 {
+		t.Fatal("expected 2 reminder overrides")
+	}
+}
+
+// TestMapEventToOutput_EmptyOptionals verifies empty/nil fields are omitted
+func TestMapEventToOutput_EmptyOptionals(t *testing.T) {
+	event := &calendar.Event{
+		Id:      "evt-minimal",
+		Summary: "Minimal Event",
+		Status:  "confirmed",
+		Start:   &calendar.EventDateTime{DateTime: "2026-03-01T09:00:00Z"},
+		End:     &calendar.EventDateTime{DateTime: "2026-03-01T10:00:00Z"},
+	}
+
+	result := mapEventToOutput(event)
+
+	// These must be present
+	if result["id"] != "evt-minimal" {
+		t.Errorf("expected id 'evt-minimal', got %v", result["id"])
+	}
+
+	// These must be absent
+	absentFields := []string{
+		"description", "location", "hangout_link", "html_link",
+		"created", "updated", "color_id", "visibility", "transparency",
+		"event_type", "organizer", "creator", "response_status",
+		"attendees", "conference", "attachments", "recurrence", "reminders",
+	}
+	for _, field := range absentFields {
+		if _, exists := result[field]; exists {
+			t.Errorf("field %q should be omitted for minimal event, but was present: %v", field, result[field])
+		}
+	}
+}
+
+// TestMapEventToOutput_AllDayEvent verifies all-day event handling through the helper
+func TestMapEventToOutput_AllDayEvent(t *testing.T) {
+	event := &calendar.Event{
+		Id:      "evt-allday",
+		Summary: "Holiday",
+		Status:  "confirmed",
+		Start:   &calendar.EventDateTime{Date: "2026-03-15"},
+		End:     &calendar.EventDateTime{Date: "2026-03-16"},
+	}
+
+	result := mapEventToOutput(event)
+
+	if result["start"] != "2026-03-15" {
+		t.Errorf("expected start '2026-03-15', got %v", result["start"])
+	}
+	if result["end"] != "2026-03-16" {
+		t.Errorf("expected end '2026-03-16', got %v", result["end"])
+	}
+	if result["all_day"] != true {
+		t.Error("expected all_day=true for date-only event")
+	}
+}
+
+// TestMapEventToOutput_NilNestedEntries verifies nil elements in slices are safely skipped
+func TestMapEventToOutput_NilNestedEntries(t *testing.T) {
+	event := &calendar.Event{
+		Id:      "evt-nils",
+		Summary: "Nil Test",
+		Status:  "confirmed",
+		Start:   &calendar.EventDateTime{DateTime: "2026-03-01T09:00:00Z"},
+		End:     &calendar.EventDateTime{DateTime: "2026-03-01T10:00:00Z"},
+		Attendees: []*calendar.EventAttendee{
+			nil,
+			{Email: "valid@example.com", ResponseStatus: "accepted"},
+			{Email: "", ResponseStatus: ""},
+			nil,
+		},
+		ConferenceData: &calendar.ConferenceData{
+			ConferenceId: "conf-nil",
+			EntryPoints: []*calendar.EntryPoint{
+				nil,
+				{EntryPointType: "video", Uri: "https://meet.google.com/nil"},
+				nil,
+			},
+		},
+		Attachments: []*calendar.EventAttachment{
+			nil,
+			{FileUrl: "https://drive.google.com/file/d/x", Title: "Doc.pdf"},
+			nil,
+		},
+		Reminders: &calendar.EventReminders{
+			UseDefault: false,
+			Overrides: []*calendar.EventReminder{
+				nil,
+				{Method: "popup", Minutes: 5},
+				nil,
+			},
+		},
+	}
+
+	// Must not panic
+	result := mapEventToOutput(event)
+
+	// Attendees: nil and empty-email entries skipped, only valid@example.com remains
+	attendees, ok := result["attendees"].([]map[string]interface{})
+	if !ok {
+		t.Fatal("expected attendees to be present")
+	}
+	if len(attendees) != 1 {
+		t.Errorf("expected 1 valid attendee, got %d", len(attendees))
+	}
+	if attendees[0]["email"] != "valid@example.com" {
+		t.Errorf("expected valid@example.com, got %v", attendees[0]["email"])
+	}
+
+	// Conference: nil entry points skipped
+	conf, ok := result["conference"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected conference to be present")
+	}
+	eps, ok := conf["entry_points"].([]map[string]interface{})
+	if !ok || len(eps) != 1 {
+		t.Errorf("expected 1 valid entry point, got %v", conf["entry_points"])
+	}
+
+	// Attachments: nil entries skipped
+	atts, ok := result["attachments"].([]map[string]interface{})
+	if !ok || len(atts) != 1 {
+		t.Errorf("expected 1 valid attachment, got %v", result["attachments"])
+	}
+
+	// Reminders: nil overrides skipped
+	reminders, ok := result["reminders"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected reminders to be present")
+	}
+	overrides, ok := reminders["overrides"].([]map[string]interface{})
+	if !ok || len(overrides) != 1 {
+		t.Errorf("expected 1 valid reminder override, got %v", reminders["overrides"])
+	}
+}
+
+// TestMapEventToOutput_EmptyNestedObjects verifies fully-empty nested structures are omitted
+func TestMapEventToOutput_EmptyNestedObjects(t *testing.T) {
+	event := &calendar.Event{
+		Id:      "evt-empty-nested",
+		Summary: "Empty Nested",
+		Status:  "confirmed",
+		Start:   &calendar.EventDateTime{DateTime: "2026-03-01T09:00:00Z"},
+		End:     &calendar.EventDateTime{DateTime: "2026-03-01T10:00:00Z"},
+		// Conference with no useful data
+		ConferenceData: &calendar.ConferenceData{},
+		// Attachments with only nil/empty entries
+		Attachments: []*calendar.EventAttachment{nil},
+		// Attendees with only nil entries
+		Attendees: []*calendar.EventAttendee{nil},
+	}
+
+	result := mapEventToOutput(event)
+
+	if _, exists := result["conference"]; exists {
+		t.Error("empty conference data should be omitted")
+	}
+	if _, exists := result["attachments"]; exists {
+		t.Error("attachments with only nil entries should be omitted")
+	}
+	if _, exists := result["attendees"]; exists {
+		t.Error("attendees with only nil entries should be omitted")
+	}
+}
+
+// TestMapEventToOutput_EmptyMethodOverride verifies overrides with empty method are skipped
+func TestMapEventToOutput_EmptyMethodOverride(t *testing.T) {
+	event := &calendar.Event{
+		Id:      "evt-override",
+		Summary: "Override Test",
+		Status:  "confirmed",
+		Start:   &calendar.EventDateTime{DateTime: "2026-03-01T09:00:00Z"},
+		End:     &calendar.EventDateTime{DateTime: "2026-03-01T10:00:00Z"},
+		Reminders: &calendar.EventReminders{
+			UseDefault: false,
+			Overrides: []*calendar.EventReminder{
+				{Method: "", Minutes: 0},
+				{Method: "popup", Minutes: 10},
+				{Method: "", Minutes: 5},
+			},
+		},
+	}
+
+	result := mapEventToOutput(event)
+
+	reminders, ok := result["reminders"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected reminders to be present")
+	}
+	overrides, ok := reminders["overrides"].([]map[string]interface{})
+	if !ok || len(overrides) != 1 {
+		t.Fatalf("expected 1 valid override (empty-method skipped), got %v", reminders["overrides"])
+	}
+	if overrides[0]["method"] != "popup" {
+		t.Errorf("expected method 'popup', got %v", overrides[0]["method"])
 	}
 }

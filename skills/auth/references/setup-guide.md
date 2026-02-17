@@ -144,7 +144,7 @@ gws gmail list --max 3
 | `~/.config/gws/token.json` | OAuth token (auto-refreshes) |
 
 - Tokens auto-refresh when expired
-- All scopes are requested upfront during login
+- Scopes are requested based on the `--services` flag, config defaults, or all scopes by default
 - To re-authenticate: `gws auth logout` then `gws auth login`
 - To switch accounts: logout and login with a different Google account
 
