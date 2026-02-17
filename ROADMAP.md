@@ -13,6 +13,19 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 
 ## Completed
 
+### v1.15.0
+- [x] Slides: update-slide-background (solid color + image URL)
+- [x] Slides: list-layouts (discover custom master layouts)
+- [x] Slides: add-slide --layout-id (custom layout support)
+- [x] Slides: add-line (lines and connectors with position, color, weight)
+- [x] Slides: group / ungroup elements
+- [x] Slides: replace-text --slide-number/--slide-id (slide-scoped replacement)
+- [x] Slides: replace-text --object-id (element-level replacement via delete+insert)
+- [x] Slides: read --elements (expose element IDs, types, text per slide)
+- [x] Drive: copy command (duplicate files / templates)
+- [x] Drive: comments pagination + anchor data for Slides
+- [x] Chat: fix empty sender field (fallback to resource name, add sender_type)
+
 ### v1.14.0
 - [x] Contacts / People API: list, search, get, create, delete
 - [x] Sheets Formatting: format cells, set-column-width, set-row-height, freeze panes
@@ -113,24 +126,6 @@ gws sheets list-conditional-formats <id> --sheet "Sheet1"
 
 gws sheets delete-conditional-format <id> --index 0 --sheet "Sheet1"
 # API: batchUpdate → deleteConditionalFormatRule
-```
-
-### Slides Advanced (P2, M)
-
-Additional slide manipulation commands.
-
-```bash
-gws slides delete-object <id> --object-id "g123abc"
-# API: batchUpdate → deleteObject
-
-gws slides update-shape <id> --object-id "g123abc" --fill-color "#FF0000"
-# API: batchUpdate → updateShapeProperties
-
-gws slides reorder <id> --slide-id "g123abc" --position 2
-# API: batchUpdate → updateSlidesPosition
-
-gws slides update-text-style <id> --object-id "g123abc" --bold --font-size 24
-# API: batchUpdate → updateTextStyle
 ```
 
 ### Gmail Advanced (P2, S)

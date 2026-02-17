@@ -46,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.14.0** - Add Contacts (People API), Sheets formatting, and Docs formatting & lists.
+**v1.15.0** - Slides API parity (backgrounds, layouts, lines, groups), per-element text ops, drive copy, chat sender fix.
 
 ## Roadmap
 
