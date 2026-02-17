@@ -369,6 +369,11 @@ func TestSlidesCommands(t *testing.T) {
 		{"update-paragraph-style"},
 		{"update-shape"},
 		{"reorder-slides"},
+		{"update-slide-background"},
+		{"list-layouts"},
+		{"add-line"},
+		{"group"},
+		{"ungroup"},
 	}
 
 	for _, tt := range tests {

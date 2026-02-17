@@ -86,9 +86,12 @@ Usage: gws slides add-slide <presentation-id> [flags]
 |------|------|---------|-------------|
 | `--title` | string | | Slide title |
 | `--body` | string | | Slide body text |
-| `--layout` | string | `TITLE_AND_BODY` | Slide layout |
+| `--layout` | string | `TITLE_AND_BODY` | Slide layout (predefined) |
+| `--layout-id` | string | | Custom layout ID from presentation's masters (overrides --layout) |
 
-### Available Layouts
+Use `gws slides list-layouts <id>` to discover available custom layout IDs.
+
+### Available Predefined Layouts
 
 | Layout | Description |
 |--------|-------------|
@@ -449,3 +452,86 @@ Usage: gws slides reorder-slides <presentation-id> [flags]
 |------|------|---------|----------|-------------|
 | `--slide-ids` | string | | Yes | Comma-separated slide IDs to move |
 | `--to` | int | | Yes | Target position (0-indexed) |
+
+---
+
+## gws slides update-slide-background
+
+Sets the background of a slide to a solid color or an image URL.
+
+```
+Usage: gws slides update-slide-background <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--slide-number` | int | | | Slide number (1-indexed) |
+| `--slide-id` | string | | | Slide object ID |
+| `--color` | string | | | Background color as hex `#RRGGBB` |
+| `--image-url` | string | | | Background image URL |
+
+One of `--slide-number` or `--slide-id` is required. One of `--color` or `--image-url` is required (mutually exclusive).
+
+---
+
+## gws slides list-layouts
+
+Lists all available slide layouts from the presentation's masters.
+
+```
+Usage: gws slides list-layouts <presentation-id>
+```
+
+No additional flags. Returns layout ID, name, display name, and master ID for each layout.
+
+---
+
+## gws slides add-line
+
+Creates a line or connector on a slide.
+
+```
+Usage: gws slides add-line <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--slide-number` | int | | | Slide number (1-indexed) |
+| `--slide-id` | string | | | Slide object ID |
+| `--type` | string | `STRAIGHT_CONNECTOR_1` | No | Line type |
+| `--start-x` | float | 0 | No | Start X position in points |
+| `--start-y` | float | 0 | No | Start Y position in points |
+| `--end-x` | float | 200 | No | End X position in points |
+| `--end-y` | float | 200 | No | End Y position in points |
+| `--color` | string | | No | Line color as hex `#RRGGBB` |
+| `--weight` | float | 1 | No | Line thickness in points |
+
+One of `--slide-number` or `--slide-id` is required. Line category is determined from the type prefix: `STRAIGHT_*`, `BENT_*`, or `CURVED_*`.
+
+---
+
+## gws slides group
+
+Groups multiple page elements into a single group.
+
+```
+Usage: gws slides group <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--object-ids` | string | | Yes | Comma-separated element IDs to group (minimum 2) |
+
+---
+
+## gws slides ungroup
+
+Ungroups a group element back into individual elements.
+
+```
+Usage: gws slides ungroup <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--group-id` | string | | Yes | Object ID of the group to ungroup |

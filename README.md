@@ -194,7 +194,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws slides list <id>` | List slides with text content (`--notes` for speaker notes) |
 | `gws slides read <id> [n]` | Read slide text (specific or all, `--notes` for speaker notes) |
 | `gws slides create` | Create new presentation (`--title`) |
-| `gws slides add-slide <id>` | Add slide (`--title`, `--body`, `--layout`) |
+| `gws slides add-slide <id>` | Add slide (`--title`, `--body`, `--layout`, `--layout-id`) |
 | `gws slides delete-slide <id>` | Delete slide (`--slide-id` or `--slide-number`) |
 | `gws slides duplicate-slide <id>` | Duplicate slide (`--slide-id` or `--slide-number`) |
 | `gws slides add-shape <id>` | Add shape (`--slide-id/--slide-number`, `--type`, `--x`, `--y`, `--width`, `--height`) |
@@ -213,6 +213,11 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws slides update-paragraph-style <id>` | Paragraph style (`--object-id`, `--alignment`, `--line-spacing`) |
 | `gws slides update-shape <id>` | Shape properties (`--object-id`, `--background-color`, `--outline-color`) |
 | `gws slides reorder-slides <id>` | Reorder slides (`--slide-ids`, `--to`) |
+| `gws slides update-slide-background <id>` | Set slide background (`--slide-id/--slide-number`, `--color` or `--image-url`) |
+| `gws slides list-layouts <id>` | List available layouts from presentation masters |
+| `gws slides add-line <id>` | Add line/connector (`--slide-id/--slide-number`, `--type`, `--start-x/y`, `--end-x/y`) |
+| `gws slides group <id>` | Group elements (`--object-ids`) |
+| `gws slides ungroup <id>` | Ungroup elements (`--group-id`) |
 
 ### Chat
 
