@@ -1,5 +1,15 @@
 # Releases
 
+## v1.18.1
+
+**Chat Member Name Resolution**
+
+- `gws chat members` now auto-resolves display names and emails via People API
+  - Persistent cache at `~/.config/gws/user-cache.json` — grows over time, avoids repeat API calls
+  - Batch resolution (up to 50 per request) via `people.getBatchGet`
+  - Best-effort: gracefully degrades if People API is unavailable
+- New `internal/usercache` package for reusable user ID → name caching
+
 ## v1.18.0
 
 **Chat Members**
