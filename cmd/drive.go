@@ -12,6 +12,7 @@ import (
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/googleapi"
 )
 
 var driveCmd = &cobra.Command{
@@ -449,17 +450,22 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 	}
 
 	// List comments with full field specification including anchor and reply subfields
-	commentsCall := svc.Comments.List(fileID).
-		PageSize(maxResults).
-		Fields("nextPageToken,comments(id,content,anchor,author(displayName,emailAddress,photoLink),createdTime,modifiedTime,resolved,quotedFileContent(mimeType,value),replies(id,content,author(displayName,emailAddress),createdTime,modifiedTime,action))")
-
-	if includeDeleted {
-		commentsCall = commentsCall.IncludeDeleted(true)
-	}
+	fields := "nextPageToken,comments(id,content,anchor,author(displayName,emailAddress),createdTime,modifiedTime,resolved,quotedFileContent(mimeType,value),replies(id,content,author(displayName,emailAddress),createdTime,modifiedTime,action))"
 
 	var allComments []*drive.Comment
+	var pageToken string
 	for {
-		resp, err := commentsCall.Do()
+		call := svc.Comments.List(fileID).
+			PageSize(maxResults).
+			Fields(googleapi.Field(fields))
+		if includeDeleted {
+			call = call.IncludeDeleted(true)
+		}
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+
+		resp, err := call.Do()
 		if err != nil {
 			return p.PrintError(fmt.Errorf("failed to list comments: %w", err))
 		}
@@ -467,7 +473,11 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 		if resp.NextPageToken == "" || int64(len(allComments)) >= maxResults {
 			break
 		}
-		commentsCall = commentsCall.PageToken(resp.NextPageToken)
+		pageToken = resp.NextPageToken
+	}
+	// Trim to max if pagination overshot
+	if int64(len(allComments)) > maxResults {
+		allComments = allComments[:maxResults]
 	}
 
 	comments := make([]map[string]interface{}, 0)
