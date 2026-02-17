@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/omriariav/workspace-cli/internal/config"
 	"golang.org/x/oauth2"
 )
 
@@ -552,5 +553,141 @@ func TestMergeToken_NilIncoming(t *testing.T) {
 	merged := MergeToken(existing, nil)
 	if merged != existing {
 		t.Error("expected existing token when incoming is nil")
+	}
+}
+
+// --- Lock Timeout Test ---
+
+func TestAcquireLock_Timeout(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test-file")
+
+	// Hold the lock
+	unlock, err := acquireLock(path)
+	if err != nil {
+		t.Fatalf("failed to acquire initial lock: %v", err)
+	}
+	defer unlock()
+
+	// Try to acquire again — should timeout
+	_, err = acquireLock(path)
+	if err == nil {
+		t.Fatal("expected timeout error when lock is held")
+	}
+	if !strings.Contains(err.Error(), "timeout") {
+		t.Errorf("expected timeout error, got: %v", err)
+	}
+}
+
+func TestAcquireLock_RecentLockNotStale(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test-file")
+	lockPath := path + lockSuffix
+
+	// Create a recent lock (should NOT be cleaned as stale)
+	os.WriteFile(lockPath, []byte("999999999"), 0600)
+
+	// Should timeout, not clean the recent lock
+	_, err := acquireLock(path)
+	if err == nil {
+		t.Fatal("expected timeout — recent lock should not be treated as stale")
+	}
+
+	// Lock file should still exist
+	if _, statErr := os.Stat(lockPath); os.IsNotExist(statErr) {
+		t.Error("recent lock file should not have been removed")
+	}
+}
+
+// --- DeleteToken Lock Coordination Test ---
+
+func TestDeleteToken_Locked(t *testing.T) {
+	cleanup := setupTempConfigDir(t)
+	defer cleanup()
+
+	token := &oauth2.Token{AccessToken: "test", TokenType: "Bearer"}
+	if err := SaveToken(token); err != nil {
+		t.Fatalf("failed to save token: %v", err)
+	}
+
+	// Delete should succeed (acquires and releases its own lock)
+	if err := DeleteToken(); err != nil {
+		t.Fatalf("failed to delete token: %v", err)
+	}
+
+	if TokenExists() {
+		t.Error("token should not exist after deletion")
+	}
+}
+
+// --- Validate Services Tests ---
+
+func TestValidateServices_AllValid(t *testing.T) {
+	unknown := ValidateServices([]string{"gmail", "calendar", "chat"})
+	if len(unknown) != 0 {
+		t.Errorf("expected no unknown services, got: %v", unknown)
+	}
+}
+
+func TestValidateServices_SomeInvalid(t *testing.T) {
+	unknown := ValidateServices([]string{"gmail", "fakesvc", "calendar", "nope"})
+	if len(unknown) != 2 {
+		t.Fatalf("expected 2 unknown services, got %d: %v", len(unknown), unknown)
+	}
+
+	has := func(s string) bool {
+		for _, u := range unknown {
+			if u == s {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("fakesvc") || !has("nope") {
+		t.Errorf("expected fakesvc and nope, got: %v", unknown)
+	}
+}
+
+func TestValidateServices_Empty(t *testing.T) {
+	unknown := ValidateServices(nil)
+	if len(unknown) != 0 {
+		t.Errorf("expected no unknown services for nil input, got: %v", unknown)
+	}
+}
+
+// --- Granted Services Persistence Tests ---
+
+func TestSaveAndLoadGrantedServices(t *testing.T) {
+	cleanup := setupTempConfigDir(t)
+	defer cleanup()
+
+	// Ensure config dir exists
+	if err := config.EnsureConfigDir(); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	services := []string{"gmail", "calendar", "chat"}
+	if err := SaveGrantedServices(services); err != nil {
+		t.Fatalf("failed to save granted services: %v", err)
+	}
+
+	loaded := LoadGrantedServices()
+	if len(loaded) != len(services) {
+		t.Fatalf("expected %d services, got %d", len(services), len(loaded))
+	}
+	for i, s := range services {
+		if loaded[i] != s {
+			t.Errorf("service %d: expected %s, got %s", i, s, loaded[i])
+		}
+	}
+}
+
+func TestLoadGrantedServices_NotExists(t *testing.T) {
+	cleanup := setupTempConfigDir(t)
+	defer cleanup()
+
+	loaded := LoadGrantedServices()
+	if loaded != nil {
+		t.Errorf("expected nil for non-existent file, got: %v", loaded)
 	}
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/oauth2"
 )
@@ -104,7 +106,7 @@ func TestRevokeToken_ServerError(t *testing.T) {
 		t.Fatal("expected error for server error response")
 	}
 
-	if !contains(err.Error(), "400") {
+	if !strings.Contains(err.Error(), "400") {
 		t.Errorf("error should mention status code, got: %v", err)
 	}
 }
@@ -124,15 +126,21 @@ func TestRevokeToken_EmptyToken(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
+func TestRevokeToken_ContextTimeout(t *testing.T) {
+	// Server that delays longer than context timeout
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
 
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
+	token := &oauth2.Token{RefreshToken: "test-token"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := revokeWithEndpoint(ctx, server.URL, token)
+	if err == nil {
+		t.Fatal("expected error for context timeout")
 	}
-	return false
 }

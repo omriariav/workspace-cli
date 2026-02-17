@@ -17,6 +17,8 @@ import (
 	"google.golang.org/api/option"
 )
 
+const revokeTimeout = 10 * time.Second
+
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage authentication",
@@ -68,8 +70,15 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("missing credentials: set GWS_CLIENT_ID and GWS_CLIENT_SECRET environment variables, or use --client-id and --client-secret flags"))
 	}
 
-	// Determine scopes based on --services flag, config, or all
-	scopes := resolveScopes(cmd)
+	// Determine scopes and services based on --services flag, config, or all
+	scopes, grantedServices := resolveScopes(cmd)
+
+	// Validate service names
+	if unknown := auth.ValidateServices(grantedServices); len(unknown) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: unknown service(s): %s\nValid services: %s\n",
+			strings.Join(unknown, ", "),
+			strings.Join(auth.ValidServiceNames(), ", "))
+	}
 
 	client := auth.NewOAuthClient(clientID, clientSecret, scopes)
 
@@ -85,6 +94,11 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	if err := auth.SaveToken(token); err != nil {
 		return p.PrintError(err)
+	}
+
+	// Persist granted services for lazy scope detection
+	if len(grantedServices) > 0 {
+		_ = auth.SaveGrantedServices(grantedServices)
 	}
 
 	return p.Print(map[string]interface{}{
@@ -104,10 +118,11 @@ func runLogout(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	// Best-effort server-side revocation before deleting local token
+	// Best-effort server-side revocation with timeout before deleting local token
 	token, err := auth.LoadToken()
 	if err == nil && token != nil {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), revokeTimeout)
+		defer cancel()
 		if revokeErr := auth.RevokeToken(ctx, token); revokeErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to revoke token server-side: %v\n", revokeErr)
 		}
@@ -195,22 +210,22 @@ func getUserInfo(token *oauth2.Token) (*oauth2api.Userinfo, error) {
 }
 
 // resolveScopes determines which scopes to request based on the --services flag,
-// config file, or defaults to all scopes.
-func resolveScopes(cmd *cobra.Command) []string {
+// config file, or defaults to all scopes. Returns scopes and the service list used.
+func resolveScopes(cmd *cobra.Command) ([]string, []string) {
 	// 1. Check --services flag
 	if servicesFlag, _ := cmd.Flags().GetString("services"); servicesFlag != "" {
 		services := strings.Split(servicesFlag, ",")
 		for i := range services {
 			services[i] = strings.TrimSpace(services[i])
 		}
-		return auth.ScopesForServices(services)
+		return auth.ScopesForServices(services), services
 	}
 
 	// 2. Check config file
 	if configServices := config.GetServices(); len(configServices) > 0 {
-		return auth.ScopesForServices(configServices)
+		return auth.ScopesForServices(configServices), configServices
 	}
 
-	// 3. Default: all scopes
-	return auth.AllScopes
+	// 3. Default: all scopes (no service list = full auth)
+	return auth.AllScopes, nil
 }

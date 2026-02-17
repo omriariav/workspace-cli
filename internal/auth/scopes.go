@@ -79,3 +79,26 @@ func ServiceForScope(scope string) string {
 	}
 	return ""
 }
+
+// ValidServiceNames returns all known service names.
+func ValidServiceNames() []string {
+	return []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts"}
+}
+
+// ValidateServices checks that all service names are recognized.
+// Returns a list of unknown service names.
+func ValidateServices(services []string) []string {
+	valid := make(map[string]bool)
+	for _, s := range ValidServiceNames() {
+		valid[s] = true
+	}
+	valid["userinfo"] = true
+
+	var unknown []string
+	for _, s := range services {
+		if !valid[s] {
+			unknown = append(unknown, s)
+		}
+	}
+	return unknown
+}

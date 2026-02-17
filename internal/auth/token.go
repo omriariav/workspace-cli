@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/config"
@@ -113,8 +111,22 @@ func MergeToken(existing, incoming *oauth2.Token) *oauth2.Token {
 }
 
 // DeleteToken removes the token file.
+// Uses file locking to coordinate with SaveToken.
 func DeleteToken() error {
 	tokenPath := config.GetTokenPath()
+
+	unlock, err := acquireLock(tokenPath)
+	if err != nil {
+		// If we can't lock (e.g. config dir doesn't exist), try direct removal
+		if removeErr := os.Remove(tokenPath); removeErr != nil {
+			if os.IsNotExist(removeErr) {
+				return nil
+			}
+			return fmt.Errorf("failed to delete token: %w", removeErr)
+		}
+		return nil
+	}
+	defer unlock()
 
 	if err := os.Remove(tokenPath); err != nil {
 		if os.IsNotExist(err) {
@@ -124,6 +136,30 @@ func DeleteToken() error {
 	}
 
 	return nil
+}
+
+// SaveGrantedServices persists the list of services that were granted during login.
+func SaveGrantedServices(services []string) error {
+	path := config.GetGrantedServicesPath()
+	data, err := json.Marshal(services)
+	if err != nil {
+		return fmt.Errorf("failed to marshal granted services: %w", err)
+	}
+	return os.WriteFile(path, data, 0600)
+}
+
+// LoadGrantedServices loads the persisted list of granted services.
+func LoadGrantedServices() []string {
+	path := config.GetGrantedServicesPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var services []string
+	if err := json.Unmarshal(data, &services); err != nil {
+		return nil
+	}
+	return services
 }
 
 // TokenExists checks if a token file exists.
@@ -169,6 +205,8 @@ func acquireLock(path string) (unlock func(), err error) {
 }
 
 // removeStaleLock removes a lock file if it's older than staleLockAge.
+// A token write takes milliseconds, so a 30s-old lock is reliably stale.
+// We use age-only detection (no PID probing) for cross-platform safety.
 // Returns true if the lock was removed.
 func removeStaleLock(lockPath string) bool {
 	info, err := os.Stat(lockPath)
@@ -177,20 +215,6 @@ func removeStaleLock(lockPath string) bool {
 	}
 
 	if time.Since(info.ModTime()) > staleLockAge {
-		// Read PID for logging (best effort)
-		if data, err := os.ReadFile(lockPath); err == nil {
-			pidStr := strings.TrimSpace(string(data))
-			if pid, err := strconv.Atoi(pidStr); err == nil {
-				// Check if process is still running
-				if p, err := os.FindProcess(pid); err == nil {
-					// On Unix, FindProcess always succeeds, but Signal(0) checks existence
-					if p.Signal(nil) == nil {
-						return false // Process still running, lock is not stale
-					}
-				}
-			}
-		}
-
 		os.Remove(lockPath)
 		return true
 	}
