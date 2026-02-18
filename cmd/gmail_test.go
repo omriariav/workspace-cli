@@ -1542,3 +1542,841 @@ func TestGmailList_IncludeLabels_MockServer(t *testing.T) {
 		t.Error("labels should not be present when include-labels is false")
 	}
 }
+
+// === Tests for new Gmail commands ===
+
+// TestGmailUntrashCommand_Help tests untrash command structure
+func TestGmailUntrashCommand_Help(t *testing.T) {
+	cmd := gmailUntrashCmd
+	if cmd.Use != "untrash <message-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// TestGmailUntrash_MockServer tests untrash API integration
+func TestGmailUntrash_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/gmail/v1/users/me/messages/msg-trash-1/untrash" && r.Method == "POST" {
+			resp := &gmail.Message{
+				Id:       "msg-trash-1",
+				LabelIds: []string{"INBOX"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	msg, err := svc.Users.Messages.Untrash("me", "msg-trash-1").Do()
+	if err != nil {
+		t.Fatalf("failed to untrash message: %v", err)
+	}
+	if msg.Id != "msg-trash-1" {
+		t.Errorf("unexpected message id: %s", msg.Id)
+	}
+}
+
+// TestGmailDeleteCommand_Help tests delete command structure
+func TestGmailDeleteCommand_Help(t *testing.T) {
+	cmd := gmailDeleteCmd
+	if cmd.Use != "delete <message-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// TestGmailDelete_MockServer tests permanent delete API integration
+func TestGmailDelete_MockServer(t *testing.T) {
+	deleteCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/gmail/v1/users/me/messages/msg-del-1" && r.Method == "DELETE" {
+			deleteCalled = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	err = svc.Users.Messages.Delete("me", "msg-del-1").Do()
+	if err != nil {
+		t.Fatalf("failed to delete message: %v", err)
+	}
+	if !deleteCalled {
+		t.Error("delete API was not called")
+	}
+}
+
+// TestGmailBatchModifyCommand_Flags tests batch-modify command flags
+func TestGmailBatchModifyCommand_Flags(t *testing.T) {
+	cmd := gmailBatchModifyCmd
+
+	idsFlag := cmd.Flags().Lookup("ids")
+	if idsFlag == nil {
+		t.Error("expected --ids flag to exist")
+	}
+	addFlag := cmd.Flags().Lookup("add-labels")
+	if addFlag == nil {
+		t.Error("expected --add-labels flag to exist")
+	}
+	removeFlag := cmd.Flags().Lookup("remove-labels")
+	if removeFlag == nil {
+		t.Error("expected --remove-labels flag to exist")
+	}
+}
+
+// TestGmailBatchModify_MockServer tests batch modify API integration
+func TestGmailBatchModify_MockServer(t *testing.T) {
+	var receivedReq gmail.BatchModifyMessagesRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Labels list for resolution
+		if r.URL.Path == "/gmail/v1/users/me/labels" && r.Method == "GET" {
+			resp := &gmail.ListLabelsResponse{
+				Labels: []*gmail.Label{
+					{Id: "STARRED", Name: "STARRED", Type: "system"},
+					{Id: "INBOX", Name: "INBOX", Type: "system"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/gmail/v1/users/me/messages/batchModify" && r.Method == "POST" {
+			json.NewDecoder(r.Body).Decode(&receivedReq)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	req := &gmail.BatchModifyMessagesRequest{
+		Ids:            []string{"msg-1", "msg-2"},
+		AddLabelIds:    []string{"STARRED"},
+		RemoveLabelIds: []string{"INBOX"},
+	}
+
+	err = svc.Users.Messages.BatchModify("me", req).Do()
+	if err != nil {
+		t.Fatalf("failed to batch modify: %v", err)
+	}
+}
+
+// TestGmailBatchDeleteCommand_Flags tests batch-delete command flags
+func TestGmailBatchDeleteCommand_Flags(t *testing.T) {
+	cmd := gmailBatchDeleteCmd
+
+	idsFlag := cmd.Flags().Lookup("ids")
+	if idsFlag == nil {
+		t.Error("expected --ids flag to exist")
+	}
+}
+
+// TestGmailBatchDelete_MockServer tests batch delete API integration
+func TestGmailBatchDelete_MockServer(t *testing.T) {
+	batchDeleteCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/gmail/v1/users/me/messages/batchDelete" && r.Method == "POST" {
+			batchDeleteCalled = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	req := &gmail.BatchDeleteMessagesRequest{
+		Ids: []string{"msg-1", "msg-2", "msg-3"},
+	}
+	err = svc.Users.Messages.BatchDelete("me", req).Do()
+	if err != nil {
+		t.Fatalf("failed to batch delete: %v", err)
+	}
+	if !batchDeleteCalled {
+		t.Error("batch delete API was not called")
+	}
+}
+
+// TestGmailTrashThreadCommand_Help tests trash-thread command structure
+func TestGmailTrashThreadCommand_Help(t *testing.T) {
+	cmd := gmailTrashThreadCmd
+	if cmd.Use != "trash-thread <thread-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// TestGmailTrashThread_MockServer tests trash thread API integration
+func TestGmailTrashThread_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/threads/thread-trash-1/trash" && r.Method == "POST" {
+			resp := map[string]interface{}{
+				"id": "thread-trash-1",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	thread, err := svc.Users.Threads.Trash("me", "thread-trash-1").Do()
+	if err != nil {
+		t.Fatalf("failed to trash thread: %v", err)
+	}
+	if thread.Id != "thread-trash-1" {
+		t.Errorf("unexpected thread id: %s", thread.Id)
+	}
+}
+
+// TestGmailUntrashThreadCommand_Help tests untrash-thread command structure
+func TestGmailUntrashThreadCommand_Help(t *testing.T) {
+	cmd := gmailUntrashThreadCmd
+	if cmd.Use != "untrash-thread <thread-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// TestGmailUntrashThread_MockServer tests untrash thread API integration
+func TestGmailUntrashThread_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/threads/thread-ut-1/untrash" && r.Method == "POST" {
+			resp := map[string]interface{}{
+				"id": "thread-ut-1",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	thread, err := svc.Users.Threads.Untrash("me", "thread-ut-1").Do()
+	if err != nil {
+		t.Fatalf("failed to untrash thread: %v", err)
+	}
+	if thread.Id != "thread-ut-1" {
+		t.Errorf("unexpected thread id: %s", thread.Id)
+	}
+}
+
+// TestGmailDeleteThreadCommand_Help tests delete-thread command structure
+func TestGmailDeleteThreadCommand_Help(t *testing.T) {
+	cmd := gmailDeleteThreadCmd
+	if cmd.Use != "delete-thread <thread-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// TestGmailDeleteThread_MockServer tests delete thread API integration
+func TestGmailDeleteThread_MockServer(t *testing.T) {
+	deleteCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/gmail/v1/users/me/threads/thread-del-1" && r.Method == "DELETE" {
+			deleteCalled = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	err = svc.Users.Threads.Delete("me", "thread-del-1").Do()
+	if err != nil {
+		t.Fatalf("failed to delete thread: %v", err)
+	}
+	if !deleteCalled {
+		t.Error("delete API was not called")
+	}
+}
+
+// TestGmailLabelInfoCommand_Flags tests label-info command flags
+func TestGmailLabelInfoCommand_Flags(t *testing.T) {
+	cmd := gmailLabelInfoCmd
+	idFlag := cmd.Flags().Lookup("id")
+	if idFlag == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+// TestGmailLabelInfo_MockServer tests label info API integration
+func TestGmailLabelInfo_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/labels/Label_1" && r.Method == "GET" {
+			resp := &gmail.Label{
+				Id:                    "Label_1",
+				Name:                  "ActionNeeded",
+				Type:                  "user",
+				MessageListVisibility: "show",
+				LabelListVisibility:   "labelShow",
+				MessagesTotal:         42,
+				MessagesUnread:        5,
+				ThreadsTotal:          30,
+				ThreadsUnread:         3,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	label, err := svc.Users.Labels.Get("me", "Label_1").Do()
+	if err != nil {
+		t.Fatalf("failed to get label: %v", err)
+	}
+	if label.Name != "ActionNeeded" {
+		t.Errorf("unexpected label name: %s", label.Name)
+	}
+	if label.MessagesTotal != 42 {
+		t.Errorf("unexpected messages total: %d", label.MessagesTotal)
+	}
+}
+
+// TestGmailCreateLabelCommand_Flags tests create-label command flags
+func TestGmailCreateLabelCommand_Flags(t *testing.T) {
+	cmd := gmailCreateLabelCmd
+	nameFlag := cmd.Flags().Lookup("name")
+	if nameFlag == nil {
+		t.Error("expected --name flag to exist")
+	}
+	visFlag := cmd.Flags().Lookup("visibility")
+	if visFlag == nil {
+		t.Error("expected --visibility flag to exist")
+	}
+	listVisFlag := cmd.Flags().Lookup("list-visibility")
+	if listVisFlag == nil {
+		t.Error("expected --list-visibility flag to exist")
+	}
+}
+
+// TestGmailCreateLabel_MockServer tests create label API integration
+func TestGmailCreateLabel_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/labels" && r.Method == "POST" {
+			var label gmail.Label
+			json.NewDecoder(r.Body).Decode(&label)
+			if label.Name != "TestLabel" {
+				t.Errorf("unexpected label name: %s", label.Name)
+			}
+			resp := &gmail.Label{
+				Id:   "Label_new",
+				Name: label.Name,
+				Type: "user",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	label := &gmail.Label{Name: "TestLabel"}
+	created, err := svc.Users.Labels.Create("me", label).Do()
+	if err != nil {
+		t.Fatalf("failed to create label: %v", err)
+	}
+	if created.Id != "Label_new" {
+		t.Errorf("unexpected label id: %s", created.Id)
+	}
+}
+
+// TestGmailUpdateLabelCommand_Flags tests update-label command flags
+func TestGmailUpdateLabelCommand_Flags(t *testing.T) {
+	cmd := gmailUpdateLabelCmd
+	for _, flag := range []string{"id", "name", "visibility", "list-visibility"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag to exist", flag)
+		}
+	}
+}
+
+// TestGmailUpdateLabel_MockServer tests update label API integration
+func TestGmailUpdateLabel_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Get current label
+		if r.URL.Path == "/gmail/v1/users/me/labels/Label_1" && r.Method == "GET" {
+			resp := &gmail.Label{
+				Id:   "Label_1",
+				Name: "OldName",
+				Type: "user",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Update label
+		if r.URL.Path == "/gmail/v1/users/me/labels/Label_1" && r.Method == "PUT" {
+			var label gmail.Label
+			json.NewDecoder(r.Body).Decode(&label)
+			resp := &gmail.Label{
+				Id:   "Label_1",
+				Name: label.Name,
+				Type: "user",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	// Get then update
+	current, err := svc.Users.Labels.Get("me", "Label_1").Do()
+	if err != nil {
+		t.Fatalf("failed to get label: %v", err)
+	}
+	current.Name = "NewName"
+
+	updated, err := svc.Users.Labels.Update("me", "Label_1", current).Do()
+	if err != nil {
+		t.Fatalf("failed to update label: %v", err)
+	}
+	if updated.Name != "NewName" {
+		t.Errorf("unexpected updated name: %s", updated.Name)
+	}
+}
+
+// TestGmailDeleteLabelCommand_Flags tests delete-label command flags
+func TestGmailDeleteLabelCommand_Flags(t *testing.T) {
+	cmd := gmailDeleteLabelCmd
+	if cmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+// TestGmailDeleteLabel_MockServer tests delete label API integration
+func TestGmailDeleteLabel_MockServer(t *testing.T) {
+	deleteCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/gmail/v1/users/me/labels/Label_del" && r.Method == "DELETE" {
+			deleteCalled = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	err = svc.Users.Labels.Delete("me", "Label_del").Do()
+	if err != nil {
+		t.Fatalf("failed to delete label: %v", err)
+	}
+	if !deleteCalled {
+		t.Error("delete API was not called")
+	}
+}
+
+// TestGmailDraftsCommand_Flags tests drafts list command flags
+func TestGmailDraftsCommand_Flags(t *testing.T) {
+	cmd := gmailDraftsCmd
+	if cmd.Flags().Lookup("max") == nil {
+		t.Error("expected --max flag to exist")
+	}
+	if cmd.Flags().Lookup("query") == nil {
+		t.Error("expected --query flag to exist")
+	}
+}
+
+// TestGmailDrafts_MockServer tests drafts list API integration
+func TestGmailDrafts_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/drafts" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"drafts": []map[string]interface{}{
+					{"id": "draft-1", "message": map[string]interface{}{"id": "msg-d1"}},
+					{"id": "draft-2", "message": map[string]interface{}{"id": "msg-d2"}},
+				},
+				"resultSizeEstimate": 2,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	resp, err := svc.Users.Drafts.List("me").MaxResults(10).Do()
+	if err != nil {
+		t.Fatalf("failed to list drafts: %v", err)
+	}
+	if len(resp.Drafts) != 2 {
+		t.Errorf("expected 2 drafts, got %d", len(resp.Drafts))
+	}
+}
+
+// TestGmailDraftCommand_Flags tests draft get command flags
+func TestGmailDraftCommand_Flags(t *testing.T) {
+	cmd := gmailDraftCmd
+	if cmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+// TestGmailDraft_MockServer tests draft get API integration
+func TestGmailDraft_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/drafts/draft-1" && r.Method == "GET" {
+			body := base64.URLEncoding.EncodeToString([]byte("Draft body content"))
+			resp := map[string]interface{}{
+				"id": "draft-1",
+				"message": map[string]interface{}{
+					"id":       "msg-d1",
+					"threadId": "thread-d1",
+					"payload": map[string]interface{}{
+						"headers": []map[string]string{
+							{"name": "Subject", "value": "Draft Subject"},
+							{"name": "To", "value": "recipient@example.com"},
+						},
+						"mimeType": "text/plain",
+						"body":     map[string]interface{}{"data": body},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	draft, err := svc.Users.Drafts.Get("me", "draft-1").Format("full").Do()
+	if err != nil {
+		t.Fatalf("failed to get draft: %v", err)
+	}
+	if draft.Id != "draft-1" {
+		t.Errorf("unexpected draft id: %s", draft.Id)
+	}
+	if draft.Message == nil {
+		t.Fatal("expected message to be present")
+	}
+	if draft.Message.Id != "msg-d1" {
+		t.Errorf("unexpected message id: %s", draft.Message.Id)
+	}
+}
+
+// TestGmailCreateDraftCommand_Flags tests create-draft command flags
+func TestGmailCreateDraftCommand_Flags(t *testing.T) {
+	cmd := gmailCreateDraftCmd
+	for _, flag := range []string{"to", "subject", "body", "cc", "bcc", "thread-id"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag to exist", flag)
+		}
+	}
+}
+
+// TestGmailCreateDraft_MockServer tests create draft API integration
+func TestGmailCreateDraft_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/drafts" && r.Method == "POST" {
+			resp := map[string]interface{}{
+				"id":      "draft-new",
+				"message": map[string]interface{}{"id": "msg-new", "threadId": "thread-new"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	raw := base64.URLEncoding.EncodeToString([]byte("To: test@example.com\r\nSubject: Test\r\n\r\nBody"))
+	draft := &gmail.Draft{
+		Message: &gmail.Message{Raw: raw},
+	}
+
+	created, err := svc.Users.Drafts.Create("me", draft).Do()
+	if err != nil {
+		t.Fatalf("failed to create draft: %v", err)
+	}
+	if created.Id != "draft-new" {
+		t.Errorf("unexpected draft id: %s", created.Id)
+	}
+}
+
+// TestGmailUpdateDraftCommand_Flags tests update-draft command flags
+func TestGmailUpdateDraftCommand_Flags(t *testing.T) {
+	cmd := gmailUpdateDraftCmd
+	for _, flag := range []string{"id", "to", "subject", "body", "cc", "bcc"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag to exist", flag)
+		}
+	}
+}
+
+// TestGmailUpdateDraft_MockServer tests update draft API integration
+func TestGmailUpdateDraft_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/drafts/draft-upd" && r.Method == "PUT" {
+			resp := map[string]interface{}{
+				"id":      "draft-upd",
+				"message": map[string]interface{}{"id": "msg-upd"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	raw := base64.URLEncoding.EncodeToString([]byte("To: new@example.com\r\nSubject: Updated\r\n\r\nNew body"))
+	draft := &gmail.Draft{
+		Message: &gmail.Message{Raw: raw},
+	}
+
+	updated, err := svc.Users.Drafts.Update("me", "draft-upd", draft).Do()
+	if err != nil {
+		t.Fatalf("failed to update draft: %v", err)
+	}
+	if updated.Id != "draft-upd" {
+		t.Errorf("unexpected draft id: %s", updated.Id)
+	}
+}
+
+// TestGmailSendDraftCommand_Flags tests send-draft command flags
+func TestGmailSendDraftCommand_Flags(t *testing.T) {
+	cmd := gmailSendDraftCmd
+	if cmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+// TestGmailSendDraft_MockServer tests send draft API integration
+func TestGmailSendDraft_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/drafts/send" && r.Method == "POST" {
+			resp := &gmail.Message{
+				Id:       "msg-sent",
+				ThreadId: "thread-sent",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	draft := &gmail.Draft{Id: "draft-to-send"}
+	sent, err := svc.Users.Drafts.Send("me", draft).Do()
+	if err != nil {
+		t.Fatalf("failed to send draft: %v", err)
+	}
+	if sent.Id != "msg-sent" {
+		t.Errorf("unexpected message id: %s", sent.Id)
+	}
+	if sent.ThreadId != "thread-sent" {
+		t.Errorf("unexpected thread id: %s", sent.ThreadId)
+	}
+}
+
+// TestGmailDeleteDraftCommand_Flags tests delete-draft command flags
+func TestGmailDeleteDraftCommand_Flags(t *testing.T) {
+	cmd := gmailDeleteDraftCmd
+	if cmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+// TestGmailDeleteDraft_MockServer tests delete draft API integration
+func TestGmailDeleteDraft_MockServer(t *testing.T) {
+	deleteCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/gmail/v1/users/me/drafts/draft-del" && r.Method == "DELETE" {
+			deleteCalled = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	err = svc.Users.Drafts.Delete("me", "draft-del").Do()
+	if err != nil {
+		t.Fatalf("failed to delete draft: %v", err)
+	}
+	if !deleteCalled {
+		t.Error("delete API was not called")
+	}
+}
+
+// TestGmailAttachmentCommand_Flags tests attachment command flags
+func TestGmailAttachmentCommand_Flags(t *testing.T) {
+	cmd := gmailAttachmentCmd
+	for _, flag := range []string{"message-id", "id", "output"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag to exist", flag)
+		}
+	}
+}
+
+// TestGmailAttachment_MockServer tests attachment download API integration
+func TestGmailAttachment_MockServer(t *testing.T) {
+	attachmentData := base64.URLEncoding.EncodeToString([]byte("file content here"))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/messages/msg-att/attachments/att-1" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"data": attachmentData,
+				"size": len("file content here"),
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	att, err := svc.Users.Messages.Attachments.Get("me", "msg-att", "att-1").Do()
+	if err != nil {
+		t.Fatalf("failed to get attachment: %v", err)
+	}
+
+	data, err := base64.URLEncoding.DecodeString(att.Data)
+	if err != nil {
+		t.Fatalf("failed to decode attachment data: %v", err)
+	}
+	if string(data) != "file content here" {
+		t.Errorf("unexpected attachment data: %s", string(data))
+	}
+}
