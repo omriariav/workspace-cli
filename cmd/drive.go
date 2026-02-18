@@ -7,6 +7,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
@@ -131,6 +132,211 @@ Examples:
 	RunE: runDriveCopy,
 }
 
+// --- Permissions ---
+
+var drivePermissionsCmd = &cobra.Command{
+	Use:   "permissions",
+	Short: "List permissions on a file",
+	Long:  "Lists all permissions on a Google Drive file.",
+	RunE:  runDrivePermissions,
+}
+
+var driveShareCmd = &cobra.Command{
+	Use:   "share",
+	Short: "Share a file",
+	Long: `Shares a file with a user, group, domain, or anyone.
+
+Examples:
+  gws drive share --file-id <id> --type user --role writer --email user@example.com
+  gws drive share --file-id <id> --type domain --role reader --domain example.com
+  gws drive share --file-id <id> --type anyone --role reader`,
+	RunE: runDriveShare,
+}
+
+var driveUnshareCmd = &cobra.Command{
+	Use:   "unshare",
+	Short: "Remove a permission",
+	Long:  "Removes a permission from a Google Drive file.",
+	RunE:  runDriveUnshare,
+}
+
+var drivePermissionCmd = &cobra.Command{
+	Use:   "permission",
+	Short: "Get permission details",
+	Long:  "Gets details of a specific permission on a file.",
+	RunE:  runDrivePermission,
+}
+
+var driveUpdatePermissionCmd = &cobra.Command{
+	Use:   "update-permission",
+	Short: "Update a permission",
+	Long:  "Updates the role of an existing permission on a file.",
+	RunE:  runDriveUpdatePermission,
+}
+
+// --- Revisions ---
+
+var driveRevisionsCmd = &cobra.Command{
+	Use:   "revisions",
+	Short: "List file revisions",
+	Long:  "Lists all revisions of a Google Drive file.",
+	RunE:  runDriveRevisions,
+}
+
+var driveRevisionCmd = &cobra.Command{
+	Use:   "revision",
+	Short: "Get revision details",
+	Long:  "Gets details of a specific file revision.",
+	RunE:  runDriveRevision,
+}
+
+var driveDeleteRevisionCmd = &cobra.Command{
+	Use:   "delete-revision",
+	Short: "Delete a revision",
+	Long:  "Deletes a specific revision of a file.",
+	RunE:  runDriveDeleteRevision,
+}
+
+// --- Replies ---
+
+var driveRepliesCmd = &cobra.Command{
+	Use:   "replies",
+	Short: "List replies to a comment",
+	Long:  "Lists all replies to a comment on a Google Drive file.",
+	RunE:  runDriveReplies,
+}
+
+var driveReplyCmd = &cobra.Command{
+	Use:   "reply",
+	Short: "Reply to a comment",
+	Long:  "Creates a reply to a comment on a Google Drive file.",
+	RunE:  runDriveReply,
+}
+
+var driveGetReplyCmd = &cobra.Command{
+	Use:   "get-reply",
+	Short: "Get a reply",
+	Long:  "Gets a specific reply to a comment.",
+	RunE:  runDriveGetReply,
+}
+
+var driveDeleteReplyCmd = &cobra.Command{
+	Use:   "delete-reply",
+	Short: "Delete a reply",
+	Long:  "Deletes a reply to a comment.",
+	RunE:  runDriveDeleteReply,
+}
+
+// --- Comments (single) ---
+
+var driveCommentCmd = &cobra.Command{
+	Use:   "comment",
+	Short: "Get a comment",
+	Long:  "Gets a specific comment on a Google Drive file.",
+	RunE:  runDriveComment,
+}
+
+var driveAddCommentCmd = &cobra.Command{
+	Use:   "add-comment",
+	Short: "Add a comment",
+	Long:  "Adds a comment to a Google Drive file.",
+	RunE:  runDriveAddComment,
+}
+
+var driveDeleteCommentCmd = &cobra.Command{
+	Use:   "delete-comment",
+	Short: "Delete a comment",
+	Long:  "Deletes a comment from a Google Drive file.",
+	RunE:  runDriveDeleteComment,
+}
+
+// --- Files ---
+
+var driveExportCmd = &cobra.Command{
+	Use:   "export",
+	Short: "Export a Google Workspace file",
+	Long: `Exports a Google Workspace file (Docs, Sheets, Slides) to a specified format.
+
+Examples:
+  gws drive export --file-id <id> --mime-type application/pdf --output report.pdf
+  gws drive export --file-id <id> --mime-type text/csv --output data.csv`,
+	RunE: runDriveExport,
+}
+
+var driveEmptyTrashCmd = &cobra.Command{
+	Use:   "empty-trash",
+	Short: "Empty trash",
+	Long:  "Permanently deletes all files in the trash.",
+	RunE:  runDriveEmptyTrash,
+}
+
+var driveUpdateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Update file metadata",
+	Long: `Updates metadata of a file in Google Drive.
+
+Examples:
+  gws drive update --file-id <id> --name "New Name"
+  gws drive update --file-id <id> --starred
+  gws drive update --file-id <id> --description "Updated description"`,
+	RunE: runDriveUpdate,
+}
+
+// --- Shared Drives ---
+
+var driveSharedDrivesCmd = &cobra.Command{
+	Use:   "shared-drives",
+	Short: "List shared drives",
+	Long:  "Lists all shared drives the user has access to.",
+	RunE:  runDriveSharedDrives,
+}
+
+var driveSharedDriveCmd = &cobra.Command{
+	Use:   "shared-drive",
+	Short: "Get shared drive info",
+	Long:  "Gets information about a shared drive.",
+	RunE:  runDriveSharedDrive,
+}
+
+var driveCreateDriveCmd = &cobra.Command{
+	Use:   "create-drive",
+	Short: "Create a shared drive",
+	Long:  "Creates a new shared drive.",
+	RunE:  runDriveCreateDrive,
+}
+
+var driveDeleteDriveCmd = &cobra.Command{
+	Use:   "delete-drive",
+	Short: "Delete a shared drive",
+	Long:  "Deletes a shared drive.",
+	RunE:  runDriveDeleteDrive,
+}
+
+var driveUpdateDriveCmd = &cobra.Command{
+	Use:   "update-drive",
+	Short: "Update a shared drive",
+	Long:  "Updates the name of a shared drive.",
+	RunE:  runDriveUpdateDrive,
+}
+
+// --- Other ---
+
+var driveAboutCmd = &cobra.Command{
+	Use:   "about",
+	Short: "Get drive storage and user info",
+	Long:  "Gets information about the user's Drive storage quota and account.",
+	RunE:  runDriveAbout,
+}
+
+var driveChangesCmd = &cobra.Command{
+	Use:   "changes",
+	Short: "List recent file changes",
+	Long: `Lists recent changes to files in Google Drive.
+
+If no page token is provided, fetches the start page token automatically.`,
+	RunE: runDriveChanges,
+}
+
 func init() {
 	rootCmd.AddCommand(driveCmd)
 	driveCmd.AddCommand(driveListCmd)
@@ -180,6 +386,158 @@ func init() {
 	// Copy flags
 	driveCopyCmd.Flags().String("name", "", "Name for the copy (default: 'Copy of <original>')")
 	driveCopyCmd.Flags().String("folder", "", "Destination folder ID")
+
+	// --- New commands ---
+	driveCmd.AddCommand(drivePermissionsCmd)
+	driveCmd.AddCommand(driveShareCmd)
+	driveCmd.AddCommand(driveUnshareCmd)
+	driveCmd.AddCommand(drivePermissionCmd)
+	driveCmd.AddCommand(driveUpdatePermissionCmd)
+	driveCmd.AddCommand(driveRevisionsCmd)
+	driveCmd.AddCommand(driveRevisionCmd)
+	driveCmd.AddCommand(driveDeleteRevisionCmd)
+	driveCmd.AddCommand(driveRepliesCmd)
+	driveCmd.AddCommand(driveReplyCmd)
+	driveCmd.AddCommand(driveGetReplyCmd)
+	driveCmd.AddCommand(driveDeleteReplyCmd)
+	driveCmd.AddCommand(driveCommentCmd)
+	driveCmd.AddCommand(driveAddCommentCmd)
+	driveCmd.AddCommand(driveDeleteCommentCmd)
+	driveCmd.AddCommand(driveExportCmd)
+	driveCmd.AddCommand(driveEmptyTrashCmd)
+	driveCmd.AddCommand(driveUpdateCmd)
+	driveCmd.AddCommand(driveSharedDrivesCmd)
+	driveCmd.AddCommand(driveSharedDriveCmd)
+	driveCmd.AddCommand(driveCreateDriveCmd)
+	driveCmd.AddCommand(driveDeleteDriveCmd)
+	driveCmd.AddCommand(driveUpdateDriveCmd)
+	driveCmd.AddCommand(driveAboutCmd)
+	driveCmd.AddCommand(driveChangesCmd)
+
+	// Permissions flags
+	drivePermissionsCmd.Flags().String("file-id", "", "File ID (required)")
+	drivePermissionsCmd.MarkFlagRequired("file-id")
+
+	driveShareCmd.Flags().String("file-id", "", "File ID (required)")
+	driveShareCmd.Flags().String("type", "", "Permission type: user, group, domain, anyone (required)")
+	driveShareCmd.Flags().String("role", "", "Role: reader, commenter, writer, organizer, owner (required)")
+	driveShareCmd.Flags().String("email", "", "Email address (for user/group type)")
+	driveShareCmd.Flags().String("domain", "", "Domain (for domain type)")
+	driveShareCmd.Flags().Bool("send-notification", true, "Send notification email")
+	driveShareCmd.MarkFlagRequired("file-id")
+	driveShareCmd.MarkFlagRequired("type")
+	driveShareCmd.MarkFlagRequired("role")
+
+	driveUnshareCmd.Flags().String("file-id", "", "File ID (required)")
+	driveUnshareCmd.Flags().String("permission-id", "", "Permission ID (required)")
+	driveUnshareCmd.MarkFlagRequired("file-id")
+	driveUnshareCmd.MarkFlagRequired("permission-id")
+
+	drivePermissionCmd.Flags().String("file-id", "", "File ID (required)")
+	drivePermissionCmd.Flags().String("permission-id", "", "Permission ID (required)")
+	drivePermissionCmd.MarkFlagRequired("file-id")
+	drivePermissionCmd.MarkFlagRequired("permission-id")
+
+	driveUpdatePermissionCmd.Flags().String("file-id", "", "File ID (required)")
+	driveUpdatePermissionCmd.Flags().String("permission-id", "", "Permission ID (required)")
+	driveUpdatePermissionCmd.Flags().String("role", "", "New role (required)")
+	driveUpdatePermissionCmd.MarkFlagRequired("file-id")
+	driveUpdatePermissionCmd.MarkFlagRequired("permission-id")
+	driveUpdatePermissionCmd.MarkFlagRequired("role")
+
+	// Revisions flags
+	driveRevisionsCmd.Flags().String("file-id", "", "File ID (required)")
+	driveRevisionsCmd.MarkFlagRequired("file-id")
+
+	driveRevisionCmd.Flags().String("file-id", "", "File ID (required)")
+	driveRevisionCmd.Flags().String("revision-id", "", "Revision ID (required)")
+	driveRevisionCmd.MarkFlagRequired("file-id")
+	driveRevisionCmd.MarkFlagRequired("revision-id")
+
+	driveDeleteRevisionCmd.Flags().String("file-id", "", "File ID (required)")
+	driveDeleteRevisionCmd.Flags().String("revision-id", "", "Revision ID (required)")
+	driveDeleteRevisionCmd.MarkFlagRequired("file-id")
+	driveDeleteRevisionCmd.MarkFlagRequired("revision-id")
+
+	// Replies flags
+	driveRepliesCmd.Flags().String("file-id", "", "File ID (required)")
+	driveRepliesCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveRepliesCmd.MarkFlagRequired("file-id")
+	driveRepliesCmd.MarkFlagRequired("comment-id")
+
+	driveReplyCmd.Flags().String("file-id", "", "File ID (required)")
+	driveReplyCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveReplyCmd.Flags().String("content", "", "Reply content (required)")
+	driveReplyCmd.MarkFlagRequired("file-id")
+	driveReplyCmd.MarkFlagRequired("comment-id")
+	driveReplyCmd.MarkFlagRequired("content")
+
+	driveGetReplyCmd.Flags().String("file-id", "", "File ID (required)")
+	driveGetReplyCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveGetReplyCmd.Flags().String("reply-id", "", "Reply ID (required)")
+	driveGetReplyCmd.MarkFlagRequired("file-id")
+	driveGetReplyCmd.MarkFlagRequired("comment-id")
+	driveGetReplyCmd.MarkFlagRequired("reply-id")
+
+	driveDeleteReplyCmd.Flags().String("file-id", "", "File ID (required)")
+	driveDeleteReplyCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveDeleteReplyCmd.Flags().String("reply-id", "", "Reply ID (required)")
+	driveDeleteReplyCmd.MarkFlagRequired("file-id")
+	driveDeleteReplyCmd.MarkFlagRequired("comment-id")
+	driveDeleteReplyCmd.MarkFlagRequired("reply-id")
+
+	// Comment flags
+	driveCommentCmd.Flags().String("file-id", "", "File ID (required)")
+	driveCommentCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveCommentCmd.MarkFlagRequired("file-id")
+	driveCommentCmd.MarkFlagRequired("comment-id")
+
+	driveAddCommentCmd.Flags().String("file-id", "", "File ID (required)")
+	driveAddCommentCmd.Flags().String("content", "", "Comment content (required)")
+	driveAddCommentCmd.MarkFlagRequired("file-id")
+	driveAddCommentCmd.MarkFlagRequired("content")
+
+	driveDeleteCommentCmd.Flags().String("file-id", "", "File ID (required)")
+	driveDeleteCommentCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveDeleteCommentCmd.MarkFlagRequired("file-id")
+	driveDeleteCommentCmd.MarkFlagRequired("comment-id")
+
+	// Export flags
+	driveExportCmd.Flags().String("file-id", "", "File ID (required)")
+	driveExportCmd.Flags().String("mime-type", "", "Export MIME type (required, e.g. application/pdf)")
+	driveExportCmd.Flags().String("output", "", "Output file path (required)")
+	driveExportCmd.MarkFlagRequired("file-id")
+	driveExportCmd.MarkFlagRequired("mime-type")
+	driveExportCmd.MarkFlagRequired("output")
+
+	// Update flags
+	driveUpdateCmd.Flags().String("file-id", "", "File ID (required)")
+	driveUpdateCmd.Flags().String("name", "", "New file name")
+	driveUpdateCmd.Flags().String("description", "", "New description")
+	driveUpdateCmd.Flags().Bool("starred", false, "Star or unstar the file")
+	driveUpdateCmd.Flags().Bool("trashed", false, "Trash or untrash the file")
+	driveUpdateCmd.MarkFlagRequired("file-id")
+
+	// Shared Drives flags
+	driveSharedDrivesCmd.Flags().Int64("max", 100, "Maximum number of shared drives")
+	driveSharedDrivesCmd.Flags().String("query", "", "Search query")
+
+	driveSharedDriveCmd.Flags().String("id", "", "Shared drive ID (required)")
+	driveSharedDriveCmd.MarkFlagRequired("id")
+
+	driveCreateDriveCmd.Flags().String("name", "", "Shared drive name (required)")
+	driveCreateDriveCmd.MarkFlagRequired("name")
+
+	driveDeleteDriveCmd.Flags().String("id", "", "Shared drive ID (required)")
+	driveDeleteDriveCmd.MarkFlagRequired("id")
+
+	driveUpdateDriveCmd.Flags().String("id", "", "Shared drive ID (required)")
+	driveUpdateDriveCmd.Flags().String("name", "", "New name for the shared drive")
+	driveUpdateDriveCmd.MarkFlagRequired("id")
+
+	// Changes flags
+	driveChangesCmd.Flags().Int64("max", 100, "Maximum number of changes")
+	driveChangesCmd.Flags().String("page-token", "", "Page token (fetches start token if empty)")
 }
 
 func runDriveList(cmd *cobra.Command, args []string) error {
@@ -874,4 +1232,1134 @@ func runDriveCopy(cmd *cobra.Command, args []string) error {
 		"mime_type": copied.MimeType,
 		"web_link":  copied.WebViewLink,
 	})
+}
+
+// --- Permissions ---
+
+func runDrivePermissions(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+
+	resp, err := svc.Permissions.List(fileID).
+		SupportsAllDrives(true).
+		Fields("permissions(id,type,role,emailAddress,domain,displayName)").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to list permissions: %w", err))
+	}
+
+	permissions := make([]map[string]interface{}, 0, len(resp.Permissions))
+	for _, perm := range resp.Permissions {
+		permInfo := map[string]interface{}{
+			"id":   perm.Id,
+			"type": perm.Type,
+			"role": perm.Role,
+		}
+		if perm.EmailAddress != "" {
+			permInfo["email"] = perm.EmailAddress
+		}
+		if perm.Domain != "" {
+			permInfo["domain"] = perm.Domain
+		}
+		if perm.DisplayName != "" {
+			permInfo["display_name"] = perm.DisplayName
+		}
+		permissions = append(permissions, permInfo)
+	}
+
+	return p.Print(map[string]interface{}{
+		"file_id":     fileID,
+		"permissions": permissions,
+		"count":       len(permissions),
+	})
+}
+
+func runDriveShare(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	permType, _ := cmd.Flags().GetString("type")
+	role, _ := cmd.Flags().GetString("role")
+	email, _ := cmd.Flags().GetString("email")
+	domain, _ := cmd.Flags().GetString("domain")
+	sendNotification, _ := cmd.Flags().GetBool("send-notification")
+
+	perm := &drive.Permission{
+		Type: permType,
+		Role: role,
+	}
+	if email != "" {
+		perm.EmailAddress = email
+	}
+	if domain != "" {
+		perm.Domain = domain
+	}
+
+	call := svc.Permissions.Create(fileID, perm).
+		SupportsAllDrives(true).
+		SendNotificationEmail(sendNotification).
+		Fields("id,type,role,emailAddress,domain,displayName")
+
+	if role == "owner" {
+		call = call.TransferOwnership(true)
+	}
+
+	created, err := call.Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to share file: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status": "shared",
+		"id":     created.Id,
+		"type":   created.Type,
+		"role":   created.Role,
+	}
+	if created.EmailAddress != "" {
+		result["email"] = created.EmailAddress
+	}
+	if created.Domain != "" {
+		result["domain"] = created.Domain
+	}
+
+	return p.Print(result)
+}
+
+func runDriveUnshare(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	permissionID, _ := cmd.Flags().GetString("permission-id")
+
+	err = svc.Permissions.Delete(fileID, permissionID).
+		SupportsAllDrives(true).
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to remove permission: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":        "removed",
+		"file_id":       fileID,
+		"permission_id": permissionID,
+	})
+}
+
+func runDrivePermission(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	permissionID, _ := cmd.Flags().GetString("permission-id")
+
+	perm, err := svc.Permissions.Get(fileID, permissionID).
+		SupportsAllDrives(true).
+		Fields("id,type,role,emailAddress,domain,displayName").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get permission: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"id":   perm.Id,
+		"type": perm.Type,
+		"role": perm.Role,
+	}
+	if perm.EmailAddress != "" {
+		result["email"] = perm.EmailAddress
+	}
+	if perm.Domain != "" {
+		result["domain"] = perm.Domain
+	}
+	if perm.DisplayName != "" {
+		result["display_name"] = perm.DisplayName
+	}
+
+	return p.Print(result)
+}
+
+func runDriveUpdatePermission(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	permissionID, _ := cmd.Flags().GetString("permission-id")
+	role, _ := cmd.Flags().GetString("role")
+
+	perm := &drive.Permission{Role: role}
+
+	call := svc.Permissions.Update(fileID, permissionID, perm).
+		SupportsAllDrives(true).
+		Fields("id,type,role,emailAddress,domain,displayName")
+
+	if role == "owner" {
+		call = call.TransferOwnership(true)
+	}
+
+	updated, err := call.Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update permission: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status": "updated",
+		"id":     updated.Id,
+		"type":   updated.Type,
+		"role":   updated.Role,
+	}
+	if updated.EmailAddress != "" {
+		result["email"] = updated.EmailAddress
+	}
+
+	return p.Print(result)
+}
+
+// --- Revisions ---
+
+func runDriveRevisions(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+
+	resp, err := svc.Revisions.List(fileID).
+		Fields("revisions(id,mimeType,modifiedTime,size,lastModifyingUser(displayName,emailAddress),originalFilename,keepForever)").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to list revisions: %w", err))
+	}
+
+	revisions := make([]map[string]interface{}, 0, len(resp.Revisions))
+	for _, rev := range resp.Revisions {
+		revInfo := map[string]interface{}{
+			"id": rev.Id,
+		}
+		if rev.MimeType != "" {
+			revInfo["mime_type"] = rev.MimeType
+		}
+		if rev.ModifiedTime != "" {
+			revInfo["modified"] = rev.ModifiedTime
+		}
+		if rev.Size > 0 {
+			revInfo["size"] = rev.Size
+		}
+		if rev.OriginalFilename != "" {
+			revInfo["original_filename"] = rev.OriginalFilename
+		}
+		if rev.LastModifyingUser != nil {
+			revInfo["last_modifying_user"] = map[string]interface{}{
+				"name":  rev.LastModifyingUser.DisplayName,
+				"email": rev.LastModifyingUser.EmailAddress,
+			}
+		}
+		revInfo["keep_forever"] = rev.KeepForever
+		revisions = append(revisions, revInfo)
+	}
+
+	return p.Print(map[string]interface{}{
+		"file_id":   fileID,
+		"revisions": revisions,
+		"count":     len(revisions),
+	})
+}
+
+func runDriveRevision(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	revisionID, _ := cmd.Flags().GetString("revision-id")
+
+	rev, err := svc.Revisions.Get(fileID, revisionID).
+		Fields("id,mimeType,modifiedTime,size,lastModifyingUser(displayName,emailAddress),originalFilename,keepForever").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get revision: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"id":           rev.Id,
+		"keep_forever": rev.KeepForever,
+	}
+	if rev.MimeType != "" {
+		result["mime_type"] = rev.MimeType
+	}
+	if rev.ModifiedTime != "" {
+		result["modified"] = rev.ModifiedTime
+	}
+	if rev.Size > 0 {
+		result["size"] = rev.Size
+	}
+	if rev.OriginalFilename != "" {
+		result["original_filename"] = rev.OriginalFilename
+	}
+	if rev.LastModifyingUser != nil {
+		result["last_modifying_user"] = map[string]interface{}{
+			"name":  rev.LastModifyingUser.DisplayName,
+			"email": rev.LastModifyingUser.EmailAddress,
+		}
+	}
+
+	return p.Print(result)
+}
+
+func runDriveDeleteRevision(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	revisionID, _ := cmd.Flags().GetString("revision-id")
+
+	err = svc.Revisions.Delete(fileID, revisionID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete revision: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "deleted",
+		"file_id":     fileID,
+		"revision_id": revisionID,
+	})
+}
+
+// --- Replies ---
+
+func runDriveReplies(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	commentID, _ := cmd.Flags().GetString("comment-id")
+
+	resp, err := svc.Replies.List(fileID, commentID).
+		Fields("replies(id,content,author(displayName,emailAddress),createdTime,modifiedTime,action)").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to list replies: %w", err))
+	}
+
+	replies := make([]map[string]interface{}, 0, len(resp.Replies))
+	for _, reply := range resp.Replies {
+		r := map[string]interface{}{
+			"id":      reply.Id,
+			"content": reply.Content,
+			"created": reply.CreatedTime,
+		}
+		if reply.ModifiedTime != "" {
+			r["modified"] = reply.ModifiedTime
+		}
+		if reply.Author != nil {
+			r["author"] = map[string]interface{}{
+				"name":  reply.Author.DisplayName,
+				"email": reply.Author.EmailAddress,
+			}
+		}
+		if reply.Action != "" {
+			r["action"] = reply.Action
+		}
+		replies = append(replies, r)
+	}
+
+	return p.Print(map[string]interface{}{
+		"file_id":    fileID,
+		"comment_id": commentID,
+		"replies":    replies,
+		"count":      len(replies),
+	})
+}
+
+func runDriveReply(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	commentID, _ := cmd.Flags().GetString("comment-id")
+	content, _ := cmd.Flags().GetString("content")
+
+	reply := &drive.Reply{Content: content}
+
+	created, err := svc.Replies.Create(fileID, commentID, reply).
+		Fields("id,content,author(displayName,emailAddress),createdTime").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create reply: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":  "created",
+		"id":      created.Id,
+		"content": created.Content,
+		"created": created.CreatedTime,
+	}
+	if created.Author != nil {
+		result["author"] = map[string]interface{}{
+			"name":  created.Author.DisplayName,
+			"email": created.Author.EmailAddress,
+		}
+	}
+
+	return p.Print(result)
+}
+
+func runDriveGetReply(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	commentID, _ := cmd.Flags().GetString("comment-id")
+	replyID, _ := cmd.Flags().GetString("reply-id")
+
+	reply, err := svc.Replies.Get(fileID, commentID, replyID).
+		Fields("id,content,author(displayName,emailAddress),createdTime,modifiedTime,action").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get reply: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"id":      reply.Id,
+		"content": reply.Content,
+		"created": reply.CreatedTime,
+	}
+	if reply.ModifiedTime != "" {
+		result["modified"] = reply.ModifiedTime
+	}
+	if reply.Author != nil {
+		result["author"] = map[string]interface{}{
+			"name":  reply.Author.DisplayName,
+			"email": reply.Author.EmailAddress,
+		}
+	}
+	if reply.Action != "" {
+		result["action"] = reply.Action
+	}
+
+	return p.Print(result)
+}
+
+func runDriveDeleteReply(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	commentID, _ := cmd.Flags().GetString("comment-id")
+	replyID, _ := cmd.Flags().GetString("reply-id")
+
+	err = svc.Replies.Delete(fileID, commentID, replyID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete reply: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":     "deleted",
+		"file_id":    fileID,
+		"comment_id": commentID,
+		"reply_id":   replyID,
+	})
+}
+
+// --- Comments (single) ---
+
+func runDriveComment(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	commentID, _ := cmd.Flags().GetString("comment-id")
+
+	comment, err := svc.Comments.Get(fileID, commentID).
+		Fields("id,content,author(displayName,emailAddress),createdTime,modifiedTime,resolved,quotedFileContent(value),replies(id,content,author(displayName,emailAddress),createdTime,action)").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get comment: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"id":       comment.Id,
+		"content":  comment.Content,
+		"created":  comment.CreatedTime,
+		"resolved": comment.Resolved,
+	}
+	if comment.ModifiedTime != "" {
+		result["modified"] = comment.ModifiedTime
+	}
+	if comment.Author != nil {
+		result["author"] = map[string]interface{}{
+			"name":  comment.Author.DisplayName,
+			"email": comment.Author.EmailAddress,
+		}
+	}
+	if comment.QuotedFileContent != nil && comment.QuotedFileContent.Value != "" {
+		result["quoted_text"] = comment.QuotedFileContent.Value
+	}
+	if len(comment.Replies) > 0 {
+		replies := make([]map[string]interface{}, 0, len(comment.Replies))
+		for _, reply := range comment.Replies {
+			r := map[string]interface{}{
+				"id":      reply.Id,
+				"content": reply.Content,
+				"created": reply.CreatedTime,
+			}
+			if reply.Author != nil {
+				r["author"] = map[string]interface{}{
+					"name":  reply.Author.DisplayName,
+					"email": reply.Author.EmailAddress,
+				}
+			}
+			if reply.Action != "" {
+				r["action"] = reply.Action
+			}
+			replies = append(replies, r)
+		}
+		result["replies"] = replies
+	}
+
+	return p.Print(result)
+}
+
+func runDriveAddComment(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	content, _ := cmd.Flags().GetString("content")
+
+	comment := &drive.Comment{Content: content}
+
+	created, err := svc.Comments.Create(fileID, comment).
+		Fields("id,content,author(displayName,emailAddress),createdTime").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add comment: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":  "created",
+		"id":      created.Id,
+		"content": created.Content,
+		"created": created.CreatedTime,
+	}
+	if created.Author != nil {
+		result["author"] = map[string]interface{}{
+			"name":  created.Author.DisplayName,
+			"email": created.Author.EmailAddress,
+		}
+	}
+
+	return p.Print(result)
+}
+
+func runDriveDeleteComment(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	commentID, _ := cmd.Flags().GetString("comment-id")
+
+	err = svc.Comments.Delete(fileID, commentID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete comment: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":     "deleted",
+		"file_id":    fileID,
+		"comment_id": commentID,
+	})
+}
+
+// --- Files ---
+
+func runDriveExport(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	mimeType, _ := cmd.Flags().GetString("mime-type")
+	outputPath, _ := cmd.Flags().GetString("output")
+
+	exportResp, err := svc.Files.Export(fileID, mimeType).Download()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to export file: %w", err))
+	}
+	defer exportResp.Body.Close()
+
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create output file: %w", err))
+	}
+	defer outFile.Close()
+
+	written, err := io.Copy(outFile, exportResp.Body)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to write file: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":    "exported",
+		"file_id":   fileID,
+		"mime_type": mimeType,
+		"output":    outputPath,
+		"size":      written,
+	})
+}
+
+func runDriveEmptyTrash(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	err = svc.Files.EmptyTrash().Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to empty trash: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "trash_emptied",
+	})
+}
+
+func runDriveUpdate(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	name, _ := cmd.Flags().GetString("name")
+	description, _ := cmd.Flags().GetString("description")
+	starred, _ := cmd.Flags().GetBool("starred")
+	trashed, _ := cmd.Flags().GetBool("trashed")
+
+	file := &drive.File{}
+	var forceSendFields []string
+
+	if name != "" {
+		file.Name = name
+	}
+	if description != "" {
+		file.Description = description
+	}
+	if cmd.Flags().Changed("starred") {
+		file.Starred = starred
+		forceSendFields = append(forceSendFields, "Starred")
+	}
+	if cmd.Flags().Changed("trashed") {
+		file.Trashed = trashed
+		forceSendFields = append(forceSendFields, "Trashed")
+	}
+	if len(forceSendFields) > 0 {
+		file.ForceSendFields = forceSendFields
+	}
+
+	updated, err := svc.Files.Update(fileID, file).
+		SupportsAllDrives(true).
+		Fields("id,name,mimeType,description,starred,trashed,modifiedTime,webViewLink").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update file: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":   "updated",
+		"id":       updated.Id,
+		"name":     updated.Name,
+		"starred":  updated.Starred,
+		"trashed":  updated.Trashed,
+		"modified": updated.ModifiedTime,
+	}
+	if updated.Description != "" {
+		result["description"] = updated.Description
+	}
+	if updated.WebViewLink != "" {
+		result["web_link"] = updated.WebViewLink
+	}
+
+	return p.Print(result)
+}
+
+// --- Shared Drives ---
+
+func runDriveSharedDrives(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	maxResults, _ := cmd.Flags().GetInt64("max")
+	query, _ := cmd.Flags().GetString("query")
+
+	call := svc.Drives.List().
+		PageSize(maxResults).
+		Fields("drives(id,name,createdTime,hidden)")
+
+	if query != "" {
+		call = call.Q(query)
+	}
+
+	resp, err := call.Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to list shared drives: %w", err))
+	}
+
+	drives := make([]map[string]interface{}, 0, len(resp.Drives))
+	for _, d := range resp.Drives {
+		driveInfo := map[string]interface{}{
+			"id":   d.Id,
+			"name": d.Name,
+		}
+		if d.CreatedTime != "" {
+			driveInfo["created"] = d.CreatedTime
+		}
+		drives = append(drives, driveInfo)
+	}
+
+	return p.Print(map[string]interface{}{
+		"drives": drives,
+		"count":  len(drives),
+	})
+}
+
+func runDriveSharedDrive(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	driveID, _ := cmd.Flags().GetString("id")
+
+	d, err := svc.Drives.Get(driveID).
+		Fields("id,name,createdTime,hidden,colorRgb,restrictions").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get shared drive: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"id":   d.Id,
+		"name": d.Name,
+	}
+	if d.CreatedTime != "" {
+		result["created"] = d.CreatedTime
+	}
+	if d.ColorRgb != "" {
+		result["color"] = d.ColorRgb
+	}
+
+	return p.Print(result)
+}
+
+func runDriveCreateDrive(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	name, _ := cmd.Flags().GetString("name")
+	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	d := &drive.Drive{Name: name}
+
+	created, err := svc.Drives.Create(requestID, d).
+		Fields("id,name,createdTime").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create shared drive: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status": "created",
+		"id":     created.Id,
+		"name":   created.Name,
+	}
+	if created.CreatedTime != "" {
+		result["created"] = created.CreatedTime
+	}
+
+	return p.Print(result)
+}
+
+func runDriveDeleteDrive(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	driveID, _ := cmd.Flags().GetString("id")
+
+	err = svc.Drives.Delete(driveID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete shared drive: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "deleted",
+		"id":     driveID,
+	})
+}
+
+func runDriveUpdateDrive(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	driveID, _ := cmd.Flags().GetString("id")
+	name, _ := cmd.Flags().GetString("name")
+
+	d := &drive.Drive{}
+	if name != "" {
+		d.Name = name
+	}
+
+	updated, err := svc.Drives.Update(driveID, d).
+		Fields("id,name").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update shared drive: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "updated",
+		"id":     updated.Id,
+		"name":   updated.Name,
+	})
+}
+
+// --- Other ---
+
+func runDriveAbout(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	about, err := svc.About.Get().
+		Fields("user(displayName,emailAddress),storageQuota(limit,usage,usageInDrive,usageInDriveTrash)").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get drive info: %w", err))
+	}
+
+	result := map[string]interface{}{}
+	if about.User != nil {
+		result["user"] = map[string]interface{}{
+			"name":  about.User.DisplayName,
+			"email": about.User.EmailAddress,
+		}
+	}
+	if about.StorageQuota != nil {
+		result["storage_quota"] = map[string]interface{}{
+			"limit":          about.StorageQuota.Limit,
+			"usage":          about.StorageQuota.Usage,
+			"usage_in_drive": about.StorageQuota.UsageInDrive,
+			"usage_in_trash": about.StorageQuota.UsageInDriveTrash,
+		}
+	}
+
+	return p.Print(result)
+}
+
+func runDriveChanges(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	maxResults, _ := cmd.Flags().GetInt64("max")
+	pageToken, _ := cmd.Flags().GetString("page-token")
+
+	// If no page token provided, get the start page token
+	if pageToken == "" {
+		startToken, err := svc.Changes.GetStartPageToken().
+			SupportsAllDrives(true).
+			Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get start page token: %w", err))
+		}
+		pageToken = startToken.StartPageToken
+	}
+
+	resp, err := svc.Changes.List(pageToken).
+		PageSize(maxResults).
+		SupportsAllDrives(true).
+		IncludeItemsFromAllDrives(true).
+		Fields("changes(fileId,file(id,name,mimeType,modifiedTime),removed,time,changeType),newStartPageToken,nextPageToken").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to list changes: %w", err))
+	}
+
+	changes := make([]map[string]interface{}, 0, len(resp.Changes))
+	for _, change := range resp.Changes {
+		c := map[string]interface{}{
+			"file_id": change.FileId,
+			"removed": change.Removed,
+		}
+		if change.Time != "" {
+			c["time"] = change.Time
+		}
+		if change.ChangeType != "" {
+			c["change_type"] = change.ChangeType
+		}
+		if change.File != nil {
+			c["file"] = map[string]interface{}{
+				"id":        change.File.Id,
+				"name":      change.File.Name,
+				"mime_type": change.File.MimeType,
+				"modified":  change.File.ModifiedTime,
+			}
+		}
+		changes = append(changes, c)
+	}
+
+	result := map[string]interface{}{
+		"changes": changes,
+		"count":   len(changes),
+	}
+	if resp.NewStartPageToken != "" {
+		result["new_start_page_token"] = resp.NewStartPageToken
+	}
+	if resp.NextPageToken != "" {
+		result["next_page_token"] = resp.NextPageToken
+	}
+
+	return p.Print(result)
 }
