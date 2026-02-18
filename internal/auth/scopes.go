@@ -6,9 +6,9 @@ const scopePrefix = "https://www.googleapis.com/auth/"
 
 // ServiceScopes maps each service to its required Google API scopes.
 var ServiceScopes = map[string][]string{
-	"gmail":    {"gmail.readonly", "gmail.send", "gmail.modify"},
-	"calendar": {"calendar.readonly", "calendar.events"},
-	"drive":    {"drive.readonly", "drive.file"},
+	"gmail":    {"gmail.readonly", "gmail.send", "gmail.modify", "gmail.settings.basic", "gmail.settings.sharing"},
+	"calendar": {"calendar.readonly", "calendar.events", "calendar"},
+	"drive":    {"drive.readonly", "drive.file", "drive"},
 	"docs":     {"documents.readonly", "documents"},
 	"sheets":   {"spreadsheets"},
 	"slides":   {"presentations.readonly", "presentations"},
