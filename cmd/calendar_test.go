@@ -1107,3 +1107,758 @@ func TestMapEventToOutput_EmptyMethodOverride(t *testing.T) {
 		t.Errorf("expected method 'popup', got %v", overrides[0]["method"])
 	}
 }
+
+// --- Tests for new calendar commands ---
+
+func TestCalendarGetCommand_Flags(t *testing.T) {
+	cmd := calendarGetCmd
+	flags := []string{"id", "calendar-id"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarQuickAddCommand_Flags(t *testing.T) {
+	cmd := calendarQuickAddCmd
+	flags := []string{"text", "calendar-id"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarInstancesCommand_Flags(t *testing.T) {
+	cmd := calendarInstancesCmd
+	flags := []string{"id", "calendar-id", "max", "from", "to"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarMoveCommand_Flags(t *testing.T) {
+	cmd := calendarMoveCmd
+	flags := []string{"id", "calendar-id", "destination"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarGetCalendarCommand_Flags(t *testing.T) {
+	if calendarGetCalendarCmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+func TestCalendarCreateCalendarCommand_Flags(t *testing.T) {
+	cmd := calendarCreateCalendarCmd
+	flags := []string{"summary", "description", "timezone"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarUpdateCalendarCommand_Flags(t *testing.T) {
+	cmd := calendarUpdateCalendarCmd
+	flags := []string{"id", "summary", "description", "timezone"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarDeleteCalendarCommand_Flags(t *testing.T) {
+	if calendarDeleteCalendarCmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+func TestCalendarClearCommand_Flags(t *testing.T) {
+	if calendarClearCmd.Flags().Lookup("calendar-id") == nil {
+		t.Error("expected --calendar-id flag to exist")
+	}
+}
+
+func TestCalendarSubscribeCommand_Flags(t *testing.T) {
+	if calendarSubscribeCmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+func TestCalendarUnsubscribeCommand_Flags(t *testing.T) {
+	if calendarUnsubscribeCmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+func TestCalendarCalendarInfoCommand_Flags(t *testing.T) {
+	if calendarCalendarInfoCmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag to exist")
+	}
+}
+
+func TestCalendarUpdateSubscriptionCommand_Flags(t *testing.T) {
+	cmd := calendarUpdateSubscriptionCmd
+	flags := []string{"id", "color", "hidden", "summary-override"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarAclCommand_Flags(t *testing.T) {
+	if calendarAclCmd.Flags().Lookup("calendar-id") == nil {
+		t.Error("expected --calendar-id flag to exist")
+	}
+}
+
+func TestCalendarShareCommand_Flags(t *testing.T) {
+	cmd := calendarShareCmd
+	flags := []string{"calendar-id", "email", "role"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarUnshareCommand_Flags(t *testing.T) {
+	cmd := calendarUnshareCmd
+	flags := []string{"calendar-id", "rule-id"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarUpdateAclCommand_Flags(t *testing.T) {
+	cmd := calendarUpdateAclCmd
+	flags := []string{"calendar-id", "rule-id", "role"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarFreebusyCommand_Flags(t *testing.T) {
+	cmd := calendarFreebusyCmd
+	flags := []string{"from", "to", "calendars"}
+	for _, name := range flags {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag to exist", name)
+		}
+	}
+}
+
+func TestCalendarAclRoleValidation(t *testing.T) {
+	tests := []struct {
+		role  string
+		valid bool
+	}{
+		{"reader", true},
+		{"writer", true},
+		{"owner", true},
+		{"freeBusyReader", true},
+		{"admin", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.role, func(t *testing.T) {
+			result := validAclRoles[tt.role]
+			if result != tt.valid {
+				t.Errorf("validAclRoles[%q] = %v, want %v", tt.role, result, tt.valid)
+			}
+		})
+	}
+}
+
+// TestCalendarGet_MockServer tests get event API
+func TestCalendarGet_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/calendars/primary/events/evt-get" && r.Method == "GET" {
+			resp := &calendar.Event{
+				Id:      "evt-get",
+				Summary: "Test Event",
+				Status:  "confirmed",
+				Start:   &calendar.EventDateTime{DateTime: "2026-03-01T09:00:00Z"},
+				End:     &calendar.EventDateTime{DateTime: "2026-03-01T10:00:00Z"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	event, err := svc.Events.Get("primary", "evt-get").Do()
+	if err != nil {
+		t.Fatalf("failed to get event: %v", err)
+	}
+
+	if event.Id != "evt-get" {
+		t.Errorf("expected id 'evt-get', got %s", event.Id)
+	}
+	if event.Summary != "Test Event" {
+		t.Errorf("expected summary 'Test Event', got %s", event.Summary)
+	}
+}
+
+// TestCalendarQuickAdd_MockServer tests quick-add event API
+func TestCalendarQuickAdd_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/calendars/primary/events/quickAdd" && r.Method == "POST" {
+			text := r.URL.Query().Get("text")
+			resp := &calendar.Event{
+				Id:      "evt-quick",
+				Summary: text,
+				Status:  "confirmed",
+				Start:   &calendar.EventDateTime{DateTime: "2026-03-01T12:00:00Z"},
+				End:     &calendar.EventDateTime{DateTime: "2026-03-01T13:00:00Z"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	event, err := svc.Events.QuickAdd("primary", "Lunch tomorrow at noon").Do()
+	if err != nil {
+		t.Fatalf("failed to quick-add event: %v", err)
+	}
+
+	if event.Id != "evt-quick" {
+		t.Errorf("expected id 'evt-quick', got %s", event.Id)
+	}
+}
+
+// TestCalendarInstances_MockServer tests instances API
+func TestCalendarInstances_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/calendars/primary/events/recurring-123/instances" && r.Method == "GET" {
+			resp := &calendar.Events{
+				Items: []*calendar.Event{
+					{Id: "inst-1", Summary: "Weekly Meeting", Status: "confirmed",
+						Start: &calendar.EventDateTime{DateTime: "2026-03-01T09:00:00Z"},
+						End:   &calendar.EventDateTime{DateTime: "2026-03-01T10:00:00Z"}},
+					{Id: "inst-2", Summary: "Weekly Meeting", Status: "confirmed",
+						Start: &calendar.EventDateTime{DateTime: "2026-03-08T09:00:00Z"},
+						End:   &calendar.EventDateTime{DateTime: "2026-03-08T10:00:00Z"}},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	resp, err := svc.Events.Instances("primary", "recurring-123").Do()
+	if err != nil {
+		t.Fatalf("failed to list instances: %v", err)
+	}
+
+	if len(resp.Items) != 2 {
+		t.Errorf("expected 2 instances, got %d", len(resp.Items))
+	}
+}
+
+// TestCalendarMove_MockServer tests move event API
+func TestCalendarMove_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/calendars/primary/events/evt-move/move" && r.Method == "POST" {
+			dest := r.URL.Query().Get("destination")
+			resp := &calendar.Event{
+				Id:       "evt-move",
+				Summary:  "Moved Event",
+				HtmlLink: "https://calendar.google.com/event?id=evt-move&cal=" + dest,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	event, err := svc.Events.Move("primary", "evt-move", "work@group.calendar.google.com").Do()
+	if err != nil {
+		t.Fatalf("failed to move event: %v", err)
+	}
+
+	if event.Id != "evt-move" {
+		t.Errorf("expected id 'evt-move', got %s", event.Id)
+	}
+}
+
+// TestCalendarCRUD_MockServer tests calendar create/get/update/delete
+func TestCalendarCRUD_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Create calendar
+		if r.URL.Path == "/calendars" && r.Method == "POST" {
+			var cal calendar.Calendar
+			json.NewDecoder(r.Body).Decode(&cal)
+			resp := &calendar.Calendar{
+				Id:       "new-cal-123",
+				Summary:  cal.Summary,
+				TimeZone: cal.TimeZone,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Get calendar
+		if r.URL.Path == "/calendars/new-cal-123" && r.Method == "GET" {
+			resp := &calendar.Calendar{
+				Id:       "new-cal-123",
+				Summary:  "Work Projects",
+				TimeZone: "America/New_York",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Update calendar
+		if r.URL.Path == "/calendars/new-cal-123" && r.Method == "PUT" {
+			var cal calendar.Calendar
+			json.NewDecoder(r.Body).Decode(&cal)
+			resp := &calendar.Calendar{
+				Id:       "new-cal-123",
+				Summary:  cal.Summary,
+				TimeZone: cal.TimeZone,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Delete calendar
+		if r.URL.Path == "/calendars/new-cal-123" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// Clear calendar
+		if r.URL.Path == "/calendars/primary/clear" && r.Method == "POST" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	// Create
+	created, err := svc.Calendars.Insert(&calendar.Calendar{
+		Summary:  "Work Projects",
+		TimeZone: "America/New_York",
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to create calendar: %v", err)
+	}
+	if created.Id != "new-cal-123" {
+		t.Errorf("expected id 'new-cal-123', got %s", created.Id)
+	}
+
+	// Get
+	cal, err := svc.Calendars.Get("new-cal-123").Do()
+	if err != nil {
+		t.Fatalf("failed to get calendar: %v", err)
+	}
+	if cal.Summary != "Work Projects" {
+		t.Errorf("expected summary 'Work Projects', got %s", cal.Summary)
+	}
+
+	// Update
+	cal.Summary = "Updated Projects"
+	updated, err := svc.Calendars.Update("new-cal-123", cal).Do()
+	if err != nil {
+		t.Fatalf("failed to update calendar: %v", err)
+	}
+	if updated.Summary != "Updated Projects" {
+		t.Errorf("expected summary 'Updated Projects', got %s", updated.Summary)
+	}
+
+	// Delete
+	err = svc.Calendars.Delete("new-cal-123").Do()
+	if err != nil {
+		t.Fatalf("failed to delete calendar: %v", err)
+	}
+
+	// Clear
+	err = svc.Calendars.Clear("primary").Do()
+	if err != nil {
+		t.Fatalf("failed to clear calendar: %v", err)
+	}
+}
+
+// TestCalendarACL_MockServer tests ACL list/insert/delete/update
+func TestCalendarACL_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// List ACL
+		if r.URL.Path == "/calendars/primary/acl" && r.Method == "GET" {
+			resp := &calendar.Acl{
+				Items: []*calendar.AclRule{
+					{Id: "user:owner@example.com", Role: "owner", Scope: &calendar.AclRuleScope{Type: "user", Value: "owner@example.com"}},
+					{Id: "user:reader@example.com", Role: "reader", Scope: &calendar.AclRuleScope{Type: "user", Value: "reader@example.com"}},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Insert ACL
+		if r.URL.Path == "/calendars/primary/acl" && r.Method == "POST" {
+			var rule calendar.AclRule
+			json.NewDecoder(r.Body).Decode(&rule)
+			rule.Id = "user:" + rule.Scope.Value
+			json.NewEncoder(w).Encode(&rule)
+			return
+		}
+
+		// Get ACL rule
+		if r.URL.Path == "/calendars/primary/acl/user:reader@example.com" && r.Method == "GET" {
+			resp := &calendar.AclRule{
+				Id:    "user:reader@example.com",
+				Role:  "reader",
+				Scope: &calendar.AclRuleScope{Type: "user", Value: "reader@example.com"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Update ACL rule
+		if r.URL.Path == "/calendars/primary/acl/user:reader@example.com" && r.Method == "PUT" {
+			var rule calendar.AclRule
+			json.NewDecoder(r.Body).Decode(&rule)
+			json.NewEncoder(w).Encode(&rule)
+			return
+		}
+
+		// Delete ACL rule
+		if r.URL.Path == "/calendars/primary/acl/user:reader@example.com" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	// List
+	acl, err := svc.Acl.List("primary").Do()
+	if err != nil {
+		t.Fatalf("failed to list ACL: %v", err)
+	}
+	if len(acl.Items) != 2 {
+		t.Errorf("expected 2 ACL rules, got %d", len(acl.Items))
+	}
+
+	// Insert (share)
+	created, err := svc.Acl.Insert("primary", &calendar.AclRule{
+		Role:  "writer",
+		Scope: &calendar.AclRuleScope{Type: "user", Value: "new@example.com"},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to insert ACL rule: %v", err)
+	}
+	if created.Role != "writer" {
+		t.Errorf("expected role 'writer', got %s", created.Role)
+	}
+
+	// Update
+	existing, err := svc.Acl.Get("primary", "user:reader@example.com").Do()
+	if err != nil {
+		t.Fatalf("failed to get ACL rule: %v", err)
+	}
+	existing.Role = "writer"
+	updated, err := svc.Acl.Update("primary", "user:reader@example.com", existing).Do()
+	if err != nil {
+		t.Fatalf("failed to update ACL rule: %v", err)
+	}
+	if updated.Role != "writer" {
+		t.Errorf("expected role 'writer', got %s", updated.Role)
+	}
+
+	// Delete (unshare)
+	err = svc.Acl.Delete("primary", "user:reader@example.com").Do()
+	if err != nil {
+		t.Fatalf("failed to delete ACL rule: %v", err)
+	}
+}
+
+// TestCalendarSubscription_MockServer tests subscribe/unsubscribe/info/update
+func TestCalendarSubscription_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Subscribe (CalendarList.Insert)
+		if r.URL.Path == "/users/me/calendarList" && r.Method == "POST" {
+			var entry calendar.CalendarListEntry
+			json.NewDecoder(r.Body).Decode(&entry)
+			entry.Summary = "US Holidays"
+			json.NewEncoder(w).Encode(&entry)
+			return
+		}
+
+		// Get calendar info (CalendarList.Get)
+		if r.URL.Path == "/users/me/calendarList/holidays" && r.Method == "GET" {
+			resp := &calendar.CalendarListEntry{
+				Id:              "holidays",
+				Summary:         "US Holidays",
+				AccessRole:      "reader",
+				BackgroundColor: "#0000ff",
+				ForegroundColor: "#ffffff",
+				ColorId:         "7",
+				Selected:        true,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Patch subscription (CalendarList.Patch)
+		if r.URL.Path == "/users/me/calendarList/holidays" && r.Method == "PATCH" {
+			var entry calendar.CalendarListEntry
+			json.NewDecoder(r.Body).Decode(&entry)
+			entry.Id = "holidays"
+			entry.Summary = "US Holidays"
+			json.NewEncoder(w).Encode(&entry)
+			return
+		}
+
+		// Unsubscribe (CalendarList.Delete)
+		if r.URL.Path == "/users/me/calendarList/holidays" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	// Subscribe
+	subscribed, err := svc.CalendarList.Insert(&calendar.CalendarListEntry{Id: "holidays"}).Do()
+	if err != nil {
+		t.Fatalf("failed to subscribe: %v", err)
+	}
+	if subscribed.Summary != "US Holidays" {
+		t.Errorf("expected summary 'US Holidays', got %s", subscribed.Summary)
+	}
+
+	// Get info
+	info, err := svc.CalendarList.Get("holidays").Do()
+	if err != nil {
+		t.Fatalf("failed to get calendar info: %v", err)
+	}
+	if info.AccessRole != "reader" {
+		t.Errorf("expected access_role 'reader', got %s", info.AccessRole)
+	}
+
+	// Patch subscription
+	patched, err := svc.CalendarList.Patch("holidays", &calendar.CalendarListEntry{
+		SummaryOverride: "My Holidays",
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to patch subscription: %v", err)
+	}
+	if patched.Id != "holidays" {
+		t.Errorf("expected id 'holidays', got %s", patched.Id)
+	}
+
+	// Unsubscribe
+	err = svc.CalendarList.Delete("holidays").Do()
+	if err != nil {
+		t.Fatalf("failed to unsubscribe: %v", err)
+	}
+}
+
+// TestCalendarFreebusy_MockServer tests free/busy query
+func TestCalendarFreebusy_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/freeBusy" && r.Method == "POST" {
+			resp := &calendar.FreeBusyResponse{
+				TimeMin: "2026-03-01T09:00:00Z",
+				TimeMax: "2026-03-01T17:00:00Z",
+				Calendars: map[string]calendar.FreeBusyCalendar{
+					"primary": {
+						Busy: []*calendar.TimePeriod{
+							{Start: "2026-03-01T10:00:00Z", End: "2026-03-01T11:00:00Z"},
+							{Start: "2026-03-01T14:00:00Z", End: "2026-03-01T15:00:00Z"},
+						},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	resp, err := svc.Freebusy.Query(&calendar.FreeBusyRequest{
+		TimeMin: "2026-03-01T09:00:00Z",
+		TimeMax: "2026-03-01T17:00:00Z",
+		Items:   []*calendar.FreeBusyRequestItem{{Id: "primary"}},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to query free/busy: %v", err)
+	}
+
+	if fb, ok := resp.Calendars["primary"]; ok {
+		if len(fb.Busy) != 2 {
+			t.Errorf("expected 2 busy periods, got %d", len(fb.Busy))
+		}
+	} else {
+		t.Error("expected primary calendar in response")
+	}
+}
+
+// TestCalendarColors_MockServer tests colors API
+func TestCalendarColors_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/colors" && r.Method == "GET" {
+			resp := &calendar.Colors{
+				Calendar: map[string]calendar.ColorDefinition{
+					"1": {Background: "#ac725e", Foreground: "#1d1d1d"},
+					"2": {Background: "#d06b64", Foreground: "#1d1d1d"},
+				},
+				Event: map[string]calendar.ColorDefinition{
+					"1": {Background: "#a4bdfc", Foreground: "#1d1d1d"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	colors, err := svc.Colors.Get().Do()
+	if err != nil {
+		t.Fatalf("failed to get colors: %v", err)
+	}
+
+	if len(colors.Calendar) != 2 {
+		t.Errorf("expected 2 calendar colors, got %d", len(colors.Calendar))
+	}
+	if len(colors.Event) != 1 {
+		t.Errorf("expected 1 event color, got %d", len(colors.Event))
+	}
+}
+
+// TestCalendarSettings_MockServer tests settings API
+func TestCalendarSettings_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/users/me/settings" && r.Method == "GET" {
+			resp := &calendar.Settings{
+				Items: []*calendar.Setting{
+					{Id: "timezone", Value: "America/New_York"},
+					{Id: "locale", Value: "en"},
+					{Id: "weekStart", Value: "0"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	resp, err := svc.Settings.List().Do()
+	if err != nil {
+		t.Fatalf("failed to list settings: %v", err)
+	}
+
+	if len(resp.Items) != 3 {
+		t.Errorf("expected 3 settings, got %d", len(resp.Items))
+	}
+}
