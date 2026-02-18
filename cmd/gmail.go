@@ -145,6 +145,141 @@ Examples:
 	RunE: runGmailThread,
 }
 
+var gmailUntrashCmd = &cobra.Command{
+	Use:   "untrash <message-id>",
+	Short: "Remove a message from trash",
+	Long:  "Removes a Gmail message from the trash, restoring it to its previous location.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runGmailUntrash,
+}
+
+var gmailDeleteCmd = &cobra.Command{
+	Use:   "delete <message-id>",
+	Short: "Permanently delete a message",
+	Long:  "Permanently deletes a Gmail message. This action cannot be undone.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runGmailDelete,
+}
+
+var gmailBatchModifyCmd = &cobra.Command{
+	Use:   "batch-modify",
+	Short: "Modify labels on multiple messages",
+	Long: `Modifies labels on multiple Gmail messages at once.
+
+Examples:
+  gws gmail batch-modify --ids "msg1,msg2,msg3" --add-labels "STARRED"
+  gws gmail batch-modify --ids "msg1,msg2" --remove-labels "INBOX,UNREAD"`,
+	RunE: runGmailBatchModify,
+}
+
+var gmailBatchDeleteCmd = &cobra.Command{
+	Use:   "batch-delete",
+	Short: "Permanently delete multiple messages",
+	Long:  "Permanently deletes multiple Gmail messages at once. This action cannot be undone.",
+	RunE:  runGmailBatchDelete,
+}
+
+var gmailTrashThreadCmd = &cobra.Command{
+	Use:   "trash-thread <thread-id>",
+	Short: "Move a thread to trash",
+	Long:  "Moves all messages in a Gmail thread to the trash.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runGmailTrashThread,
+}
+
+var gmailUntrashThreadCmd = &cobra.Command{
+	Use:   "untrash-thread <thread-id>",
+	Short: "Remove a thread from trash",
+	Long:  "Removes all messages in a Gmail thread from the trash.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runGmailUntrashThread,
+}
+
+var gmailDeleteThreadCmd = &cobra.Command{
+	Use:   "delete-thread <thread-id>",
+	Short: "Permanently delete a thread",
+	Long:  "Permanently deletes all messages in a Gmail thread. This action cannot be undone.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runGmailDeleteThread,
+}
+
+var gmailLabelInfoCmd = &cobra.Command{
+	Use:   "label-info",
+	Short: "Get label details",
+	Long:  "Gets detailed information about a specific Gmail label.",
+	RunE:  runGmailLabelInfo,
+}
+
+var gmailCreateLabelCmd = &cobra.Command{
+	Use:   "create-label",
+	Short: "Create a new label",
+	Long:  "Creates a new Gmail label.",
+	RunE:  runGmailCreateLabel,
+}
+
+var gmailUpdateLabelCmd = &cobra.Command{
+	Use:   "update-label",
+	Short: "Update a label",
+	Long:  "Updates an existing Gmail label's name or visibility settings.",
+	RunE:  runGmailUpdateLabel,
+}
+
+var gmailDeleteLabelCmd = &cobra.Command{
+	Use:   "delete-label",
+	Short: "Delete a label",
+	Long:  "Permanently deletes a Gmail label. Messages with this label are not deleted.",
+	RunE:  runGmailDeleteLabel,
+}
+
+var gmailDraftsCmd = &cobra.Command{
+	Use:   "drafts",
+	Short: "List drafts",
+	Long:  "Lists Gmail drafts.",
+	RunE:  runGmailDrafts,
+}
+
+var gmailDraftCmd = &cobra.Command{
+	Use:   "draft",
+	Short: "Get a draft by ID",
+	Long:  "Gets the content of a specific Gmail draft.",
+	RunE:  runGmailDraft,
+}
+
+var gmailCreateDraftCmd = &cobra.Command{
+	Use:   "create-draft",
+	Short: "Create a draft",
+	Long:  "Creates a new Gmail draft message.",
+	RunE:  runGmailCreateDraft,
+}
+
+var gmailUpdateDraftCmd = &cobra.Command{
+	Use:   "update-draft",
+	Short: "Update a draft",
+	Long:  "Replaces the content of an existing Gmail draft.",
+	RunE:  runGmailUpdateDraft,
+}
+
+var gmailSendDraftCmd = &cobra.Command{
+	Use:   "send-draft",
+	Short: "Send an existing draft",
+	Long:  "Sends an existing Gmail draft.",
+	RunE:  runGmailSendDraft,
+}
+
+var gmailDeleteDraftCmd = &cobra.Command{
+	Use:   "delete-draft",
+	Short: "Delete a draft",
+	Long:  "Permanently deletes a Gmail draft.",
+	RunE:  runGmailDeleteDraft,
+}
+
+var gmailAttachmentCmd = &cobra.Command{
+	Use:   "attachment",
+	Short: "Download an attachment",
+	Long:  "Downloads a Gmail message attachment to a local file.",
+	RunE:  runGmailAttachment,
+}
+
 func init() {
 	rootCmd.AddCommand(gmailCmd)
 	gmailCmd.AddCommand(gmailListCmd)
@@ -187,6 +322,99 @@ func init() {
 	// Label flags
 	gmailLabelCmd.Flags().String("add", "", "Label names to add (comma-separated)")
 	gmailLabelCmd.Flags().String("remove", "", "Label names to remove (comma-separated)")
+
+	// New commands
+	gmailCmd.AddCommand(gmailUntrashCmd)
+	gmailCmd.AddCommand(gmailDeleteCmd)
+	gmailCmd.AddCommand(gmailBatchModifyCmd)
+	gmailCmd.AddCommand(gmailBatchDeleteCmd)
+	gmailCmd.AddCommand(gmailTrashThreadCmd)
+	gmailCmd.AddCommand(gmailUntrashThreadCmd)
+	gmailCmd.AddCommand(gmailDeleteThreadCmd)
+	gmailCmd.AddCommand(gmailLabelInfoCmd)
+	gmailCmd.AddCommand(gmailCreateLabelCmd)
+	gmailCmd.AddCommand(gmailUpdateLabelCmd)
+	gmailCmd.AddCommand(gmailDeleteLabelCmd)
+	gmailCmd.AddCommand(gmailDraftsCmd)
+	gmailCmd.AddCommand(gmailDraftCmd)
+	gmailCmd.AddCommand(gmailCreateDraftCmd)
+	gmailCmd.AddCommand(gmailUpdateDraftCmd)
+	gmailCmd.AddCommand(gmailSendDraftCmd)
+	gmailCmd.AddCommand(gmailDeleteDraftCmd)
+	gmailCmd.AddCommand(gmailAttachmentCmd)
+
+	// Batch modify flags
+	gmailBatchModifyCmd.Flags().String("ids", "", "Comma-separated message IDs (required)")
+	gmailBatchModifyCmd.Flags().String("add-labels", "", "Label names to add (comma-separated)")
+	gmailBatchModifyCmd.Flags().String("remove-labels", "", "Label names to remove (comma-separated)")
+	gmailBatchModifyCmd.MarkFlagRequired("ids")
+
+	// Batch delete flags
+	gmailBatchDeleteCmd.Flags().String("ids", "", "Comma-separated message IDs (required)")
+	gmailBatchDeleteCmd.MarkFlagRequired("ids")
+
+	// Label info flags
+	gmailLabelInfoCmd.Flags().String("id", "", "Label ID (required)")
+	gmailLabelInfoCmd.MarkFlagRequired("id")
+
+	// Create label flags
+	gmailCreateLabelCmd.Flags().String("name", "", "Label name (required)")
+	gmailCreateLabelCmd.Flags().String("visibility", "", "Message visibility: labelShow, labelShowIfUnread, labelHide")
+	gmailCreateLabelCmd.Flags().String("list-visibility", "", "Label list visibility: labelShow, labelHide")
+	gmailCreateLabelCmd.MarkFlagRequired("name")
+
+	// Update label flags
+	gmailUpdateLabelCmd.Flags().String("id", "", "Label ID (required)")
+	gmailUpdateLabelCmd.Flags().String("name", "", "New label name")
+	gmailUpdateLabelCmd.Flags().String("visibility", "", "Message visibility: labelShow, labelShowIfUnread, labelHide")
+	gmailUpdateLabelCmd.Flags().String("list-visibility", "", "Label list visibility: labelShow, labelHide")
+	gmailUpdateLabelCmd.MarkFlagRequired("id")
+
+	// Delete label flags
+	gmailDeleteLabelCmd.Flags().String("id", "", "Label ID (required)")
+	gmailDeleteLabelCmd.MarkFlagRequired("id")
+
+	// Drafts list flags
+	gmailDraftsCmd.Flags().Int64("max", 10, "Maximum number of results")
+	gmailDraftsCmd.Flags().String("query", "", "Gmail search query")
+
+	// Draft get flags
+	gmailDraftCmd.Flags().String("id", "", "Draft ID (required)")
+	gmailDraftCmd.MarkFlagRequired("id")
+
+	// Create draft flags
+	gmailCreateDraftCmd.Flags().String("to", "", "Recipient email address (required)")
+	gmailCreateDraftCmd.Flags().String("subject", "", "Email subject")
+	gmailCreateDraftCmd.Flags().String("body", "", "Email body")
+	gmailCreateDraftCmd.Flags().String("cc", "", "CC recipients (comma-separated)")
+	gmailCreateDraftCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
+	gmailCreateDraftCmd.Flags().String("thread-id", "", "Thread ID for reply draft")
+	gmailCreateDraftCmd.MarkFlagRequired("to")
+
+	// Update draft flags
+	gmailUpdateDraftCmd.Flags().String("id", "", "Draft ID (required)")
+	gmailUpdateDraftCmd.Flags().String("to", "", "Recipient email address")
+	gmailUpdateDraftCmd.Flags().String("subject", "", "Email subject")
+	gmailUpdateDraftCmd.Flags().String("body", "", "Email body")
+	gmailUpdateDraftCmd.Flags().String("cc", "", "CC recipients (comma-separated)")
+	gmailUpdateDraftCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
+	gmailUpdateDraftCmd.MarkFlagRequired("id")
+
+	// Send draft flags
+	gmailSendDraftCmd.Flags().String("id", "", "Draft ID (required)")
+	gmailSendDraftCmd.MarkFlagRequired("id")
+
+	// Delete draft flags
+	gmailDeleteDraftCmd.Flags().String("id", "", "Draft ID (required)")
+	gmailDeleteDraftCmd.MarkFlagRequired("id")
+
+	// Attachment flags
+	gmailAttachmentCmd.Flags().String("message-id", "", "Message ID (required)")
+	gmailAttachmentCmd.Flags().String("id", "", "Attachment ID (required)")
+	gmailAttachmentCmd.Flags().String("output", "", "Output file path (required)")
+	gmailAttachmentCmd.MarkFlagRequired("message-id")
+	gmailAttachmentCmd.MarkFlagRequired("id")
+	gmailAttachmentCmd.MarkFlagRequired("output")
 }
 
 func runGmailList(cmd *cobra.Command, args []string) error {
@@ -1032,4 +1260,701 @@ func extractBody(payload *gmail.MessagePart) string {
 	}
 
 	return ""
+}
+
+func runGmailUntrash(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	messageID := args[0]
+
+	msg, err := svc.Users.Messages.Untrash("me", messageID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to untrash message: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":     "untrashed",
+		"message_id": msg.Id,
+	})
+}
+
+func runGmailDelete(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	messageID := args[0]
+
+	err = svc.Users.Messages.Delete("me", messageID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete message: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":     "deleted",
+		"message_id": messageID,
+	})
+}
+
+func runGmailBatchModify(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	idsStr, _ := cmd.Flags().GetString("ids")
+	addLabelsStr, _ := cmd.Flags().GetString("add-labels")
+	removeLabelsStr, _ := cmd.Flags().GetString("remove-labels")
+
+	if addLabelsStr == "" && removeLabelsStr == "" {
+		return p.PrintError(fmt.Errorf("at least one of --add-labels or --remove-labels is required"))
+	}
+
+	ids := strings.Split(idsStr, ",")
+	for i := range ids {
+		ids[i] = strings.TrimSpace(ids[i])
+	}
+
+	// Fetch label map once for both add and remove
+	labelMap, err := fetchLabelMap(svc)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	req := &gmail.BatchModifyMessagesRequest{
+		Ids: ids,
+	}
+
+	if addLabelsStr != "" {
+		addIDs, err := resolveFromMap(labelMap, strings.Split(addLabelsStr, ","))
+		if err != nil {
+			return p.PrintError(err)
+		}
+		req.AddLabelIds = addIDs
+	}
+
+	if removeLabelsStr != "" {
+		removeIDs, err := resolveFromMap(labelMap, strings.Split(removeLabelsStr, ","))
+		if err != nil {
+			return p.PrintError(err)
+		}
+		req.RemoveLabelIds = removeIDs
+	}
+
+	err = svc.Users.Messages.BatchModify("me", req).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to batch modify messages: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "modified",
+		"count":  len(ids),
+	})
+}
+
+func runGmailBatchDelete(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	idsStr, _ := cmd.Flags().GetString("ids")
+	ids := strings.Split(idsStr, ",")
+	for i := range ids {
+		ids[i] = strings.TrimSpace(ids[i])
+	}
+
+	req := &gmail.BatchDeleteMessagesRequest{
+		Ids: ids,
+	}
+
+	err = svc.Users.Messages.BatchDelete("me", req).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to batch delete messages: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "deleted",
+		"count":  len(ids),
+	})
+}
+
+func runGmailTrashThread(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	threadID := args[0]
+
+	thread, err := svc.Users.Threads.Trash("me", threadID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to trash thread: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":    "trashed",
+		"thread_id": thread.Id,
+	})
+}
+
+func runGmailUntrashThread(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	threadID := args[0]
+
+	thread, err := svc.Users.Threads.Untrash("me", threadID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to untrash thread: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":    "untrashed",
+		"thread_id": thread.Id,
+	})
+}
+
+func runGmailDeleteThread(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	threadID := args[0]
+
+	err = svc.Users.Threads.Delete("me", threadID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete thread: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":    "deleted",
+		"thread_id": threadID,
+	})
+}
+
+func runGmailLabelInfo(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	labelID, _ := cmd.Flags().GetString("id")
+
+	label, err := svc.Users.Labels.Get("me", labelID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get label: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"id":                      label.Id,
+		"name":                    label.Name,
+		"type":                    label.Type,
+		"message_list_visibility": label.MessageListVisibility,
+		"label_list_visibility":   label.LabelListVisibility,
+		"messages_total":          label.MessagesTotal,
+		"messages_unread":         label.MessagesUnread,
+		"threads_total":           label.ThreadsTotal,
+		"threads_unread":          label.ThreadsUnread,
+	})
+}
+
+func runGmailCreateLabel(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	name, _ := cmd.Flags().GetString("name")
+	visibility, _ := cmd.Flags().GetString("visibility")
+	listVisibility, _ := cmd.Flags().GetString("list-visibility")
+
+	label := &gmail.Label{
+		Name: name,
+	}
+	if visibility != "" {
+		label.MessageListVisibility = visibility
+	}
+	if listVisibility != "" {
+		label.LabelListVisibility = listVisibility
+	}
+
+	created, err := svc.Users.Labels.Create("me", label).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create label: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "created",
+		"id":     created.Id,
+		"name":   created.Name,
+	})
+}
+
+func runGmailUpdateLabel(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	labelID, _ := cmd.Flags().GetString("id")
+	name, _ := cmd.Flags().GetString("name")
+	visibility, _ := cmd.Flags().GetString("visibility")
+	listVisibility, _ := cmd.Flags().GetString("list-visibility")
+
+	current, err := svc.Users.Labels.Get("me", labelID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get label: %w", err))
+	}
+
+	if name != "" {
+		current.Name = name
+	}
+	if visibility != "" {
+		current.MessageListVisibility = visibility
+	}
+	if listVisibility != "" {
+		current.LabelListVisibility = listVisibility
+	}
+
+	updated, err := svc.Users.Labels.Update("me", labelID, current).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update label: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "updated",
+		"id":     updated.Id,
+		"name":   updated.Name,
+	})
+}
+
+func runGmailDeleteLabel(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	labelID, _ := cmd.Flags().GetString("id")
+
+	err = svc.Users.Labels.Delete("me", labelID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete label: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "deleted",
+		"id":     labelID,
+	})
+}
+
+func runGmailDrafts(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	maxResults, _ := cmd.Flags().GetInt64("max")
+	query, _ := cmd.Flags().GetString("query")
+
+	call := svc.Users.Drafts.List("me").MaxResults(maxResults)
+	if query != "" {
+		call = call.Q(query)
+	}
+
+	resp, err := call.Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to list drafts: %w", err))
+	}
+
+	results := make([]map[string]interface{}, 0, len(resp.Drafts))
+	for _, draft := range resp.Drafts {
+		d := map[string]interface{}{
+			"id": draft.Id,
+		}
+		if draft.Message != nil {
+			d["message_id"] = draft.Message.Id
+		}
+		results = append(results, d)
+	}
+
+	return p.Print(map[string]interface{}{
+		"drafts": results,
+		"count":  len(results),
+	})
+}
+
+func runGmailDraft(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	draftID, _ := cmd.Flags().GetString("id")
+
+	draft, err := svc.Users.Drafts.Get("me", draftID).Format("full").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get draft: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"id": draft.Id,
+	}
+
+	if draft.Message != nil {
+		result["message_id"] = draft.Message.Id
+
+		if draft.Message.Payload != nil {
+			headers := make(map[string]string)
+			for _, header := range draft.Message.Payload.Headers {
+				switch header.Name {
+				case "Subject", "From", "To", "Date", "Cc", "Bcc":
+					headers[strings.ToLower(header.Name)] = header.Value
+				}
+			}
+			result["headers"] = headers
+			result["body"] = extractBody(draft.Message.Payload)
+		}
+	}
+
+	return p.Print(result)
+}
+
+func runGmailCreateDraft(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	to, _ := cmd.Flags().GetString("to")
+	subject, _ := cmd.Flags().GetString("subject")
+	body, _ := cmd.Flags().GetString("body")
+	cc, _ := cmd.Flags().GetString("cc")
+	bcc, _ := cmd.Flags().GetString("bcc")
+	threadID, _ := cmd.Flags().GetString("thread-id")
+
+	// Build RFC 2822 message
+	var msgBuilder strings.Builder
+	msgBuilder.WriteString(fmt.Sprintf("To: %s\r\n", to))
+	if cc != "" {
+		msgBuilder.WriteString(fmt.Sprintf("Cc: %s\r\n", cc))
+	}
+	if bcc != "" {
+		msgBuilder.WriteString(fmt.Sprintf("Bcc: %s\r\n", bcc))
+	}
+	if subject != "" {
+		msgBuilder.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	}
+	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	msgBuilder.WriteString("\r\n")
+	if body != "" {
+		msgBuilder.WriteString(body)
+	}
+
+	raw := base64.URLEncoding.EncodeToString([]byte(msgBuilder.String()))
+
+	msg := &gmail.Message{Raw: raw}
+	if threadID != "" {
+		msg.ThreadId = threadID
+	}
+
+	draft := &gmail.Draft{
+		Message: msg,
+	}
+
+	created, err := svc.Users.Drafts.Create("me", draft).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create draft: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":   "created",
+		"draft_id": created.Id,
+	}
+	if created.Message != nil {
+		result["message_id"] = created.Message.Id
+	}
+
+	return p.Print(result)
+}
+
+func runGmailUpdateDraft(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	draftID, _ := cmd.Flags().GetString("id")
+	to, _ := cmd.Flags().GetString("to")
+	subject, _ := cmd.Flags().GetString("subject")
+	body, _ := cmd.Flags().GetString("body")
+	cc, _ := cmd.Flags().GetString("cc")
+	bcc, _ := cmd.Flags().GetString("bcc")
+
+	// Build RFC 2822 message
+	var msgBuilder strings.Builder
+	if to != "" {
+		msgBuilder.WriteString(fmt.Sprintf("To: %s\r\n", to))
+	}
+	if cc != "" {
+		msgBuilder.WriteString(fmt.Sprintf("Cc: %s\r\n", cc))
+	}
+	if bcc != "" {
+		msgBuilder.WriteString(fmt.Sprintf("Bcc: %s\r\n", bcc))
+	}
+	if subject != "" {
+		msgBuilder.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	}
+	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	msgBuilder.WriteString("\r\n")
+	if body != "" {
+		msgBuilder.WriteString(body)
+	}
+
+	raw := base64.URLEncoding.EncodeToString([]byte(msgBuilder.String()))
+
+	draft := &gmail.Draft{
+		Message: &gmail.Message{Raw: raw},
+	}
+
+	updated, err := svc.Users.Drafts.Update("me", draftID, draft).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update draft: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"status":   "updated",
+		"draft_id": updated.Id,
+	}
+	if updated.Message != nil {
+		result["message_id"] = updated.Message.Id
+	}
+
+	return p.Print(result)
+}
+
+func runGmailSendDraft(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	draftID, _ := cmd.Flags().GetString("id")
+
+	draft := &gmail.Draft{
+		Id: draftID,
+	}
+
+	sent, err := svc.Users.Drafts.Send("me", draft).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to send draft: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":     "sent",
+		"message_id": sent.Id,
+		"thread_id":  sent.ThreadId,
+	})
+}
+
+func runGmailDeleteDraft(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	draftID, _ := cmd.Flags().GetString("id")
+
+	err = svc.Users.Drafts.Delete("me", draftID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete draft: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":   "deleted",
+		"draft_id": draftID,
+	})
+}
+
+func runGmailAttachment(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	messageID, _ := cmd.Flags().GetString("message-id")
+	attachmentID, _ := cmd.Flags().GetString("id")
+	output, _ := cmd.Flags().GetString("output")
+
+	attachment, err := svc.Users.Messages.Attachments.Get("me", messageID, attachmentID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get attachment: %w", err))
+	}
+
+	data, err := base64.URLEncoding.DecodeString(attachment.Data)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to decode attachment: %w", err))
+	}
+
+	err = os.WriteFile(output, data, 0644)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to write file: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "downloaded",
+		"file":   output,
+		"size":   len(data),
+	})
 }

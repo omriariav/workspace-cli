@@ -259,3 +259,305 @@ Usage: gws gmail trash <message-id>
 ```
 
 No additional flags. Messages in trash are permanently deleted after 30 days.
+
+---
+
+## gws gmail untrash
+
+Removes a Gmail message from the trash.
+
+```
+Usage: gws gmail untrash <message-id>
+```
+
+No additional flags. Restores the message to its previous location.
+
+---
+
+## gws gmail delete
+
+Permanently deletes a Gmail message. This action cannot be undone.
+
+```
+Usage: gws gmail delete <message-id>
+```
+
+No additional flags.
+
+---
+
+## gws gmail batch-modify
+
+Modifies labels on multiple Gmail messages at once.
+
+```
+Usage: gws gmail batch-modify [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--ids` | string | | Yes | Comma-separated message IDs |
+| `--add-labels` | string | | No | Label names to add (comma-separated) |
+| `--remove-labels` | string | | No | Label names to remove (comma-separated) |
+
+At least one of `--add-labels` or `--remove-labels` is required.
+
+---
+
+## gws gmail batch-delete
+
+Permanently deletes multiple Gmail messages at once. This action cannot be undone.
+
+```
+Usage: gws gmail batch-delete [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--ids` | string | | Yes | Comma-separated message IDs |
+
+---
+
+## gws gmail trash-thread
+
+Moves all messages in a Gmail thread to the trash.
+
+```
+Usage: gws gmail trash-thread <thread-id>
+```
+
+No additional flags.
+
+---
+
+## gws gmail untrash-thread
+
+Removes all messages in a Gmail thread from the trash.
+
+```
+Usage: gws gmail untrash-thread <thread-id>
+```
+
+No additional flags.
+
+---
+
+## gws gmail delete-thread
+
+Permanently deletes all messages in a Gmail thread. This action cannot be undone.
+
+```
+Usage: gws gmail delete-thread <thread-id>
+```
+
+No additional flags.
+
+---
+
+## gws gmail label-info
+
+Gets detailed information about a specific Gmail label.
+
+```
+Usage: gws gmail label-info [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Label ID |
+
+### Output Fields (JSON)
+
+- `id` — Label ID
+- `name` — Label name
+- `type` — Label type (`system` or `user`)
+- `message_list_visibility` — Visibility in message list
+- `label_list_visibility` — Visibility in label list
+- `messages_total` — Total messages with this label
+- `messages_unread` — Unread messages with this label
+- `threads_total` — Total threads with this label
+- `threads_unread` — Unread threads with this label
+
+---
+
+## gws gmail create-label
+
+Creates a new Gmail label.
+
+```
+Usage: gws gmail create-label [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--name` | string | | Yes | Label name |
+| `--visibility` | string | | No | Message visibility: `labelShow`, `labelShowIfUnread`, `labelHide` |
+| `--list-visibility` | string | | No | Label list visibility: `labelShow`, `labelHide` |
+
+---
+
+## gws gmail update-label
+
+Updates an existing Gmail label.
+
+```
+Usage: gws gmail update-label [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Label ID |
+| `--name` | string | | No | New label name |
+| `--visibility` | string | | No | Message visibility: `labelShow`, `labelShowIfUnread`, `labelHide` |
+| `--list-visibility` | string | | No | Label list visibility: `labelShow`, `labelHide` |
+
+---
+
+## gws gmail delete-label
+
+Permanently deletes a Gmail label. Messages with this label are not deleted.
+
+```
+Usage: gws gmail delete-label [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Label ID |
+
+---
+
+## gws gmail drafts
+
+Lists Gmail drafts.
+
+```
+Usage: gws gmail drafts [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--max` | int | 10 | No | Maximum number of results |
+| `--query` | string | | No | Gmail search query |
+
+### Output Fields (JSON)
+
+- `drafts` — Array of drafts, each with:
+  - `id` — Draft ID
+  - `message_id` — Associated message ID
+- `count` — Total number of drafts returned
+
+---
+
+## gws gmail draft
+
+Gets the content of a specific Gmail draft.
+
+```
+Usage: gws gmail draft [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Draft ID |
+
+### Output Fields (JSON)
+
+- `id` — Draft ID
+- `message_id` — Associated message ID
+- `headers` — Object with `subject`, `from`, `to`, `date`, `cc`, `bcc`
+- `body` — Draft body text
+
+---
+
+## gws gmail create-draft
+
+Creates a new Gmail draft message.
+
+```
+Usage: gws gmail create-draft [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--to` | string | | Yes | Recipient email address |
+| `--subject` | string | | No | Email subject |
+| `--body` | string | | No | Email body |
+| `--cc` | string | | No | CC recipients (comma-separated) |
+| `--bcc` | string | | No | BCC recipients (comma-separated) |
+| `--thread-id` | string | | No | Thread ID for reply draft |
+
+---
+
+## gws gmail update-draft
+
+Replaces the content of an existing Gmail draft.
+
+```
+Usage: gws gmail update-draft [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Draft ID |
+| `--to` | string | | No | Recipient email address |
+| `--subject` | string | | No | Email subject |
+| `--body` | string | | No | Email body |
+| `--cc` | string | | No | CC recipients (comma-separated) |
+| `--bcc` | string | | No | BCC recipients (comma-separated) |
+
+---
+
+## gws gmail send-draft
+
+Sends an existing Gmail draft.
+
+```
+Usage: gws gmail send-draft [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Draft ID |
+
+### Output Fields (JSON)
+
+- `status` — Always `"sent"`
+- `message_id` — Sent message ID
+- `thread_id` — Thread ID
+
+---
+
+## gws gmail delete-draft
+
+Permanently deletes a Gmail draft.
+
+```
+Usage: gws gmail delete-draft [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Draft ID |
+
+---
+
+## gws gmail attachment
+
+Downloads a Gmail message attachment to a local file.
+
+```
+Usage: gws gmail attachment [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--message-id` | string | | Yes | Message ID |
+| `--id` | string | | Yes | Attachment ID |
+| `--output` | string | | Yes | Output file path |
+
+### Output Fields (JSON)
+
+- `status` — Always `"downloaded"`
+- `file` — Output file path
+- `size` — File size in bytes
