@@ -228,6 +228,6 @@ func resolveScopes(cmd *cobra.Command) ([]string, []string) {
 		return auth.ScopesForServices(configServices), configServices
 	}
 
-	// 3. Default: all scopes (no service list = full auth)
-	return auth.AllScopes, nil
+	// 3. Default: all scopes (all services granted)
+	return auth.AllScopes, auth.ValidServiceNames()
 }

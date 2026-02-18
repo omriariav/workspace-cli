@@ -46,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.22.0** - Full Gmail, Calendar, and Drive API parity: 63 new commands across drafts, label CRUD, batch ops, attachments, calendar CRUD/ACL/subscriptions/freebusy, drive permissions/revisions/replies/shared drives/export.
+**v1.22.1** - Fix: `auth login` without `--services` now correctly records all services as granted, eliminating spurious "requires additional permissions" warnings.
 
 ## Roadmap
 
