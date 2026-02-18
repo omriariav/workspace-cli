@@ -1,7 +1,7 @@
 ---
 name: gws-drive
-version: 1.1.0
-description: "Google Drive CLI operations via gws. Use when users need to list, search, upload, download, or manage files and folders in Google Drive. Triggers: drive, files, upload, download, folders, google drive, file management."
+version: 2.0.0
+description: "Google Drive CLI operations via gws. Use when users need to list, search, upload, download, manage files/folders, permissions, revisions, comments, shared drives, and more. Triggers: drive, files, upload, download, folders, google drive, file management, permissions, share, shared drives."
 metadata:
   short-description: Google Drive CLI operations
   compatibility: claude-code, codex-cli
@@ -30,6 +30,7 @@ For initial setup, see the `gws-auth` skill.
 
 ## Quick Command Reference
 
+### Files & Folders
 | Task | Command |
 |------|---------|
 | List files | `gws drive list` |
@@ -38,13 +39,53 @@ For initial setup, see the `gws-auth` skill.
 | Get file info | `gws drive info <file-id>` |
 | Download a file | `gws drive download <file-id>` |
 | Upload a file | `gws drive upload report.pdf` |
-| Upload to folder | `gws drive upload data.xlsx --folder <folder-id>` |
 | Create a folder | `gws drive create-folder --name "Project Files"` |
 | Move a file | `gws drive move <file-id> --to <folder-id>` |
 | Delete a file | `gws drive delete <file-id>` |
-| Permanently delete | `gws drive delete <file-id> --permanent` |
 | Copy a file | `gws drive copy <file-id>` |
+| Export file | `gws drive export --file-id <id> --mime-type application/pdf --output report.pdf` |
+| Update metadata | `gws drive update --file-id <id> --name "New Name"` |
+| Empty trash | `gws drive empty-trash` |
+| Drive info | `gws drive about` |
+| Recent changes | `gws drive changes` |
+
+### Permissions
+| Task | Command |
+|------|---------|
+| List permissions | `gws drive permissions --file-id <id>` |
+| Share with user | `gws drive share --file-id <id> --type user --role writer --email user@example.com` |
+| Share with anyone | `gws drive share --file-id <id> --type anyone --role reader` |
+| Get permission | `gws drive permission --file-id <id> --permission-id <perm-id>` |
+| Update permission | `gws drive update-permission --file-id <id> --permission-id <perm-id> --role reader` |
+| Remove permission | `gws drive unshare --file-id <id> --permission-id <perm-id>` |
+
+### Comments & Replies
+| Task | Command |
+|------|---------|
 | List comments | `gws drive comments <file-id>` |
+| Get comment | `gws drive comment --file-id <id> --comment-id <cid>` |
+| Add comment | `gws drive add-comment --file-id <id> --content "Great work!"` |
+| Delete comment | `gws drive delete-comment --file-id <id> --comment-id <cid>` |
+| List replies | `gws drive replies --file-id <id> --comment-id <cid>` |
+| Reply to comment | `gws drive reply --file-id <id> --comment-id <cid> --content "Thanks!"` |
+| Get reply | `gws drive get-reply --file-id <id> --comment-id <cid> --reply-id <rid>` |
+| Delete reply | `gws drive delete-reply --file-id <id> --comment-id <cid> --reply-id <rid>` |
+
+### Revisions
+| Task | Command |
+|------|---------|
+| List revisions | `gws drive revisions --file-id <id>` |
+| Get revision | `gws drive revision --file-id <id> --revision-id <rid>` |
+| Delete revision | `gws drive delete-revision --file-id <id> --revision-id <rid>` |
+
+### Shared Drives
+| Task | Command |
+|------|---------|
+| List shared drives | `gws drive shared-drives` |
+| Get shared drive | `gws drive shared-drive --id <drive-id>` |
+| Create shared drive | `gws drive create-drive --name "Engineering"` |
+| Update shared drive | `gws drive update-drive --id <drive-id> --name "New Name"` |
+| Delete shared drive | `gws drive delete-drive --id <drive-id>` |
 
 ## Detailed Usage
 
@@ -115,13 +156,6 @@ gws drive upload <local-file> [flags]
 - `--name string` — File name in Drive (default: local filename)
 - `--mime-type string` — MIME type (auto-detected if not specified)
 
-**Examples:**
-```bash
-gws drive upload report.pdf
-gws drive upload data.xlsx --folder 1abc123xyz
-gws drive upload document.docx --name "My Report"
-```
-
 ### create-folder — Create a new folder
 
 ```bash
@@ -132,25 +166,10 @@ gws drive create-folder --name <name> [flags]
 - `--name string` — Folder name (required)
 - `--parent string` — Parent folder ID (default: root)
 
-**Examples:**
-```bash
-gws drive create-folder --name "Project Files"
-gws drive create-folder --name "Subproject" --parent 1abc123xyz
-```
-
 ### move — Move a file
 
 ```bash
 gws drive move <file-id> --to <folder-id>
-```
-
-**Flags:**
-- `--to string` — Destination folder ID (required)
-
-**Examples:**
-```bash
-gws drive move 1abc123xyz --to 2def456uvw
-gws drive move 1abc123xyz --to root
 ```
 
 ### delete — Delete a file
@@ -159,16 +178,7 @@ gws drive move 1abc123xyz --to root
 gws drive delete <file-id> [flags]
 ```
 
-By default, moves the file to trash. Use `--permanent` to permanently delete.
-
-**Flags:**
-- `--permanent` — Permanently delete (skip trash)
-
-**Examples:**
-```bash
-gws drive delete 1abc123xyz
-gws drive delete 1abc123xyz --permanent
-```
+By default, moves to trash. Use `--permanent` to permanently delete.
 
 ### copy — Copy a file
 
@@ -176,36 +186,207 @@ gws drive delete 1abc123xyz --permanent
 gws drive copy <file-id> [flags]
 ```
 
-Creates a copy of a file in Google Drive. Useful for duplicating template files (Docs, Sheets, Slides).
-
 **Flags:**
-- `--name string` — Name for the copy (default: "Copy of <original>")
+- `--name string` — Name for the copy
 - `--folder string` — Destination folder ID
 
-**Examples:**
+### export — Export a Google Workspace file
+
 ```bash
-gws drive copy 1abc123xyz
-gws drive copy 1abc123xyz --name "Q1 OKR Deck"
-gws drive copy 1abc123xyz --name "Project Plan" --folder 2def456uvw
+gws drive export --file-id <id> --mime-type <mime> --output <path>
 ```
 
-### comments — List comments on a file
+Exports Docs, Sheets, Slides to formats like PDF, CSV, DOCX, etc.
+
+**Flags:**
+- `--file-id string` — File ID (required)
+- `--mime-type string` — Export MIME type (required, e.g. `application/pdf`, `text/csv`)
+- `--output string` — Output file path (required)
+
+### update — Update file metadata
+
+```bash
+gws drive update --file-id <id> [flags]
+```
+
+**Flags:**
+- `--file-id string` — File ID (required)
+- `--name string` — New file name
+- `--description string` — New description
+- `--starred` — Star or unstar the file
+- `--trashed` — Trash or untrash the file
+
+### empty-trash — Empty trash
+
+```bash
+gws drive empty-trash
+```
+
+Permanently deletes all files in the trash. Cannot be undone.
+
+### about — Drive storage and user info
+
+```bash
+gws drive about
+```
+
+Returns user info and storage quota (limit, usage, usage in Drive, usage in trash).
+
+### changes — List recent file changes
+
+```bash
+gws drive changes [flags]
+```
+
+Polling pattern: the first call (without `--page-token`) fetches the current start token
+and typically returns zero results. Save the returned `new_start_page_token` and pass it
+in subsequent calls to detect new changes.
+
+**Flags:**
+- `--max int` — Maximum number of changes (default 100)
+- `--page-token string` — Page token from a previous call (auto-fetches start token if empty)
+
+### permissions — List permissions
+
+```bash
+gws drive permissions --file-id <id>
+```
+
+### share — Share a file
+
+```bash
+gws drive share --file-id <id> --type <type> --role <role> [flags]
+```
+
+**Flags:**
+- `--file-id string` — File ID (required)
+- `--type string` — Permission type: `user`, `group`, `domain`, `anyone` (required)
+- `--role string` — Role: `reader`, `commenter`, `writer`, `organizer`, `owner` (required)
+- `--email string` — Email address (for user/group type)
+- `--domain string` — Domain (for domain type)
+- `--send-notification` — Send notification email (default: true)
+
+### unshare — Remove a permission
+
+```bash
+gws drive unshare --file-id <id> --permission-id <perm-id>
+```
+
+### permission — Get permission details
+
+```bash
+gws drive permission --file-id <id> --permission-id <perm-id>
+```
+
+### update-permission — Update a permission
+
+```bash
+gws drive update-permission --file-id <id> --permission-id <perm-id> --role <role>
+```
+
+### comments — List comments
 
 ```bash
 gws drive comments <file-id> [flags]
 ```
-
-Lists all comments and replies on a Google Drive file (works with Docs, Sheets, Slides).
 
 **Flags:**
 - `--max int` — Maximum number of comments (default 100)
 - `--include-resolved` — Include resolved comments
 - `--include-deleted` — Include deleted comments
 
-**Examples:**
+### comment — Get a single comment
+
 ```bash
-gws drive comments 1abc123xyz
-gws drive comments 1abc123xyz --include-resolved
+gws drive comment --file-id <id> --comment-id <cid>
+```
+
+### add-comment — Add a comment
+
+```bash
+gws drive add-comment --file-id <id> --content "comment text"
+```
+
+### delete-comment — Delete a comment
+
+```bash
+gws drive delete-comment --file-id <id> --comment-id <cid>
+```
+
+### replies — List replies
+
+```bash
+gws drive replies --file-id <id> --comment-id <cid>
+```
+
+### reply — Create a reply
+
+```bash
+gws drive reply --file-id <id> --comment-id <cid> --content "reply text"
+```
+
+### get-reply — Get a reply
+
+```bash
+gws drive get-reply --file-id <id> --comment-id <cid> --reply-id <rid>
+```
+
+### delete-reply — Delete a reply
+
+```bash
+gws drive delete-reply --file-id <id> --comment-id <cid> --reply-id <rid>
+```
+
+### revisions — List revisions
+
+```bash
+gws drive revisions --file-id <id>
+```
+
+### revision — Get revision details
+
+```bash
+gws drive revision --file-id <id> --revision-id <rid>
+```
+
+### delete-revision — Delete a revision
+
+```bash
+gws drive delete-revision --file-id <id> --revision-id <rid>
+```
+
+### shared-drives — List shared drives
+
+```bash
+gws drive shared-drives [flags]
+```
+
+**Flags:**
+- `--max int` — Maximum number of drives (default 100)
+- `--query string` — Search query
+
+### shared-drive — Get shared drive info
+
+```bash
+gws drive shared-drive --id <drive-id>
+```
+
+### create-drive — Create a shared drive
+
+```bash
+gws drive create-drive --name "Drive Name"
+```
+
+### update-drive — Update a shared drive
+
+```bash
+gws drive update-drive --id <drive-id> --name "New Name"
+```
+
+### delete-drive — Delete a shared drive
+
+```bash
+gws drive delete-drive --id <drive-id>
 ```
 
 ## Output Modes
@@ -225,3 +406,7 @@ gws drive list --format text    # Human-readable text
 - When uploading, MIME type is auto-detected from the file extension
 - The `comments` command works on any Drive file type (Docs, Sheets, Slides, etc.)
 - Resolved comments are excluded by default; use `--include-resolved` to see them
+- Use `gws drive about` to check storage quota before large uploads
+- Use `gws drive changes` to monitor recent file activity
+- For sharing, use `--type anyone --role reader` for public access
+- For Workspace file exports, common MIME types: `application/pdf`, `text/csv`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`

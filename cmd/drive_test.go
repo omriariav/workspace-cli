@@ -913,3 +913,909 @@ func TestDriveDelete_OutputFormat(t *testing.T) {
 		})
 	}
 }
+
+// --- Permissions Tests ---
+
+func TestDrivePermissionsCommand_Flags(t *testing.T) {
+	cmd := drivePermissionsCmd
+	if cmd.Flags().Lookup("file-id") == nil {
+		t.Error("expected --file-id flag")
+	}
+}
+
+func TestDriveShareCommand_Flags(t *testing.T) {
+	cmd := driveShareCmd
+	flags := []string{"file-id", "type", "role", "email", "domain", "send-notification"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveUnshareCommand_Flags(t *testing.T) {
+	cmd := driveUnshareCmd
+	flags := []string{"file-id", "permission-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDrivePermissionCommand_Flags(t *testing.T) {
+	cmd := drivePermissionCmd
+	flags := []string{"file-id", "permission-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveUpdatePermissionCommand_Flags(t *testing.T) {
+	cmd := driveUpdatePermissionCmd
+	flags := []string{"file-id", "permission-id", "role"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDrivePermissions_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/files/test-file-id/permissions" && r.Method == "GET" {
+			resp := &drive.PermissionList{
+				Permissions: []*drive.Permission{
+					{
+						Id:           "perm-1",
+						Type:         "user",
+						Role:         "writer",
+						EmailAddress: "user@example.com",
+						DisplayName:  "Test User",
+					},
+					{
+						Id:   "perm-2",
+						Type: "anyone",
+						Role: "reader",
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	resp, err := svc.Permissions.List("test-file-id").
+		Fields("permissions(id,type,role,emailAddress,displayName)").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to list permissions: %v", err)
+	}
+
+	if len(resp.Permissions) != 2 {
+		t.Fatalf("expected 2 permissions, got %d", len(resp.Permissions))
+	}
+
+	if resp.Permissions[0].Role != "writer" {
+		t.Errorf("expected role 'writer', got '%s'", resp.Permissions[0].Role)
+	}
+}
+
+func TestDriveShare_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/files/test-file-id/permissions" && r.Method == "POST" {
+			var perm drive.Permission
+			json.NewDecoder(r.Body).Decode(&perm)
+
+			resp := &drive.Permission{
+				Id:           "new-perm-id",
+				Type:         perm.Type,
+				Role:         perm.Role,
+				EmailAddress: perm.EmailAddress,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	perm := &drive.Permission{
+		Type:         "user",
+		Role:         "writer",
+		EmailAddress: "user@example.com",
+	}
+
+	created, err := svc.Permissions.Create("test-file-id", perm).
+		Fields("id,type,role,emailAddress").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to create permission: %v", err)
+	}
+
+	if created.Id != "new-perm-id" {
+		t.Errorf("expected id 'new-perm-id', got '%s'", created.Id)
+	}
+	if created.Role != "writer" {
+		t.Errorf("expected role 'writer', got '%s'", created.Role)
+	}
+}
+
+func TestDriveUnshare_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/files/test-file-id/permissions/perm-1" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	err = svc.Permissions.Delete("test-file-id", "perm-1").Do()
+	if err != nil {
+		t.Fatalf("failed to delete permission: %v", err)
+	}
+}
+
+// --- Revisions Tests ---
+
+func TestDriveRevisionsCommand_Flags(t *testing.T) {
+	cmd := driveRevisionsCmd
+	if cmd.Flags().Lookup("file-id") == nil {
+		t.Error("expected --file-id flag")
+	}
+}
+
+func TestDriveRevisionCommand_Flags(t *testing.T) {
+	cmd := driveRevisionCmd
+	flags := []string{"file-id", "revision-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveDeleteRevisionCommand_Flags(t *testing.T) {
+	cmd := driveDeleteRevisionCmd
+	flags := []string{"file-id", "revision-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveRevisions_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/files/test-file-id/revisions" && r.Method == "GET" {
+			resp := &drive.RevisionList{
+				Revisions: []*drive.Revision{
+					{
+						Id:           "rev-1",
+						MimeType:     "application/vnd.google-apps.document",
+						ModifiedTime: "2024-01-15T10:00:00Z",
+						Size:         1024,
+						LastModifyingUser: &drive.User{
+							DisplayName:  "Test User",
+							EmailAddress: "test@example.com",
+						},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/files/test-file-id/revisions/rev-1" && r.Method == "GET" {
+			resp := &drive.Revision{
+				Id:           "rev-1",
+				MimeType:     "application/vnd.google-apps.document",
+				ModifiedTime: "2024-01-15T10:00:00Z",
+				Size:         1024,
+				KeepForever:  true,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/files/test-file-id/revisions/rev-1" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Test list revisions
+	revList, err := svc.Revisions.List("test-file-id").Do()
+	if err != nil {
+		t.Fatalf("failed to list revisions: %v", err)
+	}
+	if len(revList.Revisions) != 1 {
+		t.Fatalf("expected 1 revision, got %d", len(revList.Revisions))
+	}
+
+	// Test get revision
+	rev, err := svc.Revisions.Get("test-file-id", "rev-1").Do()
+	if err != nil {
+		t.Fatalf("failed to get revision: %v", err)
+	}
+	if rev.Id != "rev-1" {
+		t.Errorf("expected id 'rev-1', got '%s'", rev.Id)
+	}
+
+	// Test delete revision
+	err = svc.Revisions.Delete("test-file-id", "rev-1").Do()
+	if err != nil {
+		t.Fatalf("failed to delete revision: %v", err)
+	}
+}
+
+// --- Replies Tests ---
+
+func TestDriveRepliesCommand_Flags(t *testing.T) {
+	cmd := driveRepliesCmd
+	flags := []string{"file-id", "comment-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveReplyCommand_Flags(t *testing.T) {
+	cmd := driveReplyCmd
+	flags := []string{"file-id", "comment-id", "content"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveGetReplyCommand_Flags(t *testing.T) {
+	cmd := driveGetReplyCmd
+	flags := []string{"file-id", "comment-id", "reply-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveDeleteReplyCommand_Flags(t *testing.T) {
+	cmd := driveDeleteReplyCmd
+	flags := []string{"file-id", "comment-id", "reply-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveReplies_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/files/test-file-id/comments/comment-1/replies" && r.Method == "GET" {
+			resp := &drive.ReplyList{
+				Replies: []*drive.Reply{
+					{
+						Id:          "reply-1",
+						Content:     "Test reply",
+						CreatedTime: "2024-01-15T10:00:00Z",
+						Author: &drive.User{
+							DisplayName:  "Test User",
+							EmailAddress: "test@example.com",
+						},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/files/test-file-id/comments/comment-1/replies" && r.Method == "POST" {
+			var reply drive.Reply
+			json.NewDecoder(r.Body).Decode(&reply)
+			resp := &drive.Reply{
+				Id:          "new-reply-id",
+				Content:     reply.Content,
+				CreatedTime: "2024-01-15T11:00:00Z",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/files/test-file-id/comments/comment-1/replies/reply-1" && r.Method == "GET" {
+			resp := &drive.Reply{
+				Id:          "reply-1",
+				Content:     "Test reply",
+				CreatedTime: "2024-01-15T10:00:00Z",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/files/test-file-id/comments/comment-1/replies/reply-1" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Test list replies
+	replyList, err := svc.Replies.List("test-file-id", "comment-1").Do()
+	if err != nil {
+		t.Fatalf("failed to list replies: %v", err)
+	}
+	if len(replyList.Replies) != 1 {
+		t.Fatalf("expected 1 reply, got %d", len(replyList.Replies))
+	}
+
+	// Test create reply
+	newReply, err := svc.Replies.Create("test-file-id", "comment-1", &drive.Reply{Content: "New reply"}).Do()
+	if err != nil {
+		t.Fatalf("failed to create reply: %v", err)
+	}
+	if newReply.Id != "new-reply-id" {
+		t.Errorf("expected id 'new-reply-id', got '%s'", newReply.Id)
+	}
+
+	// Test get reply
+	reply, err := svc.Replies.Get("test-file-id", "comment-1", "reply-1").Do()
+	if err != nil {
+		t.Fatalf("failed to get reply: %v", err)
+	}
+	if reply.Content != "Test reply" {
+		t.Errorf("unexpected content: %s", reply.Content)
+	}
+
+	// Test delete reply
+	err = svc.Replies.Delete("test-file-id", "comment-1", "reply-1").Do()
+	if err != nil {
+		t.Fatalf("failed to delete reply: %v", err)
+	}
+}
+
+// --- Comment (single) Tests ---
+
+func TestDriveCommentCommand_Flags(t *testing.T) {
+	cmd := driveCommentCmd
+	flags := []string{"file-id", "comment-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveAddCommentCommand_Flags(t *testing.T) {
+	cmd := driveAddCommentCmd
+	flags := []string{"file-id", "content"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveDeleteCommentCommand_Flags(t *testing.T) {
+	cmd := driveDeleteCommentCmd
+	flags := []string{"file-id", "comment-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveComment_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/files/test-file-id/comments/comment-1" && r.Method == "GET" {
+			resp := &drive.Comment{
+				Id:          "comment-1",
+				Content:     "Test comment",
+				CreatedTime: "2024-01-15T10:00:00Z",
+				Resolved:    false,
+				Author: &drive.User{
+					DisplayName:  "Test User",
+					EmailAddress: "test@example.com",
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/files/test-file-id/comments" && r.Method == "POST" {
+			var comment drive.Comment
+			json.NewDecoder(r.Body).Decode(&comment)
+			resp := &drive.Comment{
+				Id:          "new-comment-id",
+				Content:     comment.Content,
+				CreatedTime: "2024-01-15T11:00:00Z",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/files/test-file-id/comments/comment-1" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Test get comment
+	comment, err := svc.Comments.Get("test-file-id", "comment-1").Do()
+	if err != nil {
+		t.Fatalf("failed to get comment: %v", err)
+	}
+	if comment.Content != "Test comment" {
+		t.Errorf("unexpected content: %s", comment.Content)
+	}
+
+	// Test create comment
+	newComment, err := svc.Comments.Create("test-file-id", &drive.Comment{Content: "New comment"}).Do()
+	if err != nil {
+		t.Fatalf("failed to create comment: %v", err)
+	}
+	if newComment.Id != "new-comment-id" {
+		t.Errorf("expected id 'new-comment-id', got '%s'", newComment.Id)
+	}
+
+	// Test delete comment
+	err = svc.Comments.Delete("test-file-id", "comment-1").Do()
+	if err != nil {
+		t.Fatalf("failed to delete comment: %v", err)
+	}
+}
+
+// --- Export Tests ---
+
+func TestDriveExportCommand_Flags(t *testing.T) {
+	cmd := driveExportCmd
+	flags := []string{"file-id", "mime-type", "output"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+// --- Empty Trash Tests ---
+
+func TestDriveEmptyTrashCommand_Help(t *testing.T) {
+	cmd := driveEmptyTrashCmd
+	if cmd.Use != "empty-trash" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+}
+
+func TestDriveEmptyTrash_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/files/trash" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	err = svc.Files.EmptyTrash().Do()
+	if err != nil {
+		t.Fatalf("failed to empty trash: %v", err)
+	}
+}
+
+// --- Update Tests ---
+
+func TestDriveUpdateCommand_Flags(t *testing.T) {
+	cmd := driveUpdateCmd
+	flags := []string{"file-id", "name", "description", "starred", "trashed"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveUpdate_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/files/test-file-id" && r.Method == "PATCH" {
+			resp := &drive.File{
+				Id:           "test-file-id",
+				Name:         "Updated Name",
+				Starred:      true,
+				ModifiedTime: "2024-01-15T12:00:00Z",
+				WebViewLink:  "https://drive.google.com/file/d/test-file-id/view",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	updated, err := svc.Files.Update("test-file-id", &drive.File{
+		Name:    "Updated Name",
+		Starred: true,
+	}).Fields("id,name,starred,modifiedTime,webViewLink").Do()
+	if err != nil {
+		t.Fatalf("failed to update file: %v", err)
+	}
+
+	if updated.Name != "Updated Name" {
+		t.Errorf("unexpected name: %s", updated.Name)
+	}
+	if !updated.Starred {
+		t.Error("expected starred to be true")
+	}
+}
+
+// --- Shared Drives Tests ---
+
+func TestDriveSharedDrivesCommand_Flags(t *testing.T) {
+	cmd := driveSharedDrivesCmd
+	flags := []string{"max", "query"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveSharedDriveCommand_Flags(t *testing.T) {
+	cmd := driveSharedDriveCmd
+	if cmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag")
+	}
+}
+
+func TestDriveCreateDriveCommand_Flags(t *testing.T) {
+	cmd := driveCreateDriveCmd
+	if cmd.Flags().Lookup("name") == nil {
+		t.Error("expected --name flag")
+	}
+}
+
+func TestDriveDeleteDriveCommand_Flags(t *testing.T) {
+	cmd := driveDeleteDriveCmd
+	if cmd.Flags().Lookup("id") == nil {
+		t.Error("expected --id flag")
+	}
+}
+
+func TestDriveUpdateDriveCommand_Flags(t *testing.T) {
+	cmd := driveUpdateDriveCmd
+	flags := []string{"id", "name"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveSharedDrives_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/drives" && r.Method == "GET" {
+			resp := &drive.DriveList{
+				Drives: []*drive.Drive{
+					{
+						Id:          "drive-1",
+						Name:        "Engineering",
+						CreatedTime: "2024-01-01T00:00:00Z",
+					},
+					{
+						Id:          "drive-2",
+						Name:        "Marketing",
+						CreatedTime: "2024-02-01T00:00:00Z",
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/drives/drive-1" && r.Method == "GET" {
+			resp := &drive.Drive{
+				Id:          "drive-1",
+				Name:        "Engineering",
+				CreatedTime: "2024-01-01T00:00:00Z",
+				ColorRgb:    "#4285f4",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/drives" && r.Method == "POST" {
+			resp := &drive.Drive{
+				Id:          "new-drive-id",
+				Name:        "New Drive",
+				CreatedTime: "2024-03-01T00:00:00Z",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/drives/drive-1" && r.Method == "DELETE" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		if r.URL.Path == "/drives/drive-1" && r.Method == "PATCH" {
+			resp := &drive.Drive{
+				Id:   "drive-1",
+				Name: "Updated Engineering",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Test list shared drives
+	driveList, err := svc.Drives.List().Do()
+	if err != nil {
+		t.Fatalf("failed to list drives: %v", err)
+	}
+	if len(driveList.Drives) != 2 {
+		t.Fatalf("expected 2 drives, got %d", len(driveList.Drives))
+	}
+
+	// Test get shared drive
+	d, err := svc.Drives.Get("drive-1").Do()
+	if err != nil {
+		t.Fatalf("failed to get drive: %v", err)
+	}
+	if d.Name != "Engineering" {
+		t.Errorf("unexpected name: %s", d.Name)
+	}
+
+	// Test create shared drive
+	created, err := svc.Drives.Create("req-123", &drive.Drive{Name: "New Drive"}).Do()
+	if err != nil {
+		t.Fatalf("failed to create drive: %v", err)
+	}
+	if created.Id != "new-drive-id" {
+		t.Errorf("unexpected id: %s", created.Id)
+	}
+
+	// Test delete shared drive
+	err = svc.Drives.Delete("drive-1").Do()
+	if err != nil {
+		t.Fatalf("failed to delete drive: %v", err)
+	}
+
+	// Test update shared drive
+	updated, err := svc.Drives.Update("drive-1", &drive.Drive{Name: "Updated Engineering"}).Do()
+	if err != nil {
+		t.Fatalf("failed to update drive: %v", err)
+	}
+	if updated.Name != "Updated Engineering" {
+		t.Errorf("unexpected name: %s", updated.Name)
+	}
+}
+
+// --- About Tests ---
+
+func TestDriveAboutCommand_Help(t *testing.T) {
+	cmd := driveAboutCmd
+	if cmd.Use != "about" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+}
+
+func TestDriveAbout_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/about" && r.Method == "GET" {
+			resp := &drive.About{
+				User: &drive.User{
+					DisplayName:  "Test User",
+					EmailAddress: "test@example.com",
+				},
+				StorageQuota: &drive.AboutStorageQuota{
+					Limit:             16106127360,
+					Usage:             5368709120,
+					UsageInDrive:      4294967296,
+					UsageInDriveTrash: 1073741824,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	about, err := svc.About.Get().
+		Fields("user(displayName,emailAddress),storageQuota(limit,usage,usageInDrive,usageInDriveTrash)").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to get about: %v", err)
+	}
+
+	if about.User.EmailAddress != "test@example.com" {
+		t.Errorf("unexpected email: %s", about.User.EmailAddress)
+	}
+	if about.StorageQuota.Limit != 16106127360 {
+		t.Errorf("unexpected storage limit: %d", about.StorageQuota.Limit)
+	}
+}
+
+// --- Changes Tests ---
+
+func TestDriveChangesCommand_Flags(t *testing.T) {
+	cmd := driveChangesCmd
+	flags := []string{"max", "page-token"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveChanges_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/changes/startPageToken" && r.Method == "GET" {
+			resp := &drive.StartPageToken{
+				StartPageToken: "start-token-123",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/changes" && r.Method == "GET" {
+			resp := &drive.ChangeList{
+				Changes: []*drive.Change{
+					{
+						FileId:     "file-1",
+						ChangeType: "file",
+						Time:       "2024-01-15T10:00:00Z",
+						Removed:    false,
+						File: &drive.File{
+							Id:           "file-1",
+							Name:         "Modified File.docx",
+							MimeType:     "application/vnd.google-apps.document",
+							ModifiedTime: "2024-01-15T10:00:00Z",
+						},
+					},
+				},
+				NewStartPageToken: "new-token-456",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Test get start page token
+	startToken, err := svc.Changes.GetStartPageToken().Do()
+	if err != nil {
+		t.Fatalf("failed to get start token: %v", err)
+	}
+	if startToken.StartPageToken != "start-token-123" {
+		t.Errorf("unexpected start token: %s", startToken.StartPageToken)
+	}
+
+	// Test list changes
+	changes, err := svc.Changes.List("start-token-123").Do()
+	if err != nil {
+		t.Fatalf("failed to list changes: %v", err)
+	}
+	if len(changes.Changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes.Changes))
+	}
+	if changes.Changes[0].FileId != "file-1" {
+		t.Errorf("unexpected file id: %s", changes.Changes[0].FileId)
+	}
+	if changes.NewStartPageToken != "new-token-456" {
+		t.Errorf("unexpected new start token: %s", changes.NewStartPageToken)
+	}
+}

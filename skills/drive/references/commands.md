@@ -49,8 +49,6 @@ Usage: gws drive search <query> [flags]
 |------|------|---------|-------------|
 | `--max` | int | 50 | Maximum number of results |
 
-The query is a full-text search across file names and content.
-
 ---
 
 ## gws drive info
@@ -62,17 +60,6 @@ Usage: gws drive info <file-id>
 ```
 
 No additional flags.
-
-### Output Fields (JSON)
-
-- `id` — File ID
-- `name` — File name
-- `mimeType` — MIME type
-- `size` — File size in bytes
-- `createdTime` — Creation time
-- `modifiedTime` — Last modified time
-- `owners` — File owners
-- `webViewLink` — Link to view in browser
 
 ---
 
@@ -104,10 +91,6 @@ Usage: gws drive upload <local-file> [flags]
 | `--name` | string | local filename | File name in Drive |
 | `--mime-type` | string | auto-detected | MIME type |
 
-### MIME Type Auto-Detection
-
-The MIME type is auto-detected from the file extension. Override with `--mime-type` if needed.
-
 ---
 
 ## gws drive create-folder
@@ -137,8 +120,6 @@ Usage: gws drive move <file-id> [flags]
 |------|------|---------|----------|-------------|
 | `--to` | string | | Yes | Destination folder ID |
 
-Use `root` as the folder ID to move to the root of Drive.
-
 ---
 
 ## gws drive delete
@@ -152,8 +133,6 @@ Usage: gws drive delete <file-id> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--permanent` | bool | false | Permanently delete (skip trash) |
-
-By default, files are moved to trash (recoverable for 30 days). Use `--permanent` only when explicitly intended.
 
 ---
 
@@ -169,8 +148,6 @@ Usage: gws drive copy <file-id> [flags]
 |------|------|---------|-------------|
 | `--name` | string | "Copy of <original>" | Name for the copy |
 | `--folder` | string | same as original | Destination folder ID |
-
-Useful for duplicating template files (Docs, Sheets, Slides, etc.).
 
 ---
 
@@ -188,9 +165,392 @@ Usage: gws drive comments <file-id> [flags]
 | `--include-resolved` | bool | false | Include resolved comments |
 | `--include-deleted` | bool | false | Include deleted comments |
 
-### Notes
+---
 
-- Works on any Drive file type: Docs, Sheets, Slides, PDFs, etc.
-- Resolved comments are excluded by default
-- When filtering resolved comments, the actual result count may be less than `--max` since filtering happens after fetching from the API
-- Each comment includes its replies
+## gws drive export
+
+Exports a Google Workspace file to a specified format.
+
+```
+Usage: gws drive export [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--mime-type` | string | | Yes | Export MIME type (e.g. `application/pdf`) |
+| `--output` | string | | Yes | Output file path |
+
+### Common Export MIME Types
+
+| Format | MIME Type |
+|--------|-----------|
+| PDF | `application/pdf` |
+| CSV | `text/csv` |
+| DOCX | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+| XLSX | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| PPTX | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+| Plain Text | `text/plain` |
+| HTML | `text/html` |
+
+---
+
+## gws drive empty-trash
+
+Permanently deletes all files in the trash. Cannot be undone.
+
+```
+Usage: gws drive empty-trash
+```
+
+No flags.
+
+---
+
+## gws drive update
+
+Updates metadata of a file in Google Drive.
+
+```
+Usage: gws drive update [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--name` | string | | No | New file name |
+| `--description` | string | | No | New description |
+| `--starred` | bool | false | No | Star or unstar the file |
+| `--trashed` | bool | false | No | Trash or untrash the file |
+
+---
+
+## gws drive about
+
+Gets information about the user's Drive storage quota and account.
+
+```
+Usage: gws drive about
+```
+
+No flags. Returns user info and storage quota (limit, usage, usage in Drive, usage in trash).
+
+---
+
+## gws drive changes
+
+Lists recent changes to files in Google Drive.
+
+```
+Usage: gws drive changes [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--max` | int | 100 | Maximum number of changes |
+| `--page-token` | string | auto-fetched | Page token for pagination |
+
+If no page token is provided, the start page token is fetched automatically.
+
+---
+
+## gws drive permissions
+
+Lists all permissions on a file.
+
+```
+Usage: gws drive permissions [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+
+---
+
+## gws drive share
+
+Shares a file with a user, group, domain, or anyone.
+
+```
+Usage: gws drive share [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--type` | string | | Yes | Permission type: `user`, `group`, `domain`, `anyone` |
+| `--role` | string | | Yes | Role: `reader`, `commenter`, `writer`, `organizer`, `owner` |
+| `--email` | string | | No | Email address (for user/group type) |
+| `--domain` | string | | No | Domain (for domain type) |
+| `--send-notification` | bool | true | No | Send notification email |
+
+---
+
+## gws drive unshare
+
+Removes a permission from a file.
+
+```
+Usage: gws drive unshare [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--permission-id` | string | | Yes | Permission ID |
+
+---
+
+## gws drive permission
+
+Gets details of a specific permission.
+
+```
+Usage: gws drive permission [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--permission-id` | string | | Yes | Permission ID |
+
+---
+
+## gws drive update-permission
+
+Updates the role of an existing permission.
+
+```
+Usage: gws drive update-permission [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--permission-id` | string | | Yes | Permission ID |
+| `--role` | string | | Yes | New role |
+
+---
+
+## gws drive comment
+
+Gets a specific comment on a file.
+
+```
+Usage: gws drive comment [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--comment-id` | string | | Yes | Comment ID |
+
+---
+
+## gws drive add-comment
+
+Adds a comment to a file.
+
+```
+Usage: gws drive add-comment [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--content` | string | | Yes | Comment content |
+
+---
+
+## gws drive delete-comment
+
+Deletes a comment from a file.
+
+```
+Usage: gws drive delete-comment [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--comment-id` | string | | Yes | Comment ID |
+
+---
+
+## gws drive replies
+
+Lists all replies to a comment.
+
+```
+Usage: gws drive replies [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--comment-id` | string | | Yes | Comment ID |
+
+---
+
+## gws drive reply
+
+Creates a reply to a comment.
+
+```
+Usage: gws drive reply [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--comment-id` | string | | Yes | Comment ID |
+| `--content` | string | | Yes | Reply content |
+
+---
+
+## gws drive get-reply
+
+Gets a specific reply.
+
+```
+Usage: gws drive get-reply [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--comment-id` | string | | Yes | Comment ID |
+| `--reply-id` | string | | Yes | Reply ID |
+
+---
+
+## gws drive delete-reply
+
+Deletes a reply.
+
+```
+Usage: gws drive delete-reply [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--comment-id` | string | | Yes | Comment ID |
+| `--reply-id` | string | | Yes | Reply ID |
+
+---
+
+## gws drive revisions
+
+Lists all revisions of a file.
+
+```
+Usage: gws drive revisions [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+
+---
+
+## gws drive revision
+
+Gets details of a specific revision.
+
+```
+Usage: gws drive revision [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--revision-id` | string | | Yes | Revision ID |
+
+---
+
+## gws drive delete-revision
+
+Deletes a specific revision.
+
+```
+Usage: gws drive delete-revision [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--revision-id` | string | | Yes | Revision ID |
+
+---
+
+## gws drive shared-drives
+
+Lists all shared drives.
+
+```
+Usage: gws drive shared-drives [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--max` | int | 100 | Maximum number of shared drives |
+| `--query` | string | | Search query |
+
+---
+
+## gws drive shared-drive
+
+Gets information about a shared drive.
+
+```
+Usage: gws drive shared-drive [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Shared drive ID |
+
+---
+
+## gws drive create-drive
+
+Creates a new shared drive.
+
+```
+Usage: gws drive create-drive [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--name` | string | | Yes | Shared drive name |
+
+---
+
+## gws drive delete-drive
+
+Deletes a shared drive.
+
+```
+Usage: gws drive delete-drive [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Shared drive ID |
+
+---
+
+## gws drive update-drive
+
+Updates a shared drive.
+
+```
+Usage: gws drive update-drive [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--id` | string | | Yes | Shared drive ID |
+| `--name` | string | | No | New name for the shared drive |
