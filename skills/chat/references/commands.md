@@ -233,9 +233,9 @@ At least one of `--display-name` or `--description` must be provided.
 
 ---
 
-## gws chat search-spaces
+## gws chat search-spaces (admin only)
 
-Searches for Chat spaces using a query.
+Searches for Chat spaces using a query. Requires Workspace admin privileges and `chat.admin.spaces` scope. Not available with regular user OAuth.
 
 ```
 Usage: gws chat search-spaces [flags]

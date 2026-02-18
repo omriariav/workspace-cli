@@ -44,7 +44,7 @@ For initial setup, see the `gws-auth` skill.
 | Create a space | `gws chat create-space --display-name "Team" --type SPACE` |
 | Delete a space | `gws chat delete-space <space-id>` |
 | Update a space | `gws chat update-space <space-id> --display-name "New Name"` |
-| Search spaces | `gws chat search-spaces --query "Engineering"` |
+| Search spaces (admin only) | `gws chat search-spaces --query "Engineering"` |
 | Find DM with user | `gws chat find-dm --user users/123` |
 | Create space + members | `gws chat setup-space --display-name "Team" --members "users/1,users/2"` |
 | **Messages** | |
@@ -216,7 +216,9 @@ gws chat update-space <space> [flags]
 - `--display-name string` — New display name
 - `--description string` — New description
 
-### search-spaces — Search for spaces
+### search-spaces — Search for spaces (admin only)
+
+> Requires Workspace admin privileges and `chat.admin.spaces` scope. Not available with regular user OAuth.
 
 ```bash
 gws chat search-spaces --query "Engineering" [flags]
