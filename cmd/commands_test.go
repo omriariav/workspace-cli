@@ -202,14 +202,33 @@ func TestGmailSendCommand_Flags(t *testing.T) {
 func TestCalendarCommands(t *testing.T) {
 	tests := []struct {
 		name string
-		use  string
 	}{
-		{"list", "list"},
-		{"events", "events"},
-		{"create", "create"},
-		{"update", "update <event-id>"},
-		{"delete", "delete <event-id>"},
-		{"rsvp", "rsvp <event-id>"},
+		{"list"},
+		{"events"},
+		{"create"},
+		{"update"},
+		{"delete"},
+		{"rsvp"},
+		{"get"},
+		{"quick-add"},
+		{"instances"},
+		{"move"},
+		{"get-calendar"},
+		{"create-calendar"},
+		{"update-calendar"},
+		{"delete-calendar"},
+		{"clear"},
+		{"subscribe"},
+		{"unsubscribe"},
+		{"calendar-info"},
+		{"update-subscription"},
+		{"acl"},
+		{"share"},
+		{"unshare"},
+		{"update-acl"},
+		{"freebusy"},
+		{"colors"},
+		{"settings"},
 	}
 
 	for _, tt := range tests {
