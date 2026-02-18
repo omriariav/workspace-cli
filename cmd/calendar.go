@@ -221,7 +221,7 @@ var calendarUpdateSubscriptionCmd = &cobra.Command{
 	Long: `Updates subscription settings for a calendar in your list (color, hidden, summary override).
 
 Examples:
-  gws calendar update-subscription --id cal123 --color "#0000ff"
+  gws calendar update-subscription --id cal123 --color-id 7
   gws calendar update-subscription --id cal123 --hidden
   gws calendar update-subscription --id cal123 --summary-override "My Custom Name"`,
 	RunE: runCalendarUpdateSubscription,
@@ -443,7 +443,7 @@ func init() {
 
 	// Update-subscription flags
 	calendarUpdateSubscriptionCmd.Flags().String("id", "", "Calendar ID (required)")
-	calendarUpdateSubscriptionCmd.Flags().String("color", "", "Calendar color (hex, e.g. #0000ff)")
+	calendarUpdateSubscriptionCmd.Flags().String("color-id", "", "Color ID (use 'gws calendar colors' to list valid IDs)")
 	calendarUpdateSubscriptionCmd.Flags().Bool("hidden", false, "Hide calendar from the list")
 	calendarUpdateSubscriptionCmd.Flags().String("summary-override", "", "Custom display name")
 	calendarUpdateSubscriptionCmd.MarkFlagRequired("id")
@@ -1336,13 +1336,16 @@ func runCalendarUpdateSubscription(cmd *cobra.Command, args []string) error {
 	calID, _ := cmd.Flags().GetString("id")
 
 	patch := &calendar.CalendarListEntry{}
-	if cmd.Flags().Changed("color") {
-		color, _ := cmd.Flags().GetString("color")
-		patch.ColorId = color
+	if cmd.Flags().Changed("color-id") {
+		colorID, _ := cmd.Flags().GetString("color-id")
+		patch.ColorId = colorID
 	}
 	if cmd.Flags().Changed("hidden") {
 		hidden, _ := cmd.Flags().GetBool("hidden")
 		patch.Hidden = hidden
+		if !hidden {
+			patch.ForceSendFields = append(patch.ForceSendFields, "Hidden")
+		}
 	}
 	if cmd.Flags().Changed("summary-override") {
 		override, _ := cmd.Flags().GetString("summary-override")

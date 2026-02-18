@@ -1208,7 +1208,7 @@ func TestCalendarCalendarInfoCommand_Flags(t *testing.T) {
 
 func TestCalendarUpdateSubscriptionCommand_Flags(t *testing.T) {
 	cmd := calendarUpdateSubscriptionCmd
-	flags := []string{"id", "color", "hidden", "summary-override"}
+	flags := []string{"id", "color-id", "hidden", "summary-override"}
 	for _, name := range flags {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("expected --%s flag to exist", name)

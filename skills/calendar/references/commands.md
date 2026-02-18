@@ -384,7 +384,7 @@ Usage: gws calendar update-subscription [flags]
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
 | `--id` | string | | Yes | Calendar ID |
-| `--color` | string | | No | Calendar color (hex, e.g. `#0000ff`) |
+| `--color-id` | string | | No | Color ID (use `gws calendar colors` to list valid IDs) |
 | `--hidden` | bool | false | No | Hide calendar from the list |
 | `--summary-override` | string | | No | Custom display name |
 

@@ -64,7 +64,7 @@ For initial setup, see the `gws-auth` skill.
 | Subscribe to calendar | `gws calendar subscribe --id <cal-id>` |
 | Unsubscribe | `gws calendar unsubscribe --id <cal-id>` |
 | Get subscription info | `gws calendar calendar-info --id <cal-id>` |
-| Update subscription | `gws calendar update-subscription --id <cal-id> --color "#0000ff"` |
+| Update subscription | `gws calendar update-subscription --id <cal-id> --color-id 7` |
 
 ### Access Control (ACL)
 
@@ -252,7 +252,7 @@ Returns: `id`, `summary`, `primary`, `description`, `timezone`, `color_id`, `bac
 ### update-subscription -- Update subscription settings
 
 ```bash
-gws calendar update-subscription --id <cal-id> [--color <hex>] [--hidden] [--summary-override <name>]
+gws calendar update-subscription --id <cal-id> [--color-id <id>] [--hidden] [--summary-override <name>]
 ```
 
 ### acl -- List access control rules
