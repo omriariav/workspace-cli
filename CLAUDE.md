@@ -25,7 +25,7 @@
 | `docs` | read, info, create, append, insert, replace, delete, add-table, format, set-paragraph-style, add-list, remove-list |
 | `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze |
 | `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides |
-| `chat` | list, messages, members, send, get, update, delete, reactions, react, unreact |
+| `chat` | list, messages, members, send, get, update, delete, reactions, react, unreact, get-space, create-space, delete-space, update-space, search-spaces, find-dm, setup-space, get-member, add-member, remove-member, update-member, read-state, mark-read, thread-read-state, attachment, upload, download, events, event |
 | `contacts` | list, search, get, create, delete |
 | `forms` | info, responses |
 | `search` | web search (needs API key) |
@@ -46,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.19.0** - Chat API full parameter exposure: filter/order/pagination on list/messages/members, new get/update/delete/reactions/react/unreact commands.
+**v1.20.0** - Full Chat API parity: spaces CRUD, member management, read state, attachments, media upload/download, space events (19 new commands).
 
 ## Roadmap
 

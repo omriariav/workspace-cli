@@ -13,7 +13,7 @@ var ServiceScopes = map[string][]string{
 	"sheets":   {"spreadsheets"},
 	"slides":   {"presentations.readonly", "presentations"},
 	"tasks":    {"tasks.readonly", "tasks"},
-	"chat":     {"chat.spaces.readonly", "chat.messages", "chat.messages.create", "chat.memberships.readonly", "chat.messages.reactions", "chat.messages.reactions.create"},
+	"chat":     {"chat.spaces.readonly", "chat.messages", "chat.messages.create", "chat.memberships.readonly", "chat.messages.reactions", "chat.messages.reactions.create", "chat.users.readstate", "chat.users.readstate.readonly", "chat.spaces", "chat.memberships"},
 	"forms":    {"forms.responses.readonly"},
 	"contacts": {"contacts.readonly", "contacts"},
 	"userinfo": {"userinfo.email"},

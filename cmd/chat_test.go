@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"google.golang.org/api/chat/v1"
@@ -1125,5 +1127,1175 @@ func TestEnsureSpaceName(t *testing.T) {
 				t.Errorf("ensureSpaceName(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
+	}
+}
+
+// --- Helper tests ---
+
+func TestEnsureReadStateName(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"AAAA", "users/me/spaces/AAAA/spaceReadState"},
+		{"spaces/AAAA", "users/me/spaces/AAAA/spaceReadState"},
+		{"users/me/spaces/AAAA/spaceReadState", "users/me/spaces/AAAA/spaceReadState"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := ensureReadStateName(tt.input)
+			if result != tt.expected {
+				t.Errorf("ensureReadStateName(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// --- Spaces CRUD flag tests ---
+
+func TestChatGetSpaceCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "get-space")
+	if cmd == nil {
+		t.Fatal("chat get-space command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+	if cmd.Use != "get-space <space>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+}
+
+func TestChatCreateSpaceCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "create-space")
+	if cmd == nil {
+		t.Fatal("chat create-space command not found")
+	}
+	if cmd.Flags().Lookup("display-name") == nil {
+		t.Error("expected --display-name flag")
+	}
+	typeFlag := cmd.Flags().Lookup("type")
+	if typeFlag == nil {
+		t.Error("expected --type flag")
+	} else if typeFlag.DefValue != "SPACE" {
+		t.Errorf("expected --type default 'SPACE', got '%s'", typeFlag.DefValue)
+	}
+	if cmd.Flags().Lookup("description") == nil {
+		t.Error("expected --description flag")
+	}
+}
+
+func TestChatDeleteSpaceCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "delete-space")
+	if cmd == nil {
+		t.Fatal("chat delete-space command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestChatUpdateSpaceCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "update-space")
+	if cmd == nil {
+		t.Fatal("chat update-space command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+	if cmd.Flags().Lookup("display-name") == nil {
+		t.Error("expected --display-name flag")
+	}
+	if cmd.Flags().Lookup("description") == nil {
+		t.Error("expected --description flag")
+	}
+}
+
+func TestChatSearchSpacesCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "search-spaces")
+	if cmd == nil {
+		t.Fatal("chat search-spaces command not found")
+	}
+	if cmd.Flags().Lookup("query") == nil {
+		t.Error("expected --query flag")
+	}
+	pageSizeFlag := cmd.Flags().Lookup("page-size")
+	if pageSizeFlag == nil {
+		t.Error("expected --page-size flag")
+	} else if pageSizeFlag.DefValue != "100" {
+		t.Errorf("expected --page-size default '100', got '%s'", pageSizeFlag.DefValue)
+	}
+}
+
+func TestChatFindDmCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "find-dm")
+	if cmd == nil {
+		t.Fatal("chat find-dm command not found")
+	}
+	if cmd.Flags().Lookup("user") == nil {
+		t.Error("expected --user flag")
+	}
+}
+
+func TestChatSetupSpaceCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "setup-space")
+	if cmd == nil {
+		t.Fatal("chat setup-space command not found")
+	}
+	if cmd.Flags().Lookup("display-name") == nil {
+		t.Error("expected --display-name flag")
+	}
+	if cmd.Flags().Lookup("members") == nil {
+		t.Error("expected --members flag")
+	}
+}
+
+// --- Member management flag tests ---
+
+func TestChatGetMemberCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "get-member")
+	if cmd == nil {
+		t.Fatal("chat get-member command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestChatAddMemberCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "add-member")
+	if cmd == nil {
+		t.Fatal("chat add-member command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+	if cmd.Flags().Lookup("user") == nil {
+		t.Error("expected --user flag")
+	}
+	roleFlag := cmd.Flags().Lookup("role")
+	if roleFlag == nil {
+		t.Error("expected --role flag")
+	} else if roleFlag.DefValue != "ROLE_MEMBER" {
+		t.Errorf("expected --role default 'ROLE_MEMBER', got '%s'", roleFlag.DefValue)
+	}
+}
+
+func TestChatRemoveMemberCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "remove-member")
+	if cmd == nil {
+		t.Fatal("chat remove-member command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestChatUpdateMemberCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "update-member")
+	if cmd == nil {
+		t.Fatal("chat update-member command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+	if cmd.Flags().Lookup("role") == nil {
+		t.Error("expected --role flag")
+	}
+}
+
+// --- Read state flag tests ---
+
+func TestChatReadStateCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "read-state")
+	if cmd == nil {
+		t.Fatal("chat read-state command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestChatMarkReadCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "mark-read")
+	if cmd == nil {
+		t.Fatal("chat mark-read command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+	if cmd.Flags().Lookup("time") == nil {
+		t.Error("expected --time flag")
+	}
+}
+
+func TestChatThreadReadStateCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "thread-read-state")
+	if cmd == nil {
+		t.Fatal("chat thread-read-state command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// --- Attachment/Media/Events flag tests ---
+
+func TestChatAttachmentCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "attachment")
+	if cmd == nil {
+		t.Fatal("chat attachment command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestChatUploadCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "upload")
+	if cmd == nil {
+		t.Fatal("chat upload command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+	if cmd.Flags().Lookup("file") == nil {
+		t.Error("expected --file flag")
+	}
+}
+
+func TestChatDownloadCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "download")
+	if cmd == nil {
+		t.Fatal("chat download command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+	if cmd.Flags().Lookup("output") == nil {
+		t.Error("expected --output flag")
+	}
+}
+
+func TestChatEventsCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "events")
+	if cmd == nil {
+		t.Fatal("chat events command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+	if cmd.Flags().Lookup("filter") == nil {
+		t.Error("expected --filter flag")
+	}
+	pageSizeFlag := cmd.Flags().Lookup("page-size")
+	if pageSizeFlag == nil {
+		t.Error("expected --page-size flag")
+	} else if pageSizeFlag.DefValue != "100" {
+		t.Errorf("expected --page-size default '100', got '%s'", pageSizeFlag.DefValue)
+	}
+}
+
+func TestChatEventCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "event")
+	if cmd == nil {
+		t.Fatal("chat event command not found")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// --- Spaces CRUD mock server tests ---
+
+func TestChatGetSpace_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			resp := map[string]interface{}{
+				"name":        "spaces/AAAA",
+				"displayName": "General",
+				"spaceType":   "SPACE",
+				"createTime":  "2025-01-01T00:00:00Z",
+				"spaceDetails": map[string]interface{}{
+					"description": "General discussion",
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	space, err := svc.Spaces.Get("spaces/AAAA").Do()
+	if err != nil {
+		t.Fatalf("failed to get space: %v", err)
+	}
+
+	if space.Name != "spaces/AAAA" {
+		t.Errorf("expected name 'spaces/AAAA', got '%s'", space.Name)
+	}
+	if space.DisplayName != "General" {
+		t.Errorf("expected displayName 'General', got '%s'", space.DisplayName)
+	}
+	if space.SpaceType != "SPACE" {
+		t.Errorf("expected spaceType 'SPACE', got '%s'", space.SpaceType)
+	}
+	if space.SpaceDetails == nil || space.SpaceDetails.Description != "General discussion" {
+		t.Errorf("expected description 'General discussion'")
+	}
+}
+
+func TestChatCreateSpace_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+
+			var space chat.Space
+			json.NewDecoder(r.Body).Decode(&space)
+
+			if space.DisplayName != "New Space" {
+				t.Errorf("expected displayName 'New Space', got '%s'", space.DisplayName)
+			}
+			if space.SpaceType != "SPACE" {
+				t.Errorf("expected spaceType 'SPACE', got '%s'", space.SpaceType)
+			}
+
+			resp := &chat.Space{
+				Name:        "spaces/NEWSPACE",
+				DisplayName: space.DisplayName,
+				SpaceType:   space.SpaceType,
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	space := &chat.Space{DisplayName: "New Space", SpaceType: "SPACE"}
+	created, err := svc.Spaces.Create(space).Do()
+	if err != nil {
+		t.Fatalf("failed to create space: %v", err)
+	}
+
+	if created.Name != "spaces/NEWSPACE" {
+		t.Errorf("expected name 'spaces/NEWSPACE', got '%s'", created.Name)
+	}
+}
+
+func TestChatDeleteSpace_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "DELETE" {
+				t.Errorf("expected DELETE, got %s", r.Method)
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{})
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	_, err = svc.Spaces.Delete("spaces/AAAA").Do()
+	if err != nil {
+		t.Fatalf("failed to delete space: %v", err)
+	}
+}
+
+func TestChatUpdateSpace_MockServer(t *testing.T) {
+	var capturedUpdateMask string
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "PATCH" {
+				t.Errorf("expected PATCH, got %s", r.Method)
+			}
+			capturedUpdateMask = r.URL.Query().Get("updateMask")
+
+			var space chat.Space
+			json.NewDecoder(r.Body).Decode(&space)
+
+			resp := &chat.Space{
+				Name:        "spaces/AAAA",
+				DisplayName: space.DisplayName,
+				SpaceType:   "SPACE",
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	space := &chat.Space{DisplayName: "Renamed"}
+	updated, err := svc.Spaces.Patch("spaces/AAAA", space).UpdateMask("display_name").Do()
+	if err != nil {
+		t.Fatalf("failed to update space: %v", err)
+	}
+
+	if capturedUpdateMask != "display_name" {
+		t.Errorf("expected updateMask 'display_name', got '%s'", capturedUpdateMask)
+	}
+	if updated.DisplayName != "Renamed" {
+		t.Errorf("expected displayName 'Renamed', got '%s'", updated.DisplayName)
+	}
+}
+
+func TestChatSearchSpaces_MockServer(t *testing.T) {
+	var capturedQuery string
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces:search": func(w http.ResponseWriter, r *http.Request) {
+			capturedQuery = r.URL.Query().Get("query")
+			resp := map[string]interface{}{
+				"spaces": []map[string]interface{}{
+					{"name": "spaces/AAAA", "displayName": "Test Space", "spaceType": "SPACE"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	resp, err := svc.Spaces.Search().Query("Test").PageSize(10).Do()
+	if err != nil {
+		t.Fatalf("failed to search spaces: %v", err)
+	}
+
+	if capturedQuery != "Test" {
+		t.Errorf("expected query 'Test', got '%s'", capturedQuery)
+	}
+	if len(resp.Spaces) != 1 {
+		t.Fatalf("expected 1 space, got %d", len(resp.Spaces))
+	}
+	if resp.Spaces[0].DisplayName != "Test Space" {
+		t.Errorf("expected 'Test Space', got '%s'", resp.Spaces[0].DisplayName)
+	}
+}
+
+func TestChatSearchSpaces_Pagination(t *testing.T) {
+	pagesFetched := 0
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces:search": func(w http.ResponseWriter, r *http.Request) {
+			pagesFetched++
+			pageToken := r.URL.Query().Get("pageToken")
+
+			if pageToken == "" {
+				resp := map[string]interface{}{
+					"spaces":        []map[string]interface{}{{"name": "spaces/AAAA", "displayName": "Space 1", "spaceType": "SPACE"}},
+					"nextPageToken": "page2",
+				}
+				json.NewEncoder(w).Encode(resp)
+				return
+			}
+
+			resp := map[string]interface{}{
+				"spaces": []map[string]interface{}{{"name": "spaces/BBBB", "displayName": "Space 2", "spaceType": "SPACE"}},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	var allSpaces []*chat.Space
+	var pageToken string
+	for {
+		call := svc.Spaces.Search().Query("test").PageSize(10)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+		resp, err := call.Do()
+		if err != nil {
+			t.Fatalf("failed to search spaces: %v", err)
+		}
+		allSpaces = append(allSpaces, resp.Spaces...)
+		if resp.NextPageToken == "" {
+			break
+		}
+		pageToken = resp.NextPageToken
+	}
+
+	if pagesFetched != 2 {
+		t.Errorf("expected 2 pages fetched, got %d", pagesFetched)
+	}
+	if len(allSpaces) != 2 {
+		t.Errorf("expected 2 total spaces, got %d", len(allSpaces))
+	}
+}
+
+func TestChatFindDm_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces:findDirectMessage": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			resp := map[string]interface{}{
+				"name":      "spaces/DM123",
+				"spaceType": "DIRECT_MESSAGE",
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	space, err := svc.Spaces.FindDirectMessage().Name("users/123").Do()
+	if err != nil {
+		t.Fatalf("failed to find DM: %v", err)
+	}
+
+	if space.Name != "spaces/DM123" {
+		t.Errorf("expected name 'spaces/DM123', got '%s'", space.Name)
+	}
+}
+
+func TestChatSetupSpace_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces:setup": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+
+			var req chat.SetUpSpaceRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if req.Space == nil || req.Space.DisplayName != "Team Space" {
+				t.Errorf("expected displayName 'Team Space'")
+			}
+			if len(req.Memberships) != 2 {
+				t.Errorf("expected 2 memberships, got %d", len(req.Memberships))
+			}
+
+			resp := &chat.Space{
+				Name:        "spaces/SETUP123",
+				DisplayName: req.Space.DisplayName,
+				SpaceType:   "SPACE",
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	req := &chat.SetUpSpaceRequest{
+		Space: &chat.Space{DisplayName: "Team Space", SpaceType: "SPACE"},
+		Memberships: []*chat.Membership{
+			{Member: &chat.User{Name: "users/111", Type: "HUMAN"}},
+			{Member: &chat.User{Name: "users/222", Type: "HUMAN"}},
+		},
+	}
+
+	space, err := svc.Spaces.Setup(req).Do()
+	if err != nil {
+		t.Fatalf("failed to setup space: %v", err)
+	}
+
+	if space.Name != "spaces/SETUP123" {
+		t.Errorf("expected name 'spaces/SETUP123', got '%s'", space.Name)
+	}
+}
+
+// --- Member management mock server tests ---
+
+func TestChatGetMember_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/members/111": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			resp := map[string]interface{}{
+				"name":       "spaces/AAAA/members/111",
+				"role":       "ROLE_MANAGER",
+				"createTime": "2025-01-01T00:00:00Z",
+				"member":     map[string]interface{}{"displayName": "Alice", "name": "users/111", "type": "HUMAN"},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	member, err := svc.Spaces.Members.Get("spaces/AAAA/members/111").Do()
+	if err != nil {
+		t.Fatalf("failed to get member: %v", err)
+	}
+
+	if member.Name != "spaces/AAAA/members/111" {
+		t.Errorf("expected name, got '%s'", member.Name)
+	}
+	if member.Role != "ROLE_MANAGER" {
+		t.Errorf("expected role 'ROLE_MANAGER', got '%s'", member.Role)
+	}
+	if member.Member.DisplayName != "Alice" {
+		t.Errorf("expected displayName 'Alice', got '%s'", member.Member.DisplayName)
+	}
+}
+
+func TestChatAddMember_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/members": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+
+			var membership chat.Membership
+			json.NewDecoder(r.Body).Decode(&membership)
+
+			if membership.Member == nil || membership.Member.Name != "users/333" {
+				t.Errorf("expected user 'users/333'")
+			}
+			if membership.Role != "ROLE_MEMBER" {
+				t.Errorf("expected role 'ROLE_MEMBER', got '%s'", membership.Role)
+			}
+
+			resp := &chat.Membership{
+				Name:   "spaces/AAAA/members/333",
+				Role:   membership.Role,
+				Member: membership.Member,
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	membership := &chat.Membership{
+		Member: &chat.User{Name: "users/333", Type: "HUMAN"},
+		Role:   "ROLE_MEMBER",
+	}
+
+	created, err := svc.Spaces.Members.Create("spaces/AAAA", membership).Do()
+	if err != nil {
+		t.Fatalf("failed to add member: %v", err)
+	}
+
+	if created.Name != "spaces/AAAA/members/333" {
+		t.Errorf("expected name 'spaces/AAAA/members/333', got '%s'", created.Name)
+	}
+}
+
+func TestChatRemoveMember_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/members/111": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "DELETE" {
+				t.Errorf("expected DELETE, got %s", r.Method)
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{})
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	_, err = svc.Spaces.Members.Delete("spaces/AAAA/members/111").Do()
+	if err != nil {
+		t.Fatalf("failed to remove member: %v", err)
+	}
+}
+
+func TestChatUpdateMember_MockServer(t *testing.T) {
+	var capturedUpdateMask string
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/members/111": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "PATCH" {
+				t.Errorf("expected PATCH, got %s", r.Method)
+			}
+			capturedUpdateMask = r.URL.Query().Get("updateMask")
+
+			var membership chat.Membership
+			json.NewDecoder(r.Body).Decode(&membership)
+
+			resp := &chat.Membership{
+				Name: "spaces/AAAA/members/111",
+				Role: membership.Role,
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	membership := &chat.Membership{Role: "ROLE_MANAGER"}
+	updated, err := svc.Spaces.Members.Patch("spaces/AAAA/members/111", membership).UpdateMask("role").Do()
+	if err != nil {
+		t.Fatalf("failed to update member: %v", err)
+	}
+
+	if capturedUpdateMask != "role" {
+		t.Errorf("expected updateMask 'role', got '%s'", capturedUpdateMask)
+	}
+	if updated.Role != "ROLE_MANAGER" {
+		t.Errorf("expected role 'ROLE_MANAGER', got '%s'", updated.Role)
+	}
+}
+
+// --- Read state mock server tests ---
+
+func TestChatReadState_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/users/me/spaces/AAAA/spaceReadState": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			resp := map[string]interface{}{
+				"name":         "users/me/spaces/AAAA/spaceReadState",
+				"lastReadTime": "2026-02-18T10:00:00Z",
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	state, err := svc.Users.Spaces.GetSpaceReadState("users/me/spaces/AAAA/spaceReadState").Do()
+	if err != nil {
+		t.Fatalf("failed to get read state: %v", err)
+	}
+
+	if state.LastReadTime != "2026-02-18T10:00:00Z" {
+		t.Errorf("expected lastReadTime '2026-02-18T10:00:00Z', got '%s'", state.LastReadTime)
+	}
+}
+
+func TestChatMarkRead_MockServer(t *testing.T) {
+	var capturedUpdateMask string
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/users/me/spaces/AAAA/spaceReadState": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "PATCH" {
+				t.Errorf("expected PATCH, got %s", r.Method)
+			}
+			capturedUpdateMask = r.URL.Query().Get("updateMask")
+
+			var state chat.SpaceReadState
+			json.NewDecoder(r.Body).Decode(&state)
+
+			resp := &chat.SpaceReadState{
+				Name:         "users/me/spaces/AAAA/spaceReadState",
+				LastReadTime: state.LastReadTime,
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	state := &chat.SpaceReadState{LastReadTime: "2026-02-18T12:00:00Z"}
+	updated, err := svc.Users.Spaces.UpdateSpaceReadState("users/me/spaces/AAAA/spaceReadState", state).UpdateMask("last_read_time").Do()
+	if err != nil {
+		t.Fatalf("failed to mark read: %v", err)
+	}
+
+	if capturedUpdateMask != "last_read_time" {
+		t.Errorf("expected updateMask 'last_read_time', got '%s'", capturedUpdateMask)
+	}
+	if updated.LastReadTime != "2026-02-18T12:00:00Z" {
+		t.Errorf("expected lastReadTime '2026-02-18T12:00:00Z', got '%s'", updated.LastReadTime)
+	}
+}
+
+func TestChatThreadReadState_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/users/me/spaces/AAAA/threads/thread1/threadReadState": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			resp := map[string]interface{}{
+				"name":         "users/me/spaces/AAAA/threads/thread1/threadReadState",
+				"lastReadTime": "2026-02-18T09:00:00Z",
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	state, err := svc.Users.Spaces.Threads.GetThreadReadState("users/me/spaces/AAAA/threads/thread1/threadReadState").Do()
+	if err != nil {
+		t.Fatalf("failed to get thread read state: %v", err)
+	}
+
+	if state.LastReadTime != "2026-02-18T09:00:00Z" {
+		t.Errorf("expected lastReadTime '2026-02-18T09:00:00Z', got '%s'", state.LastReadTime)
+	}
+}
+
+// --- Attachment mock server test ---
+
+func TestChatAttachment_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/messages/msg1/attachments/att1": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			resp := map[string]interface{}{
+				"name":         "spaces/AAAA/messages/msg1/attachments/att1",
+				"contentName":  "document.pdf",
+				"contentType":  "application/pdf",
+				"source":       "UPLOADED_CONTENT",
+				"downloadUri":  "https://example.com/download",
+				"thumbnailUri": "https://example.com/thumb",
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	att, err := svc.Spaces.Messages.Attachments.Get("spaces/AAAA/messages/msg1/attachments/att1").Do()
+	if err != nil {
+		t.Fatalf("failed to get attachment: %v", err)
+	}
+
+	if att.Name != "spaces/AAAA/messages/msg1/attachments/att1" {
+		t.Errorf("expected name, got '%s'", att.Name)
+	}
+	if att.ContentName != "document.pdf" {
+		t.Errorf("expected contentName 'document.pdf', got '%s'", att.ContentName)
+	}
+	if att.ContentType != "application/pdf" {
+		t.Errorf("expected contentType 'application/pdf', got '%s'", att.ContentType)
+	}
+	if att.Source != "UPLOADED_CONTENT" {
+		t.Errorf("expected source 'UPLOADED_CONTENT', got '%s'", att.Source)
+	}
+	if att.DownloadUri != "https://example.com/download" {
+		t.Errorf("expected downloadUri, got '%s'", att.DownloadUri)
+	}
+	if att.ThumbnailUri != "https://example.com/thumb" {
+		t.Errorf("expected thumbnailUri, got '%s'", att.ThumbnailUri)
+	}
+}
+
+// --- Media mock server tests ---
+
+func TestChatUpload_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/upload/v1/spaces/AAAA/attachments:upload": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+			resp := map[string]interface{}{
+				"attachmentDataRef": map[string]interface{}{
+					"resourceName": "spaces/AAAA/attachments/data123",
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	// Create a temp file for upload
+	tmpFile, err := os.CreateTemp("", "upload-test-*.txt")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.WriteString("test content")
+	tmpFile.Close()
+
+	file, err := os.Open(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("failed to open temp file: %v", err)
+	}
+	defer file.Close()
+
+	req := &chat.UploadAttachmentRequest{Filename: "test.txt"}
+	resp, err := svc.Media.Upload("spaces/AAAA", req).Media(file).Do()
+	if err != nil {
+		t.Fatalf("failed to upload: %v", err)
+	}
+
+	if resp.AttachmentDataRef == nil || resp.AttachmentDataRef.ResourceName != "spaces/AAAA/attachments/data123" {
+		t.Errorf("expected attachment data ref resource name")
+	}
+}
+
+func TestChatDownload_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/media/spaces/AAAA/attachments/data123": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write([]byte("downloaded file content"))
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	resp, err := svc.Media.Download("spaces/AAAA/attachments/data123").Download()
+	if err != nil {
+		t.Fatalf("failed to download: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read body: %v", err)
+	}
+
+	if string(body) != "downloaded file content" {
+		t.Errorf("expected 'downloaded file content', got '%s'", string(body))
+	}
+}
+
+// --- Space events mock server tests ---
+
+func TestChatEvents_MockServer(t *testing.T) {
+	var capturedFilter string
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/spaceEvents": func(w http.ResponseWriter, r *http.Request) {
+			capturedFilter = r.URL.Query().Get("filter")
+			resp := map[string]interface{}{
+				"spaceEvents": []map[string]interface{}{
+					{
+						"name":      "spaces/AAAA/spaceEvents/evt1",
+						"eventType": "google.workspace.chat.message.v1.created",
+						"eventTime": "2026-02-18T10:00:00Z",
+					},
+					{
+						"name":      "spaces/AAAA/spaceEvents/evt2",
+						"eventType": "google.workspace.chat.message.v1.created",
+						"eventTime": "2026-02-18T10:05:00Z",
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	filterStr := `event_types:"google.workspace.chat.message.v1.created"`
+	resp, err := svc.Spaces.SpaceEvents.List("spaces/AAAA").Filter(filterStr).PageSize(100).Do()
+	if err != nil {
+		t.Fatalf("failed to list events: %v", err)
+	}
+
+	if capturedFilter != filterStr {
+		t.Errorf("expected filter '%s', got '%s'", filterStr, capturedFilter)
+	}
+	if len(resp.SpaceEvents) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(resp.SpaceEvents))
+	}
+	if resp.SpaceEvents[0].EventType != "google.workspace.chat.message.v1.created" {
+		t.Errorf("expected event type, got '%s'", resp.SpaceEvents[0].EventType)
+	}
+}
+
+func TestChatEvents_Pagination(t *testing.T) {
+	pagesFetched := 0
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/spaceEvents": func(w http.ResponseWriter, r *http.Request) {
+			pagesFetched++
+			pageToken := r.URL.Query().Get("pageToken")
+
+			if pageToken == "" {
+				resp := map[string]interface{}{
+					"spaceEvents": []map[string]interface{}{
+						{"name": "spaces/AAAA/spaceEvents/evt1", "eventType": "google.workspace.chat.message.v1.created", "eventTime": "2026-02-18T10:00:00Z"},
+					},
+					"nextPageToken": "page2",
+				}
+				json.NewEncoder(w).Encode(resp)
+				return
+			}
+
+			resp := map[string]interface{}{
+				"spaceEvents": []map[string]interface{}{
+					{"name": "spaces/AAAA/spaceEvents/evt2", "eventType": "google.workspace.chat.message.v1.created", "eventTime": "2026-02-18T10:05:00Z"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	var allEvents []*chat.SpaceEvent
+	var pageToken string
+	for {
+		call := svc.Spaces.SpaceEvents.List("spaces/AAAA").Filter("event_types:\"test\"").PageSize(10)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+		resp, err := call.Do()
+		if err != nil {
+			t.Fatalf("failed to list events: %v", err)
+		}
+		allEvents = append(allEvents, resp.SpaceEvents...)
+		if resp.NextPageToken == "" {
+			break
+		}
+		pageToken = resp.NextPageToken
+	}
+
+	if pagesFetched != 2 {
+		t.Errorf("expected 2 pages fetched, got %d", pagesFetched)
+	}
+	if len(allEvents) != 2 {
+		t.Errorf("expected 2 total events, got %d", len(allEvents))
+	}
+}
+
+func TestChatEvent_MockServer(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/spaceEvents/evt1": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			resp := map[string]interface{}{
+				"name":      "spaces/AAAA/spaceEvents/evt1",
+				"eventType": "google.workspace.chat.message.v1.created",
+				"eventTime": "2026-02-18T10:00:00Z",
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	event, err := svc.Spaces.SpaceEvents.Get("spaces/AAAA/spaceEvents/evt1").Do()
+	if err != nil {
+		t.Fatalf("failed to get event: %v", err)
+	}
+
+	if event.Name != "spaces/AAAA/spaceEvents/evt1" {
+		t.Errorf("expected name, got '%s'", event.Name)
+	}
+	if event.EventType != "google.workspace.chat.message.v1.created" {
+		t.Errorf("expected event type, got '%s'", event.EventType)
+	}
+	if event.EventTime != "2026-02-18T10:00:00Z" {
+		t.Errorf("expected event time, got '%s'", event.EventTime)
 	}
 }
