@@ -253,8 +253,10 @@ gws tasks list @default --format text    # Human-readable text
 
 - Always use `--format json` (the default) for programmatic parsing
 - Use `gws tasks lists` first to get task list IDs
-- Use `gws tasks list <tasklist-id>` to get individual task IDs for the `update` and `complete` commands
+- Use `gws tasks list <tasklist-id>` to get individual task IDs for `get`, `update`, `delete`, `complete`, and `move` commands
+- Use `gws tasks get` to fetch full task details (notes, due date, parent, completion time)
 - The default task list ID is `@default` — use this when users don't specify a list
 - Due dates accept both RFC3339 (`2024-02-01T00:00:00Z`) and simple date (`2024-02-01`) formats
-- Completed tasks are hidden by default; use `--show-completed` to include them
-- Use `--quiet` on create/update/complete operations to suppress JSON output in scripts
+- Completed tasks are hidden by default; use `--show-completed` to include them, or `clear` to permanently hide them
+- Use `move --destination-list` to transfer tasks between lists, `--parent` to make subtasks, `--previous` to reorder
+- Use `--quiet` on create/update/delete/complete operations to suppress JSON output in scripts
