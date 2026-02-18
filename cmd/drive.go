@@ -333,7 +333,10 @@ var driveChangesCmd = &cobra.Command{
 	Short: "List recent file changes",
 	Long: `Lists recent changes to files in Google Drive.
 
-If no page token is provided, fetches the start page token automatically.`,
+If no --page-token is provided, the current start token is fetched automatically.
+The first call will typically return zero results because the token represents "now";
+save the returned new_start_page_token and pass it in subsequent calls to poll for
+new changes (standard Drive changes polling pattern).`,
 	RunE: runDriveChanges,
 }
 
@@ -1956,6 +1959,8 @@ func runDriveExport(cmd *cobra.Command, args []string) error {
 
 	written, err := io.Copy(outFile, exportResp.Body)
 	if err != nil {
+		outFile.Close()
+		os.Remove(outputPath)
 		return p.PrintError(fmt.Errorf("failed to write file: %w", err))
 	}
 

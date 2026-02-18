@@ -978,9 +978,9 @@ func TestDrivePermissions_MockServer(t *testing.T) {
 						DisplayName:  "Test User",
 					},
 					{
-						Id:     "perm-2",
-						Type:   "anyone",
-						Role:   "reader",
+						Id:   "perm-2",
+						Type: "anyone",
+						Role: "reader",
 					},
 				},
 			}

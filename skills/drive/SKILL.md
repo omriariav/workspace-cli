@@ -238,9 +238,13 @@ Returns user info and storage quota (limit, usage, usage in Drive, usage in tras
 gws drive changes [flags]
 ```
 
+Polling pattern: the first call (without `--page-token`) fetches the current start token
+and typically returns zero results. Save the returned `new_start_page_token` and pass it
+in subsequent calls to detect new changes.
+
 **Flags:**
 - `--max int` — Maximum number of changes (default 100)
-- `--page-token string` — Page token (auto-fetches start token if empty)
+- `--page-token string` — Page token from a previous call (auto-fetches start token if empty)
 
 ### permissions — List permissions
 
