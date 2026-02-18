@@ -272,4 +272,4 @@ No additional flags.
 ### Output Fields (JSON)
 
 - `status` — Always `"cleared"`
-- `list_id` — Task list ID
+- `id` — Task list ID

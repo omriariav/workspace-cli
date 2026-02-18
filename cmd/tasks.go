@@ -414,9 +414,9 @@ func runTasksListInfo(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(map[string]interface{}{
-		"id":      list.Id,
-		"title":   list.Title,
-		"updated": list.Updated,
+		"id":       list.Id,
+		"title":    list.Title,
+		"updated":  list.Updated,
 		"selfLink": list.SelfLink,
 	})
 }
@@ -658,8 +658,8 @@ func runTasksClear(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(map[string]interface{}{
-		"status":  "cleared",
-		"list_id": tasklistID,
+		"status": "cleared",
+		"id":     tasklistID,
 	})
 }
 
