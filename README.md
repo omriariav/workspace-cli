@@ -225,10 +225,16 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 
 | Command | Description |
 |---------|-------------|
-| `gws chat list` | List spaces |
-| `gws chat messages <space>` | List messages in a space |
-| `gws chat members <space>` | List members with display names + emails via People API, cached locally (`--max`) |
+| `gws chat list` | List spaces (`--filter`, `--page-size`) |
+| `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`) |
+| `gws chat members <space>` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`) |
 | `gws chat send` | Send message (`--space`, `--text`) |
+| `gws chat get <message>` | Get a single message |
+| `gws chat update <message>` | Update message text (`--text`) |
+| `gws chat delete <message>` | Delete a message (`--force`) |
+| `gws chat reactions <message>` | List reactions (`--filter`, `--page-size`) |
+| `gws chat react <message>` | Add emoji reaction (`--emoji`) |
+| `gws chat unreact <reaction>` | Remove a reaction |
 
 ### Forms
 

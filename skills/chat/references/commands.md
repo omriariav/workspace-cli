@@ -24,13 +24,16 @@ Google Chat API requires additional setup beyond standard OAuth:
 
 ## gws chat list
 
-Lists all Chat spaces (rooms, DMs, group chats) you have access to.
+Lists all Chat spaces (rooms, DMs, group chats) you have access to. Supports filtering and pagination.
 
 ```
-Usage: gws chat list
+Usage: gws chat list [flags]
 ```
 
-No additional flags.
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--filter` | string | | Filter spaces (e.g. `spaceType = "SPACE"`) |
+| `--page-size` | int | 100 | Number of spaces per page |
 
 ### Output Fields (JSON)
 
@@ -43,7 +46,7 @@ Each space includes:
 
 ## gws chat messages
 
-Lists recent messages in a Chat space.
+Lists recent messages in a Chat space. Supports filtering, ordering, pagination, and showing deleted messages.
 
 ```
 Usage: gws chat messages <space-id> [flags]
@@ -52,6 +55,9 @@ Usage: gws chat messages <space-id> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--max` | int | 25 | Maximum number of messages to return |
+| `--filter` | string | | Filter messages (e.g. `createTime > "2024-01-01T00:00:00Z"`) |
+| `--order-by` | string | | Order messages (e.g. `createTime DESC`) |
+| `--show-deleted` | bool | false | Include deleted messages in results |
 
 The space ID format is `spaces/AAAA1234` (get from `gws chat list`).
 
@@ -68,6 +74,9 @@ Usage: gws chat members <space-id> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--max` | int | 100 | Maximum number of members to return |
+| `--filter` | string | | Filter members (e.g. `member.type = "HUMAN"`) |
+| `--show-groups` | bool | false | Include Google Group memberships |
+| `--show-invited` | bool | false | Include invited memberships |
 
 The space ID format is `spaces/AAAA1234` (get from `gws chat list`).
 
@@ -102,3 +111,100 @@ Usage: gws chat send [flags]
 |------|------|---------|----------|-------------|
 | `--space` | string | | Yes | Space ID or name |
 | `--text` | string | | Yes | Message text |
+
+---
+
+## gws chat get
+
+Retrieves a single message by its resource name.
+
+```
+Usage: gws chat get <message-name>
+```
+
+The message name format is `spaces/AAAA/messages/msg1` (get from `gws chat messages`).
+
+### Output Fields (JSON)
+
+- `name` — Message resource name
+- `text` — Message text content
+- `create_time` — Message creation timestamp
+- `sender` — Sender display name (falls back to resource name)
+- `sender_type` — `HUMAN` or `BOT`
+- `thread` — Thread resource name (if part of a thread)
+
+---
+
+## gws chat update
+
+Updates the text of an existing message.
+
+```
+Usage: gws chat update <message-name> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--text` | string | | Yes | New message text |
+
+---
+
+## gws chat delete
+
+Deletes a message by its resource name.
+
+```
+Usage: gws chat delete <message-name> [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--force` | bool | false | Force delete even if message has replies |
+
+---
+
+## gws chat reactions
+
+Lists all reactions on a message.
+
+```
+Usage: gws chat reactions <message-name> [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--filter` | string | | Filter reactions (e.g. `emoji.unicode = "😀"`) |
+| `--page-size` | int | 25 | Number of reactions per page |
+
+### Output Fields (JSON)
+
+Each reaction includes:
+- `name` — Reaction resource name
+- `emoji` — Emoji unicode character
+- `user` — User display name who reacted
+
+---
+
+## gws chat react
+
+Adds an emoji reaction to a message.
+
+```
+Usage: gws chat react <message-name> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--emoji` | string | | Yes | Emoji unicode character (e.g. `😀`) |
+
+---
+
+## gws chat unreact
+
+Removes a reaction by its resource name.
+
+```
+Usage: gws chat unreact <reaction-name>
+```
+
+The reaction name format is `spaces/AAAA/messages/msg1/reactions/rxn1` (get from `gws chat reactions`).

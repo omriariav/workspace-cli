@@ -396,6 +396,13 @@ func TestChatCommands(t *testing.T) {
 		{"list"},
 		{"messages"},
 		{"send"},
+		{"members"},
+		{"get"},
+		{"update"},
+		{"delete"},
+		{"reactions"},
+		{"react"},
+		{"unreact"},
 	}
 
 	for _, tt := range tests {
