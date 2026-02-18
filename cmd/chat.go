@@ -428,15 +428,7 @@ func runChatList(cmd *cobra.Command, args []string) error {
 		}
 
 		for _, space := range resp.Spaces {
-			spaceInfo := map[string]interface{}{
-				"name":         space.Name,
-				"display_name": space.DisplayName,
-				"type":         space.Type,
-			}
-			if space.SpaceDetails != nil {
-				spaceInfo["description"] = space.SpaceDetails.Description
-			}
-			results = append(results, spaceInfo)
+			results = append(results, mapSpaceToOutput(space))
 		}
 
 		if resp.NextPageToken == "" {
