@@ -242,6 +242,14 @@ func TestTasksCommands(t *testing.T) {
 		{"create"},
 		{"update"},
 		{"complete"},
+		{"list-info"},
+		{"create-list"},
+		{"update-list"},
+		{"delete-list"},
+		{"get"},
+		{"delete"},
+		{"move"},
+		{"clear"},
 	}
 
 	for _, tt := range tests {
