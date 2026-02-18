@@ -123,9 +123,17 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 |---------|-------------|
 | `gws tasks lists` | List task lists |
 | `gws tasks list <id>` | List tasks in a list (`--show-completed`) |
+| `gws tasks list-info <id>` | Get task list details |
 | `gws tasks create` | Create task (`--title`, `--tasklist`, `--due`); accepts YYYY-MM-DD dates |
+| `gws tasks create-list` | Create a task list (`--title`) |
 | `gws tasks update <list> <task>` | Update task (`--title`, `--notes`, `--due`) |
+| `gws tasks update-list <id>` | Update task list title (`--title`) |
+| `gws tasks delete-list <id>` | Delete a task list |
+| `gws tasks get <list> <task>` | Get task details |
+| `gws tasks delete <list> <task>` | Delete a task |
 | `gws tasks complete <list> <task>` | Mark task as done |
+| `gws tasks move <list> <task>` | Move/reorder task (`--parent`, `--previous`, `--destination-list`) |
+| `gws tasks clear <id>` | Clear completed tasks from a list |
 
 ### Drive
 

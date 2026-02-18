@@ -20,7 +20,7 @@
 | `auth` | login, logout, status |
 | `gmail` | list, read, thread, send, reply, labels, label, archive, trash, event-id |
 | `calendar` | list, events, create, update, delete, rsvp |
-| `tasks` | lists, list, create, complete |
+| `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, move, clear |
 | `drive` | list, search, info, download, upload, create-folder, move, delete, comments |
 | `docs` | read, info, create, append, insert, replace, delete, add-table, format, set-paragraph-style, add-list, remove-list |
 | `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze |
@@ -46,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.20.0** - Full Chat API parity: spaces CRUD, member management, read state, attachments, media upload/download, space events (19 new commands).
+**v1.21.0** - Full Tasks API parity: task list CRUD, task get/delete, move/reorder, clear completed (8 new commands).
 
 ## Roadmap
 

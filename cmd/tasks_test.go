@@ -240,6 +240,347 @@ func TestNormalizeDueDate(t *testing.T) {
 	}
 }
 
+// --- Flag tests for new commands ---
+
+func TestTasksListInfoCommand_Flags(t *testing.T) {
+	cmd := tasksListInfoCmd
+	if cmd.Use != "list-info <tasklist-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestTasksCreateListCommand_Flags(t *testing.T) {
+	cmd := tasksCreateListCmd
+	if cmd.Flags().Lookup("title") == nil {
+		t.Error("expected --title flag")
+	}
+}
+
+func TestTasksUpdateListCommand_Flags(t *testing.T) {
+	cmd := tasksUpdateListCmd
+	if cmd.Use != "update-list <tasklist-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Flags().Lookup("title") == nil {
+		t.Error("expected --title flag")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestTasksDeleteListCommand_Flags(t *testing.T) {
+	cmd := tasksDeleteListCmd
+	if cmd.Use != "delete-list <tasklist-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestTasksGetCommand_Flags(t *testing.T) {
+	cmd := tasksGetCmd
+	if cmd.Use != "get <tasklist-id> <task-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestTasksDeleteCommand_Flags(t *testing.T) {
+	cmd := tasksDeleteCmd
+	if cmd.Use != "delete <tasklist-id> <task-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+func TestTasksMoveCommand_Flags(t *testing.T) {
+	cmd := tasksMoveCmd
+	if cmd.Use != "move <tasklist-id> <task-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	flags := []string{"parent", "previous", "destination-list"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestTasksClearCommand_Flags(t *testing.T) {
+	cmd := tasksClearCmd
+	if cmd.Use != "clear <tasklist-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
+// --- Mock server tests for new commands ---
+
+func TestTasksListInfo_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "GET" && r.URL.Path == "/tasks/v1/users/@me/lists/list-123" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":       "list-123",
+				"title":    "My List",
+				"updated":  "2026-02-18T00:00:00Z",
+				"selfLink": "https://www.googleapis.com/tasks/v1/users/@me/lists/list-123",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := tasks.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	list, err := svc.Tasklists.Get("list-123").Do()
+	if err != nil {
+		t.Fatalf("failed to get task list: %v", err)
+	}
+
+	if list.Id != "list-123" {
+		t.Errorf("expected id 'list-123', got '%s'", list.Id)
+	}
+	if list.Title != "My List" {
+		t.Errorf("expected title 'My List', got '%s'", list.Title)
+	}
+}
+
+func TestTasksCreateList_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "POST" && r.URL.Path == "/tasks/v1/users/@me/lists" {
+			var body map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["title"] != "New List" {
+				t.Errorf("expected title 'New List', got '%v'", body["title"])
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":    "new-list-id",
+				"title": body["title"],
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := tasks.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	created, err := svc.Tasklists.Insert(&tasks.TaskList{Title: "New List"}).Do()
+	if err != nil {
+		t.Fatalf("failed to create task list: %v", err)
+	}
+
+	if created.Id != "new-list-id" {
+		t.Errorf("expected id 'new-list-id', got '%s'", created.Id)
+	}
+	if created.Title != "New List" {
+		t.Errorf("expected title 'New List', got '%s'", created.Title)
+	}
+}
+
+func TestTasksUpdateList_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "PATCH" && r.URL.Path == "/tasks/v1/users/@me/lists/list-123" {
+			var body map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["title"] != "Renamed List" {
+				t.Errorf("expected title 'Renamed List', got '%v'", body["title"])
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":    "list-123",
+				"title": body["title"],
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := tasks.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	updated, err := svc.Tasklists.Patch("list-123", &tasks.TaskList{Title: "Renamed List"}).Do()
+	if err != nil {
+		t.Fatalf("failed to update task list: %v", err)
+	}
+
+	if updated.Title != "Renamed List" {
+		t.Errorf("expected title 'Renamed List', got '%s'", updated.Title)
+	}
+}
+
+func TestTasksDeleteList_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" && r.URL.Path == "/tasks/v1/users/@me/lists/list-123" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := tasks.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	err = svc.Tasklists.Delete("list-123").Do()
+	if err != nil {
+		t.Fatalf("expected no error on delete, got: %v", err)
+	}
+}
+
+func TestTasksGet_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "GET" && r.URL.Path == "/tasks/v1/lists/@default/tasks/task-456" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":      "task-456",
+				"title":   "Test Task",
+				"status":  "needsAction",
+				"notes":   "Some notes",
+				"due":     "2026-03-01T00:00:00Z",
+				"parent":  "parent-task",
+				"updated": "2026-02-18T00:00:00Z",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := tasks.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	task, err := svc.Tasks.Get("@default", "task-456").Do()
+	if err != nil {
+		t.Fatalf("failed to get task: %v", err)
+	}
+
+	if task.Id != "task-456" {
+		t.Errorf("expected id 'task-456', got '%s'", task.Id)
+	}
+	if task.Title != "Test Task" {
+		t.Errorf("expected title 'Test Task', got '%s'", task.Title)
+	}
+	if task.Notes != "Some notes" {
+		t.Errorf("expected notes 'Some notes', got '%s'", task.Notes)
+	}
+	if task.Parent != "parent-task" {
+		t.Errorf("expected parent 'parent-task', got '%s'", task.Parent)
+	}
+}
+
+func TestTasksDelete_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" && r.URL.Path == "/tasks/v1/lists/@default/tasks/task-456" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := tasks.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	err = svc.Tasks.Delete("@default", "task-456").Do()
+	if err != nil {
+		t.Fatalf("expected no error on delete, got: %v", err)
+	}
+}
+
+func TestTasksMove_MockServer(t *testing.T) {
+	var capturedQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "POST" && r.URL.Path == "/tasks/v1/lists/@default/tasks/task-1/move" {
+			capturedQuery = r.URL.RawQuery
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":     "task-1",
+				"title":  "Moved Task",
+				"parent": "parent-task",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := tasks.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	moved, err := svc.Tasks.Move("@default", "task-1").Parent("parent-task").Previous("prev-task").Do()
+	if err != nil {
+		t.Fatalf("failed to move task: %v", err)
+	}
+
+	if moved.Id != "task-1" {
+		t.Errorf("expected id 'task-1', got '%s'", moved.Id)
+	}
+
+	// Verify query params were sent
+	if capturedQuery == "" {
+		t.Error("expected query parameters to be sent")
+	}
+}
+
+func TestTasksClear_MockServer(t *testing.T) {
+	var called bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/tasks/v1/lists/@default/clear" {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := tasks.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	err = svc.Tasks.Clear("@default").Do()
+	if err != nil {
+		t.Fatalf("expected no error on clear, got: %v", err)
+	}
+
+	if !called {
+		t.Error("expected clear endpoint to be called")
+	}
+}
+
 // TestTasksUpdate_MockServer tests update API integration
 func TestTasksUpdate_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
