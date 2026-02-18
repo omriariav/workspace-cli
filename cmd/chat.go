@@ -356,6 +356,7 @@ func init() {
 
 	// Setup space flags
 	chatSetupSpaceCmd.Flags().String("display-name", "", "Space display name (required)")
+	chatSetupSpaceCmd.Flags().String("type", "SPACE", "Space type: SPACE or GROUP_CHAT")
 	chatSetupSpaceCmd.Flags().String("members", "", "Comma-separated user resource names")
 	chatSetupSpaceCmd.MarkFlagRequired("display-name")
 
@@ -462,6 +463,13 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 	filter, _ := cmd.Flags().GetString("filter")
 	orderBy, _ := cmd.Flags().GetString("order-by")
 	showDeleted, _ := cmd.Flags().GetBool("show-deleted")
+
+	if maxResults <= 0 {
+		return p.Print(map[string]interface{}{
+			"messages": []map[string]interface{}{},
+			"count":    0,
+		})
+	}
 
 	var results []map[string]interface{}
 	var pageToken string
@@ -1168,12 +1176,13 @@ func runChatSetupSpace(cmd *cobra.Command, args []string) error {
 	}
 
 	displayName, _ := cmd.Flags().GetString("display-name")
+	spaceType, _ := cmd.Flags().GetString("type")
 	membersStr, _ := cmd.Flags().GetString("members")
 
 	req := &chat.SetUpSpaceRequest{
 		Space: &chat.Space{
 			DisplayName: displayName,
-			SpaceType:   "SPACE",
+			SpaceType:   spaceType,
 		},
 	}
 
