@@ -105,6 +105,24 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws gmail archive <id>` | Archive message (remove from inbox) |
 | `gws gmail archive-thread <id>` | Archive all messages in thread (archives + marks read) |
 | `gws gmail trash <id>` | Move message to trash |
+| `gws gmail untrash <id>` | Remove message from trash |
+| `gws gmail delete <id>` | Permanently delete message |
+| `gws gmail batch-modify` | Modify labels on multiple messages (`--ids`, `--add-labels`, `--remove-labels`) |
+| `gws gmail batch-delete` | Permanently delete multiple messages (`--ids`) |
+| `gws gmail trash-thread <id>` | Move thread to trash |
+| `gws gmail untrash-thread <id>` | Remove thread from trash |
+| `gws gmail delete-thread <id>` | Permanently delete thread |
+| `gws gmail label-info <id>` | Get label details |
+| `gws gmail create-label` | Create label (`--name`, `--visibility`, `--list-visibility`) |
+| `gws gmail update-label` | Update label (`--id`, `--name`, `--visibility`, `--list-visibility`) |
+| `gws gmail delete-label <id>` | Delete a label |
+| `gws gmail drafts` | List drafts (`--max`, `--query`) |
+| `gws gmail draft <id>` | Get draft by ID |
+| `gws gmail create-draft` | Create draft (`--to`, `--subject`, `--body`, `--cc`, `--bcc`) |
+| `gws gmail update-draft` | Update draft (`--id`, `--to`, `--subject`, `--body`) |
+| `gws gmail send-draft <id>` | Send an existing draft |
+| `gws gmail delete-draft <id>` | Delete a draft |
+| `gws gmail attachment` | Download attachment (`--message-id`, `--id`, `--output`) |
 
 ### Calendar
 
@@ -116,6 +134,26 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws calendar update <id>` | Update event (`--title`, `--start`, `--end`, `--add-attendees`) |
 | `gws calendar delete <id>` | Delete event |
 | `gws calendar rsvp <id>` | RSVP to invite (`--response accepted/declined/tentative`, `--message`) |
+| `gws calendar get` | Get event by ID (`--calendar-id`, `--id`) |
+| `gws calendar quick-add` | Quick add event from text (`--text`) |
+| `gws calendar instances` | List instances of recurring event (`--id`, `--max`, `--from`, `--to`) |
+| `gws calendar move` | Move event to another calendar (`--id`, `--destination`) |
+| `gws calendar get-calendar` | Get calendar metadata (`--id`) |
+| `gws calendar create-calendar` | Create secondary calendar (`--summary`, `--description`, `--timezone`) |
+| `gws calendar update-calendar` | Update calendar (`--id`, `--summary`, `--description`, `--timezone`) |
+| `gws calendar delete-calendar` | Delete secondary calendar (`--id`) |
+| `gws calendar clear` | Clear all events from a calendar (`--calendar-id`) |
+| `gws calendar subscribe` | Subscribe to a public calendar (`--id`) |
+| `gws calendar unsubscribe` | Unsubscribe from calendar (`--id`) |
+| `gws calendar calendar-info` | Get calendar subscription info (`--id`) |
+| `gws calendar update-subscription` | Update subscription settings (`--id`, `--color-id`, `--hidden`) |
+| `gws calendar acl` | List access control rules (`--calendar-id`) |
+| `gws calendar share` | Share calendar (`--calendar-id`, `--email`, `--role`) |
+| `gws calendar unshare` | Remove access (`--calendar-id`, `--rule-id`) |
+| `gws calendar update-acl` | Update access rule (`--calendar-id`, `--rule-id`, `--role`) |
+| `gws calendar freebusy` | Query free/busy (`--from`, `--to`, `--calendars`) |
+| `gws calendar colors` | List available calendar colors |
+| `gws calendar settings` | List user calendar settings |
 
 ### Tasks
 
@@ -148,6 +186,31 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws drive move <id>` | Move file to folder (`--to`) |
 | `gws drive delete <id>` | Delete file (`--permanent` for hard delete) |
 | `gws drive comments <id>` | List comments and replies (`--include-resolved`, `--include-deleted`) |
+| `gws drive permissions` | List permissions on a file (`--file-id`) |
+| `gws drive share` | Share file (`--file-id`, `--type`, `--role`, `--email`, `--domain`) |
+| `gws drive unshare` | Remove permission (`--file-id`, `--permission-id`) |
+| `gws drive permission` | Get permission details (`--file-id`, `--permission-id`) |
+| `gws drive update-permission` | Update permission role (`--file-id`, `--permission-id`, `--role`) |
+| `gws drive revisions` | List file revisions (`--file-id`) |
+| `gws drive revision` | Get revision details (`--file-id`, `--revision-id`) |
+| `gws drive delete-revision` | Delete a revision (`--file-id`, `--revision-id`) |
+| `gws drive replies` | List replies to a comment (`--file-id`, `--comment-id`) |
+| `gws drive reply` | Create reply (`--file-id`, `--comment-id`, `--content`) |
+| `gws drive get-reply` | Get a specific reply (`--file-id`, `--comment-id`, `--reply-id`) |
+| `gws drive delete-reply` | Delete a reply (`--file-id`, `--comment-id`, `--reply-id`) |
+| `gws drive comment` | Get a single comment (`--file-id`, `--comment-id`) |
+| `gws drive add-comment` | Add comment to file (`--file-id`, `--content`) |
+| `gws drive delete-comment` | Delete comment (`--file-id`, `--comment-id`) |
+| `gws drive export` | Export Google Workspace file (`--file-id`, `--mime-type`, `--output`) |
+| `gws drive empty-trash` | Empty trash permanently |
+| `gws drive update` | Update file metadata (`--file-id`, `--name`, `--description`, `--starred`, `--trashed`) |
+| `gws drive shared-drives` | List shared drives (`--max`, `--query`) |
+| `gws drive shared-drive` | Get shared drive details (`--id`) |
+| `gws drive create-drive` | Create shared drive (`--name`) |
+| `gws drive delete-drive` | Delete shared drive (`--id`) |
+| `gws drive update-drive` | Update shared drive (`--id`, `--name`) |
+| `gws drive about` | Get drive storage and user info |
+| `gws drive changes` | List recent file changes (`--max`, `--page-token`) |
 
 ### Docs
 

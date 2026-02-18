@@ -18,10 +18,10 @@
 | Service | Commands |
 |---------|----------|
 | `auth` | login, logout, status |
-| `gmail` | list, read, thread, send, reply, labels, label, archive, trash, event-id |
-| `calendar` | list, events, create, update, delete, rsvp |
+| `gmail` | list, read, thread, send, reply, labels, label, archive, trash, event-id, untrash, delete, batch-modify, batch-delete, trash-thread, untrash-thread, delete-thread, label-info, create-label, update-label, delete-label, drafts, draft, create-draft, update-draft, send-draft, delete-draft, attachment |
+| `calendar` | list, events, create, update, delete, rsvp, get, quick-add, instances, move, get-calendar, create-calendar, update-calendar, delete-calendar, clear, subscribe, unsubscribe, calendar-info, update-subscription, acl, share, unshare, update-acl, freebusy, colors, settings |
 | `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, move, clear |
-| `drive` | list, search, info, download, upload, create-folder, move, delete, comments |
+| `drive` | list, search, info, download, upload, create-folder, move, delete, comments, permissions, share, unshare, permission, update-permission, revisions, revision, delete-revision, replies, reply, get-reply, delete-reply, comment, add-comment, delete-comment, export, empty-trash, update, shared-drives, shared-drive, create-drive, delete-drive, update-drive, about, changes |
 | `docs` | read, info, create, append, insert, replace, delete, add-table, format, set-paragraph-style, add-list, remove-list |
 | `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze |
 | `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides |
@@ -46,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.21.0** - Full Tasks API parity: task list CRUD, task get/delete, move/reorder, clear completed (8 new commands).
+**v1.22.0** - Full Gmail, Calendar, and Drive API parity: 63 new commands across drafts, label CRUD, batch ops, attachments, calendar CRUD/ACL/subscriptions/freebusy, drive permissions/revisions/replies/shared drives/export.
 
 ## Roadmap
 
