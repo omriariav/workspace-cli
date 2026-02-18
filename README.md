@@ -239,7 +239,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat create-space` | Create a space (`--display-name`, `--type`, `--description`) |
 | `gws chat delete-space <space>` | Delete a space |
 | `gws chat update-space <space>` | Update a space (`--display-name`, `--description`) |
-| `gws chat search-spaces` | Search spaces (`--query`, `--page-size`) |
+| `gws chat search-spaces` | Search spaces — admin only (`--query`, `--page-size`) |
 | `gws chat find-dm` | Find DM space with a user (`--user`) |
 | `gws chat setup-space` | Create space with initial members (`--display-name`, `--members`) |
 | `gws chat get-member <member>` | Get member details |

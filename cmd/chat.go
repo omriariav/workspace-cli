@@ -141,8 +141,8 @@ var chatUpdateSpaceCmd = &cobra.Command{
 
 var chatSearchSpacesCmd = &cobra.Command{
 	Use:   "search-spaces",
-	Short: "Search spaces",
-	Long:  "Searches for Chat spaces using a query.",
+	Short: "Search spaces (admin only)",
+	Long:  "Searches for Chat spaces using a query. Requires Workspace admin privileges and chat.admin.spaces scope.",
 	RunE:  runChatSearchSpaces,
 }
 
