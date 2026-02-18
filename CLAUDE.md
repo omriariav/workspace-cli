@@ -25,7 +25,7 @@
 | `docs` | read, info, create, append, insert, replace, delete, add-table, format, set-paragraph-style, add-list, remove-list |
 | `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze |
 | `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides |
-| `chat` | list, messages, send (needs Chat App config) |
+| `chat` | list, messages, members, send, get, update, delete, reactions, react, unreact, get-space, create-space, delete-space, update-space, search-spaces, find-dm, setup-space, get-member, add-member, remove-member, update-member, read-state, mark-read, thread-read-state, attachment, upload, download, events, event |
 | `contacts` | list, search, get, create, delete |
 | `forms` | info, responses |
 | `search` | web search (needs API key) |
@@ -46,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.15.0** - Slides API parity (backgrounds, layouts, lines, groups), per-element text ops, drive copy, chat sender fix.
+**v1.20.0** - Full Chat API parity: spaces CRUD, member management, read state, attachments, media upload/download, space events (19 new commands).
 
 ## Roadmap
 
@@ -65,3 +65,15 @@ When adding new commands:
 4. Add command name to `TestXxxCommands` in `cmd/commands_test.go`
 5. Update README.md command table
 6. Bump version in Makefile
+
+## Development Workflow
+
+Every feature/fix follows this flow:
+
+1. **Branch** — Create a feature branch from `main` (e.g. `feat/chat-api-params`)
+2. **Implement & commit** — Make changes, commit with clear messages
+3. **Open PR** — Push branch and open a PR against `main`
+4. **Codex review loop** — Use Codex to review the PR; iterate on feedback until it approves
+5. **Merge** — Merge the PR into `main`
+6. **Release** — Bump version in Makefile, update CLAUDE.md version, tag release, update README
+7. **Tweet draft** — Write a short tweet announcing the new version and key changes

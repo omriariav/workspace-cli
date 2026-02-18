@@ -225,10 +225,35 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 
 | Command | Description |
 |---------|-------------|
-| `gws chat list` | List spaces |
-| `gws chat messages <space>` | List messages in a space |
-| `gws chat members <space>` | List members with display names + emails via People API, cached locally (`--max`) |
+| `gws chat list` | List spaces (`--filter`, `--page-size`) |
+| `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`) |
+| `gws chat members <space>` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`) |
 | `gws chat send` | Send message (`--space`, `--text`) |
+| `gws chat get <message>` | Get a single message |
+| `gws chat update <message>` | Update message text (`--text`) |
+| `gws chat delete <message>` | Delete a message (`--force`) |
+| `gws chat reactions <message>` | List reactions (`--filter`, `--page-size`) |
+| `gws chat react <message>` | Add emoji reaction (`--emoji`) |
+| `gws chat unreact <reaction>` | Remove a reaction |
+| `gws chat get-space <space>` | Get space details |
+| `gws chat create-space` | Create a space (`--display-name`, `--type`, `--description`) |
+| `gws chat delete-space <space>` | Delete a space |
+| `gws chat update-space <space>` | Update a space (`--display-name`, `--description`) |
+| `gws chat search-spaces` | Search spaces (`--query`, `--page-size`) |
+| `gws chat find-dm` | Find DM space with a user (`--user`) |
+| `gws chat setup-space` | Create space with initial members (`--display-name`, `--members`) |
+| `gws chat get-member <member>` | Get member details |
+| `gws chat add-member <space>` | Add a member (`--user`, `--role`) |
+| `gws chat remove-member <member>` | Remove a member |
+| `gws chat update-member <member>` | Update member role (`--role`) |
+| `gws chat read-state <space>` | Get space read state |
+| `gws chat mark-read <space>` | Mark space as read (`--time`) |
+| `gws chat thread-read-state <thread>` | Get thread read state |
+| `gws chat attachment <attachment>` | Get attachment metadata |
+| `gws chat upload <space>` | Upload a file (`--file`) |
+| `gws chat download <resource>` | Download media (`--output`) |
+| `gws chat events <space>` | List space events (`--filter`, `--page-size`) |
+| `gws chat event <event>` | Get event details |
 
 ### Forms
 

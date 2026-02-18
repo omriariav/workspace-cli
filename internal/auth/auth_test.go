@@ -106,13 +106,13 @@ func TestServiceScopes_ChatIncludesMemberships(t *testing.T) {
 	chatScopes := ServiceScopes["chat"]
 	found := false
 	for _, s := range chatScopes {
-		if s == "chat.memberships.readonly" {
+		if s == "chat.memberships" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("chat service should include chat.memberships.readonly scope")
+		t.Error("chat service should include chat.memberships scope")
 	}
 }
 
@@ -172,7 +172,7 @@ func TestServiceForScope(t *testing.T) {
 	}{
 		{"https://www.googleapis.com/auth/gmail.readonly", "gmail"},
 		{"https://www.googleapis.com/auth/calendar.events", "calendar"},
-		{"https://www.googleapis.com/auth/chat.memberships.readonly", "chat"},
+		{"https://www.googleapis.com/auth/chat.memberships", "chat"},
 		{"https://www.googleapis.com/auth/userinfo.email", "userinfo"},
 		{"https://www.googleapis.com/auth/unknown.scope", ""},
 	}
