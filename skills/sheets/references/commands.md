@@ -1,6 +1,6 @@
 # Sheets Commands Reference
 
-Complete flag and option reference for `gws sheets` commands — 36 commands total.
+Complete flag and option reference for `gws sheets` commands — 32 commands total.
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 

@@ -260,6 +260,12 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws sheets copy-to <id>` | Copy sheet to another spreadsheet (`--sheet-id`, `--destination`) |
 | `gws sheets batch-read <id>` | Read multiple ranges (`--ranges`, `--value-render`) |
 | `gws sheets batch-write <id>` | Write multiple ranges (`--ranges`, `--values`, `--value-input`) |
+| `gws sheets add-named-range <id> <range>` | Add named range (`--name`) |
+| `gws sheets list-named-ranges <id>` | List all named ranges |
+| `gws sheets delete-named-range <id>` | Delete named range (`--named-range-id`) |
+| `gws sheets add-filter <id> <range>` | Set basic filter on range |
+| `gws sheets clear-filter <id>` | Clear basic filter (`--sheet`) |
+| `gws sheets add-filter-view <id> <range>` | Add filter view (`--name`) |
 
 ### Slides
 

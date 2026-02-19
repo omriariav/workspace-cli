@@ -9,7 +9,7 @@ metadata:
 
 # Google Sheets (gws sheets)
 
-`gws sheets` provides CLI access to Google Sheets with structured JSON output. This skill has 28 commands covering full spreadsheet management including batch operations, named ranges, and filters.
+`gws sheets` provides CLI access to Google Sheets with structured JSON output. This skill has 32 commands covering full spreadsheet management including batch operations, named ranges, and filters.
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
