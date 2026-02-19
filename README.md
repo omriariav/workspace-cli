@@ -228,6 +228,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws docs set-paragraph-style <id>` | Paragraph style (`--from`, `--to`, `--alignment`, `--line-spacing`) |
 | `gws docs add-list <id>` | Add bullet/numbered list (`--at`, `--type`, `--items`) |
 | `gws docs remove-list <id>` | Remove list formatting (`--from`, `--to`) |
+| `gws docs trash <id>` | Trash document (`--permanent` for hard delete) |
 
 ### Sheets
 
@@ -256,6 +257,9 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws sheets set-column-width <id>` | Set column width (`--sheet`, `--col`, `--width`) |
 | `gws sheets set-row-height <id>` | Set row height (`--sheet`, `--row`, `--height`) |
 | `gws sheets freeze <id>` | Freeze panes (`--sheet`, `--rows`, `--cols`) |
+| `gws sheets copy-to <id>` | Copy sheet to another spreadsheet (`--sheet-id`, `--destination`) |
+| `gws sheets batch-read <id>` | Read multiple ranges (`--ranges`, `--value-render`) |
+| `gws sheets batch-write <id>` | Write multiple ranges (`--ranges`, `--values`, `--value-input`) |
 
 ### Slides
 
@@ -289,6 +293,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws slides add-line <id>` | Add line/connector (`--slide-id/--slide-number`, `--type`, `--start-x/y`, `--end-x/y`) |
 | `gws slides group <id>` | Group elements (`--object-ids`) |
 | `gws slides ungroup <id>` | Ungroup elements (`--group-id`) |
+| `gws slides thumbnail <id>` | Get slide thumbnail (`--slide`, `--size`, `--download`) |
 
 ### Chat
 

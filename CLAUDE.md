@@ -22,9 +22,9 @@
 | `calendar` | list, events, create, update, delete, rsvp, get, quick-add, instances, move, get-calendar, create-calendar, update-calendar, delete-calendar, clear, subscribe, unsubscribe, calendar-info, update-subscription, acl, share, unshare, update-acl, freebusy, colors, settings |
 | `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, move, clear |
 | `drive` | list, search, info, download, upload, create-folder, move, delete, comments, permissions, share, unshare, permission, update-permission, revisions, revision, delete-revision, replies, reply, get-reply, delete-reply, comment, add-comment, delete-comment, export, empty-trash, update, shared-drives, shared-drive, create-drive, delete-drive, update-drive, about, changes |
-| `docs` | read, info, create, append, insert, replace, delete, add-table, format, set-paragraph-style, add-list, remove-list |
-| `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze |
-| `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides |
+| `docs` | read, info, create, append, insert, replace, delete, add-table, format, set-paragraph-style, add-list, remove-list, trash |
+| `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze, copy-to, batch-read, batch-write |
+| `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides, thumbnail |
 | `chat` | list, messages, members, send, get, update, delete, reactions, react, unreact, get-space, create-space, delete-space, update-space, search-spaces, find-dm, setup-space, get-member, add-member, remove-member, update-member, read-state, mark-read, thread-read-state, attachment, upload, download, events, event |
 | `contacts` | list, search, get, create, delete |
 | `forms` | info, responses |
@@ -46,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.22.1** - Fix: `auth login` without `--services` now correctly records all services as granted, eliminating spurious "requires additional permissions" warnings.
+**v1.23.0** - Docs trash command, Sheets batch ops (copy-to, batch-read, batch-write), Slides page thumbnails.
 
 ## Roadmap
 
