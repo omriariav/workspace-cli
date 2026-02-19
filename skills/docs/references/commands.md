@@ -315,6 +315,38 @@ gws docs remove-list 1abc123xyz --from 1 --to 999999
 
 ---
 
+## gws docs trash
+
+Moves a Google Doc to the trash via the Drive API.
+
+```
+Usage: gws docs trash <document-id> [flags]
+```
+
+### Flags
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--permanent` | bool | false | No | Permanently delete (skip trash) |
+
+### Examples
+
+```bash
+# Move a document to trash
+gws docs trash 1abc123xyz
+
+# Permanently delete a document (cannot be undone)
+gws docs trash 1abc123xyz --permanent
+```
+
+### Notes
+
+- Default behavior moves the document to Drive trash (recoverable)
+- `--permanent` bypasses trash and permanently deletes the document
+- Uses the Drive API since the Docs API does not have a native delete endpoint
+
+---
+
 ## Content Formats
 
 The `--content-format` flag is available on `create`, `append`, and `insert` commands.

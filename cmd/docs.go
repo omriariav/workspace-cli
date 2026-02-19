@@ -11,6 +11,7 @@ import (
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/docs/v1"
+	"google.golang.org/api/drive/v3"
 )
 
 var docsCmd = &cobra.Command{
@@ -129,6 +130,22 @@ Positions are 1-based indices. Use 'gws docs read <id> --include-formatting' to 
 	RunE: runDocsRemoveList,
 }
 
+var docsTrashCmd = &cobra.Command{
+	Use:   "trash <document-id>",
+	Short: "Trash or permanently delete a document",
+	Long: `Moves a Google Doc to the trash via the Drive API.
+
+By default, moves the document to trash. Use --permanent to permanently delete.
+
+Warning: --permanent bypasses trash and cannot be undone.
+
+Examples:
+  gws docs trash 1abc123xyz
+  gws docs trash 1abc123xyz --permanent`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDocsTrash,
+}
+
 func init() {
 	rootCmd.AddCommand(docsCmd)
 	docsCmd.AddCommand(docsReadCmd)
@@ -143,6 +160,10 @@ func init() {
 	docsCmd.AddCommand(docsSetParagraphStyleCmd)
 	docsCmd.AddCommand(docsAddListCmd)
 	docsCmd.AddCommand(docsRemoveListCmd)
+	docsCmd.AddCommand(docsTrashCmd)
+
+	// Trash flags
+	docsTrashCmd.Flags().Bool("permanent", false, "Permanently delete (skip trash)")
 
 	// Format flags
 	docsFormatCmd.Flags().Int64("from", 0, "Start position (1-based index, required)")
@@ -1037,5 +1058,54 @@ func runDocsRemoveList(cmd *cobra.Command, args []string) error {
 		"document_id": docID,
 		"from":        from,
 		"to":          to,
+	})
+}
+
+func runDocsTrash(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	permanent, _ := cmd.Flags().GetBool("permanent")
+
+	// Get file info first for the response
+	file, err := svc.Files.Get(docID).SupportsAllDrives(true).Fields("name").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get document info: %w", err))
+	}
+
+	if permanent {
+		err = svc.Files.Delete(docID).SupportsAllDrives(true).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to delete document: %w", err))
+		}
+
+		return p.Print(map[string]interface{}{
+			"status": "deleted",
+			"id":     docID,
+			"name":   file.Name,
+		})
+	}
+
+	// Move to trash
+	_, err = svc.Files.Update(docID, &drive.File{Trashed: true}).SupportsAllDrives(true).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to trash document: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "trashed",
+		"id":     docID,
+		"name":   file.Name,
 	})
 }

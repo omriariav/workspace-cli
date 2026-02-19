@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"google.golang.org/api/docs/v1"
+	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 )
 
@@ -1369,5 +1370,133 @@ func TestParseDocsHexColor(t *testing.T) {
 				t.Errorf("expected blue %f, got %f", tt.wantB, rgb.Blue)
 			}
 		})
+	}
+}
+
+// TestDocsTrashCommand_Flags tests trash command flags
+func TestDocsTrashCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "trash")
+	if cmd == nil {
+		t.Fatal("docs trash command not found")
+	}
+
+	if cmd.Flags().Lookup("permanent") == nil {
+		t.Error("expected --permanent flag")
+	}
+}
+
+// TestDocsTrash_MoveToTrash tests trashing a document (default behavior)
+func TestDocsTrash_MoveToTrash(t *testing.T) {
+	getCalled := false
+	updateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/files/doc-trash-1": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				getCalled = true
+				json.NewEncoder(w).Encode(&drive.File{
+					Id:   "doc-trash-1",
+					Name: "My Document",
+				})
+			} else if r.Method == "PATCH" {
+				updateCalled = true
+
+				var req drive.File
+				json.NewDecoder(r.Body).Decode(&req)
+
+				if !req.Trashed {
+					t.Error("expected Trashed to be true")
+				}
+
+				json.NewEncoder(w).Encode(&drive.File{
+					Id:      "doc-trash-1",
+					Name:    "My Document",
+					Trashed: true,
+				})
+			}
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Get file info
+	file, err := svc.Files.Get("doc-trash-1").SupportsAllDrives(true).Fields("name").Do()
+	if err != nil {
+		t.Fatalf("failed to get file: %v", err)
+	}
+
+	if file.Name != "My Document" {
+		t.Errorf("expected name 'My Document', got '%s'", file.Name)
+	}
+
+	// Move to trash
+	_, err = svc.Files.Update("doc-trash-1", &drive.File{Trashed: true}).SupportsAllDrives(true).Do()
+	if err != nil {
+		t.Fatalf("failed to trash document: %v", err)
+	}
+
+	if !getCalled {
+		t.Error("get endpoint was not called")
+	}
+	if !updateCalled {
+		t.Error("update endpoint was not called")
+	}
+}
+
+// TestDocsTrash_PermanentDelete tests permanently deleting a document
+func TestDocsTrash_PermanentDelete(t *testing.T) {
+	getCalled := false
+	deleteCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/files/doc-perm-del": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				getCalled = true
+				json.NewEncoder(w).Encode(&drive.File{
+					Id:   "doc-perm-del",
+					Name: "Delete Me",
+				})
+			} else if r.Method == "DELETE" {
+				deleteCalled = true
+				w.WriteHeader(http.StatusNoContent)
+			}
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	// Get file info
+	file, err := svc.Files.Get("doc-perm-del").SupportsAllDrives(true).Fields("name").Do()
+	if err != nil {
+		t.Fatalf("failed to get file: %v", err)
+	}
+
+	if file.Name != "Delete Me" {
+		t.Errorf("expected name 'Delete Me', got '%s'", file.Name)
+	}
+
+	// Permanently delete
+	err = svc.Files.Delete("doc-perm-del").SupportsAllDrives(true).Do()
+	if err != nil {
+		t.Fatalf("failed to delete document: %v", err)
+	}
+
+	if !getCalled {
+		t.Error("get endpoint was not called")
+	}
+	if !deleteCalled {
+		t.Error("delete endpoint was not called")
 	}
 }

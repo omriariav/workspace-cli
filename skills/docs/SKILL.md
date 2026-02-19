@@ -47,6 +47,8 @@ For initial setup, see the `gws-auth` skill.
 | Set paragraph style | `gws docs set-paragraph-style <doc-id> --from 1 --to 100 --alignment CENTER` |
 | Add a list | `gws docs add-list <doc-id> --at 1 --type bullet --items "A;B;C"` |
 | Remove list | `gws docs remove-list <doc-id> --from 1 --to 50` |
+| Trash document | `gws docs trash <doc-id>` |
+| Permanently delete | `gws docs trash <doc-id> --permanent` |
 
 ## Detailed Usage
 
@@ -191,6 +193,15 @@ gws docs remove-list <document-id> [flags]
 **Flags:**
 - `--from int` — Start position (1-based index, required)
 - `--to int` — End position (1-based index, required)
+
+### trash — Trash or permanently delete a document
+
+```bash
+gws docs trash <document-id> [flags]
+```
+
+**Flags:**
+- `--permanent` — Permanently delete instead of trashing (cannot be undone)
 
 ## Content Formats
 
