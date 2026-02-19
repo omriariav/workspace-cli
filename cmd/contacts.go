@@ -903,7 +903,7 @@ func runContactsResolve(cmd *cobra.Command, args []string) error {
 
 	results := make([]map[string]interface{}, 0, len(resp.Responses))
 	var notFound []string
-	var errors []map[string]interface{}
+	var apiErrors []map[string]interface{}
 	for _, pr := range resp.Responses {
 		if pr.Person != nil {
 			results = append(results, formatPerson(pr.Person))
@@ -916,7 +916,7 @@ func runContactsResolve(cmd *cobra.Command, args []string) error {
 				entry["code"] = pr.Status.Code
 				entry["message"] = pr.Status.Message
 			}
-			errors = append(errors, entry)
+			apiErrors = append(apiErrors, entry)
 		}
 	}
 
@@ -924,8 +924,8 @@ func runContactsResolve(cmd *cobra.Command, args []string) error {
 	if len(notFound) > 0 {
 		out["not_found"] = notFound
 	}
-	if len(errors) > 0 {
-		out["errors"] = errors
+	if len(apiErrors) > 0 {
+		out["errors"] = apiErrors
 	}
 	return p.Print(out)
 }
