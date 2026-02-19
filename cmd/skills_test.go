@@ -401,7 +401,7 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 		},
 		"contacts": {
 			parentCmd:   contactsCmd,
-			subcommands: []string{"list", "search", "get", "create", "delete"},
+			subcommands: []string{"list", "search", "get", "create", "delete", "update", "batch-create", "batch-update", "batch-delete", "directory", "directory-search", "photo", "delete-photo", "resolve"},
 		},
 	}
 
