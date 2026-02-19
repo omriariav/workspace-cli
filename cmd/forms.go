@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
+	"google.golang.org/api/forms/v1"
 )
 
 var formsCmd = &cobra.Command{
@@ -24,6 +26,14 @@ var formsInfoCmd = &cobra.Command{
 	RunE:  runFormsInfo,
 }
 
+var formsGetCmd = &cobra.Command{
+	Use:   "get <form-id>",
+	Short: "Get form details",
+	Long:  "Gets metadata about a Google Form. Alias for 'forms info'.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runFormsInfo, // Same handler as info
+}
+
 var formsResponsesCmd = &cobra.Command{
 	Use:   "responses <form-id>",
 	Short: "Get form responses",
@@ -32,10 +42,66 @@ var formsResponsesCmd = &cobra.Command{
 	RunE:  runFormsResponses,
 }
 
+var formsResponseCmd = &cobra.Command{
+	Use:   "response <form-id>",
+	Short: "Get a single form response",
+	Long:  "Gets a specific response by ID from a form.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runFormsResponse,
+}
+
+var formsCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new form",
+	Long: `Creates a new blank Google Form with a title and optional description.
+
+Examples:
+  gws forms create --title "Feedback Survey"
+  gws forms create --title "Team Poll" --description "Weekly team feedback"`,
+	Args: cobra.NoArgs,
+	RunE: runFormsCreate,
+}
+
+var formsUpdateCmd = &cobra.Command{
+	Use:   "update <form-id>",
+	Short: "Update a form",
+	Long: `Updates a Google Form using a batch update request.
+
+For simple updates (title/description), use flags:
+  gws forms update <form-id> --title "New Title"
+  gws forms update <form-id> --description "New description"
+
+For advanced updates (adding questions, etc.), provide a JSON file:
+  gws forms update <form-id> --file batch-update.json
+
+The --file flag should contain a JSON file with a batchUpdate request body.
+See https://developers.google.com/forms/api/reference/rest/v1/forms/batchUpdate`,
+	Args: cobra.ExactArgs(1),
+	RunE: runFormsUpdate,
+}
+
 func init() {
 	rootCmd.AddCommand(formsCmd)
 	formsCmd.AddCommand(formsInfoCmd)
+	formsCmd.AddCommand(formsGetCmd)
 	formsCmd.AddCommand(formsResponsesCmd)
+	formsCmd.AddCommand(formsResponseCmd)
+	formsCmd.AddCommand(formsCreateCmd)
+	formsCmd.AddCommand(formsUpdateCmd)
+
+	// response flags
+	formsResponseCmd.Flags().String("response-id", "", "Response ID to retrieve (required)")
+	formsResponseCmd.MarkFlagRequired("response-id")
+
+	// create flags
+	formsCreateCmd.Flags().String("title", "", "Form title (required)")
+	formsCreateCmd.Flags().String("description", "", "Form description")
+	formsCreateCmd.MarkFlagRequired("title")
+
+	// update flags
+	formsUpdateCmd.Flags().String("title", "", "New form title")
+	formsUpdateCmd.Flags().String("description", "", "New form description")
+	formsUpdateCmd.Flags().String("file", "", "Path to JSON file with batchUpdate request body")
 }
 
 func runFormsInfo(cmd *cobra.Command, args []string) error {
@@ -232,4 +298,232 @@ func runFormsResponses(cmd *cobra.Command, args []string) error {
 		"responses":      responses,
 		"response_count": len(responses),
 	})
+}
+
+func runFormsResponse(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Forms()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	formID := args[0]
+	responseID, _ := cmd.Flags().GetString("response-id")
+
+	// Get the form to map question IDs to titles
+	form, err := svc.Forms.Get(formID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get form: %w", err))
+	}
+
+	// Build question ID to title map
+	questionTitles := make(map[string]string)
+	if form.Items != nil {
+		for _, item := range form.Items {
+			if item.QuestionItem != nil && item.QuestionItem.Question != nil {
+				questionTitles[item.QuestionItem.Question.QuestionId] = item.Title
+			}
+		}
+	}
+
+	// Get specific response
+	r, err := svc.Forms.Responses.Get(formID, responseID).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get response: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"id":          r.ResponseId,
+		"form_id":     formID,
+		"form_title":  form.Info.Title,
+		"create_time": r.CreateTime,
+		"last_submit": r.LastSubmittedTime,
+	}
+
+	if r.RespondentEmail != "" {
+		result["email"] = r.RespondentEmail
+	}
+
+	// Extract answers
+	answers := make(map[string]interface{})
+	if r.Answers != nil {
+		for qID, answer := range r.Answers {
+			title := questionTitles[qID]
+			if title == "" {
+				title = qID
+			}
+
+			if answer.TextAnswers != nil && len(answer.TextAnswers.Answers) > 0 {
+				if len(answer.TextAnswers.Answers) == 1 {
+					answers[title] = answer.TextAnswers.Answers[0].Value
+				} else {
+					vals := make([]string, len(answer.TextAnswers.Answers))
+					for i, a := range answer.TextAnswers.Answers {
+						vals[i] = a.Value
+					}
+					answers[title] = vals
+				}
+			} else if answer.FileUploadAnswers != nil {
+				files := make([]map[string]string, 0)
+				for _, f := range answer.FileUploadAnswers.Answers {
+					files = append(files, map[string]string{
+						"id":   f.FileId,
+						"name": f.FileName,
+					})
+				}
+				answers[title] = files
+			}
+		}
+	}
+	result["answers"] = answers
+
+	return p.Print(result)
+}
+
+func runFormsCreate(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Forms()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	title, _ := cmd.Flags().GetString("title")
+	description, _ := cmd.Flags().GetString("description")
+
+	newForm := &forms.Form{
+		Info: &forms.Info{
+			Title:         title,
+			DocumentTitle: title,
+		},
+	}
+
+	if description != "" {
+		newForm.Info.Description = description
+	}
+
+	form, err := svc.Forms.Create(newForm).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to create form: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"id":             form.FormId,
+		"title":          form.Info.Title,
+		"document_title": form.Info.DocumentTitle,
+		"responder_uri":  form.ResponderUri,
+	}
+
+	if form.Info.Description != "" {
+		result["description"] = form.Info.Description
+	}
+
+	return p.Print(result)
+}
+
+func runFormsUpdate(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Forms()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	formID := args[0]
+	filePath, _ := cmd.Flags().GetString("file")
+	title, _ := cmd.Flags().GetString("title")
+	description, _ := cmd.Flags().GetString("description")
+
+	var batchReq forms.BatchUpdateFormRequest
+
+	if filePath != "" {
+		// Read batch update request from file
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to read file: %w", err))
+		}
+
+		if err := json.Unmarshal(data, &batchReq); err != nil {
+			return p.PrintError(fmt.Errorf("failed to parse JSON: %w", err))
+		}
+	} else if title != "" || description != "" {
+		// Build simple update request for title/description
+		var requests []*forms.Request
+
+		if title != "" {
+			requests = append(requests, &forms.Request{
+				UpdateFormInfo: &forms.UpdateFormInfoRequest{
+					Info: &forms.Info{
+						Title: title,
+					},
+					UpdateMask: "title",
+				},
+			})
+		}
+
+		if description != "" {
+			requests = append(requests, &forms.Request{
+				UpdateFormInfo: &forms.UpdateFormInfoRequest{
+					Info: &forms.Info{
+						Description: description,
+					},
+					UpdateMask: "description",
+				},
+			})
+		}
+
+		batchReq.Requests = requests
+	} else {
+		return p.PrintError(fmt.Errorf("provide --file, --title, or --description"))
+	}
+
+	resp, err := svc.Forms.BatchUpdate(formID, &batchReq).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update form: %w", err))
+	}
+
+	// After batch update, get the updated form for full details
+	form, err := svc.Forms.Get(formID).Do()
+	if err != nil {
+		// If we can't fetch the updated form, return what we have
+		return p.Print(map[string]interface{}{
+			"id":            formID,
+			"replies_count": len(resp.Replies),
+			"status":        "updated",
+		})
+	}
+
+	result := map[string]interface{}{
+		"id":             form.FormId,
+		"title":          form.Info.Title,
+		"document_title": form.Info.DocumentTitle,
+		"responder_uri":  form.ResponderUri,
+		"status":         "updated",
+		"replies_count":  len(resp.Replies),
+	}
+
+	if form.Info.Description != "" {
+		result["description"] = form.Info.Description
+	}
+
+	return p.Print(result)
 }

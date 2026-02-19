@@ -515,7 +515,11 @@ func TestFormsCommands(t *testing.T) {
 		name string
 	}{
 		{"info"},
+		{"get"},
 		{"responses"},
+		{"response"},
+		{"create"},
+		{"update"},
 	}
 
 	for _, tt := range tests {
