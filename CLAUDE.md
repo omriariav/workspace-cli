@@ -50,10 +50,13 @@ go run ./cmd/gws    # or go run .
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for planned features including:
-- Sheets: formatting, charts, named ranges, filters, conditional formatting
-- Docs: text formatting, lists
-- Gmail/Calendar/Tasks: additional operations
+See [ROADMAP.md](ROADMAP.md) for planned features. Remaining API parity issues:
+- Gmail: Settings API — vacation, filters, forwarding, send-as, IMAP/POP (#104)
+- Slides: page thumbnails (#98)
+- Sheets: copy-to, batch read/write (#97)
+- Docs: delete command (#96)
+- Forms: create form, batch update, get single response (#95)
+- Contacts: update, batch ops, directory search, photos (#94)
 
 ## Implementation Patterns
 
@@ -77,3 +80,17 @@ Every feature/fix follows this flow:
 5. **Merge** — Merge the PR into `main`
 6. **Release** — Bump version in Makefile, update CLAUDE.md version, tag release, update README
 7. **Tweet draft** — Write a short tweet announcing the new version and key changes
+
+## Parallel Agent Sprints
+
+For large multi-service features, use Claude Code agent teams with git worktrees:
+
+1. **Pre-commit shared changes** on `main` before branching (e.g. scopes.go) to avoid merge conflicts
+2. **Create worktrees** — `git worktree add /tmp/{agent}-work feat/{service}` — one per agent so they don't clobber each other's working directory
+3. **Spawn agents** with `cwd` pointing to their worktree
+4. **Each agent**: implement → test → commit → push → open PR
+5. **Review loop**: pr-reviewer agent reviews each PR, agent iterates on feedback
+6. **Merge sequentially** (simplest first), rebase later PRs on updated main
+7. **Version bump** after all PRs merge
+
+Lesson learned (v1.22.0): agents sharing one working directory causes git branch switches to wipe uncommitted work. Always use separate worktrees.

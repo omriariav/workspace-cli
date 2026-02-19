@@ -13,6 +13,18 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 
 ## Completed
 
+### v1.22.0
+- [x] Gmail: full API parity — drafts CRUD, label CRUD, batch-modify/batch-delete, thread trash/untrash/delete, attachment download (18 new commands, PR #101)
+- [x] Calendar: full API parity — event get/quick-add/instances/move, calendar CRUD, ACL/sharing, subscriptions, freebusy, colors, settings (20 new commands, PR #103)
+- [x] Drive: full API parity — permissions/sharing, revisions, replies, comments CRUD, export, empty-trash, update metadata, shared drives CRUD, about, changes (25 new commands, PR #102)
+- [x] Auth: broader scopes for gmail.settings, full calendar, full drive
+
+### v1.21.0
+- [x] Tasks: full API parity — task list CRUD (create-list, update-list, delete-list), task get/delete, move/reorder, clear completed (8 new commands, PR #100)
+
+### v1.20.0
+- [x] Chat: full API parity — space CRUD, member management, read states, reactions, file upload/download, space events (28 new commands, PR #99)
+
 ### v1.15.0
 - [x] Slides: update-slide-background (solid color + image URL)
 - [x] Slides: list-layouts (discover custom master layouts)
