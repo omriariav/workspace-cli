@@ -388,6 +388,26 @@ func runContactsDelete(cmd *cobra.Command, args []string) error {
 
 func runContactsUpdate(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
+
+	// Validate flags before creating API client
+	var updateFields []string
+	if cmd.Flags().Changed("name") {
+		updateFields = append(updateFields, "names")
+	}
+	if cmd.Flags().Changed("email") {
+		updateFields = append(updateFields, "emailAddresses")
+	}
+	if cmd.Flags().Changed("phone") {
+		updateFields = append(updateFields, "phoneNumbers")
+	}
+	if cmd.Flags().Changed("organization") || cmd.Flags().Changed("title") {
+		updateFields = append(updateFields, "organizations")
+	}
+
+	if len(updateFields) == 0 {
+		return p.PrintError(fmt.Errorf("at least one field to update must be specified (--name, --email, --phone, --organization, --title)"))
+	}
+
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -408,25 +428,6 @@ func runContactsUpdate(cmd *cobra.Command, args []string) error {
 	organization, _ := cmd.Flags().GetString("organization")
 	title, _ := cmd.Flags().GetString("title")
 	etag, _ := cmd.Flags().GetString("etag")
-
-	// Determine which fields the user wants to update
-	var updateFields []string
-	if cmd.Flags().Changed("name") {
-		updateFields = append(updateFields, "names")
-	}
-	if cmd.Flags().Changed("email") {
-		updateFields = append(updateFields, "emailAddresses")
-	}
-	if cmd.Flags().Changed("phone") {
-		updateFields = append(updateFields, "phoneNumbers")
-	}
-	if cmd.Flags().Changed("organization") || cmd.Flags().Changed("title") {
-		updateFields = append(updateFields, "organizations")
-	}
-
-	if len(updateFields) == 0 {
-		return p.PrintError(fmt.Errorf("at least one field to update must be specified (--name, --email, --phone, --organization, --title)"))
-	}
 
 	// Fetch existing contact — include metadata for source/etag required by the API
 	fetchFields := append(updateFields, "metadata")

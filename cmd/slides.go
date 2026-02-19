@@ -3108,6 +3108,15 @@ func runSlidesUngroup(cmd *cobra.Command, args []string) error {
 
 func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
+
+	// Validate flags before creating API client
+	size, _ := cmd.Flags().GetString("size")
+	validSizes := map[string]bool{"SMALL": true, "MEDIUM": true, "LARGE": true}
+	sizeUpper := strings.ToUpper(size)
+	if !validSizes[sizeUpper] {
+		return p.PrintError(fmt.Errorf("invalid size '%s': must be SMALL, MEDIUM, or LARGE", size))
+	}
+
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -3122,15 +3131,7 @@ func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 
 	presentationID := args[0]
 	slideFlag, _ := cmd.Flags().GetString("slide")
-	size, _ := cmd.Flags().GetString("size")
 	downloadPath, _ := cmd.Flags().GetString("download")
-
-	// Validate size before any API calls
-	validSizes := map[string]bool{"SMALL": true, "MEDIUM": true, "LARGE": true}
-	sizeUpper := strings.ToUpper(size)
-	if !validSizes[sizeUpper] {
-		return p.PrintError(fmt.Errorf("invalid size '%s': must be SMALL, MEDIUM, or LARGE", size))
-	}
 
 	// Resolve slide flag: could be a slide object ID or a 1-based number
 	pageObjectID := slideFlag

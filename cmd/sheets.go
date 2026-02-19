@@ -2815,6 +2815,21 @@ func mapConditionType(rule string) (string, error) {
 
 func runSheetsAddConditionalFormat(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
+
+	// Validate flags before creating API client
+	rule, _ := cmd.Flags().GetString("rule")
+	value, _ := cmd.Flags().GetString("value")
+
+	conditionType, err := mapConditionType(rule)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	needsValue := map[string]bool{">": true, "<": true, "=": true, "!=": true, "contains": true, "not-contains": true, "formula": true}
+	if needsValue[rule] && value == "" {
+		return p.PrintError(fmt.Errorf("--value is required for rule type %q", rule))
+	}
+
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2829,23 +2844,10 @@ func runSheetsAddConditionalFormat(cmd *cobra.Command, args []string) error {
 
 	spreadsheetID := args[0]
 	rangeStr := args[1]
-	rule, _ := cmd.Flags().GetString("rule")
-	value, _ := cmd.Flags().GetString("value")
 	bgColor, _ := cmd.Flags().GetString("bg-color")
 	textColor, _ := cmd.Flags().GetString("color")
 	bold, _ := cmd.Flags().GetBool("bold")
 	italic, _ := cmd.Flags().GetBool("italic")
-
-	conditionType, err := mapConditionType(rule)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	// Validate --value is provided for rules that require it
-	needsValue := map[string]bool{">": true, "<": true, "=": true, "!=": true, "contains": true, "not-contains": true, "formula": true}
-	if needsValue[rule] && value == "" {
-		return p.PrintError(fmt.Errorf("--value is required for rule type %q", rule))
-	}
 
 	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
 	if err != nil {
@@ -3024,6 +3026,13 @@ func runSheetsListConditionalFormats(cmd *cobra.Command, args []string) error {
 
 func runSheetsDeleteConditionalFormat(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
+
+	// Validate flags before creating API client
+	index, _ := cmd.Flags().GetInt64("index")
+	if index < 0 {
+		return p.PrintError(fmt.Errorf("--index must be >= 0, got %d", index))
+	}
+
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -3038,11 +3047,6 @@ func runSheetsDeleteConditionalFormat(cmd *cobra.Command, args []string) error {
 
 	spreadsheetID := args[0]
 	sheetName, _ := cmd.Flags().GetString("sheet")
-	index, _ := cmd.Flags().GetInt64("index")
-
-	if index < 0 {
-		return p.PrintError(fmt.Errorf("--index must be >= 0, got %d", index))
-	}
 
 	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
 	if err != nil {
