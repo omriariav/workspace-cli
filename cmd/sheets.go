@@ -343,6 +343,65 @@ var sheetsAddFilterViewCmd = &cobra.Command{
 	RunE:  runSheetsAddFilterView,
 }
 
+var sheetsAddChartCmd = &cobra.Command{
+	Use:   "add-chart <spreadsheet-id>",
+	Short: "Add a chart to a spreadsheet",
+	Long:  "Adds an embedded chart (bar, line, area, column, scatter, pie, combo) to a spreadsheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsAddChart,
+}
+
+var sheetsListChartsCmd = &cobra.Command{
+	Use:   "list-charts <spreadsheet-id>",
+	Short: "List charts in a spreadsheet",
+	Long:  "Lists all embedded charts in a spreadsheet with their IDs, titles, and types.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsListCharts,
+}
+
+var sheetsDeleteChartCmd = &cobra.Command{
+	Use:   "delete-chart <spreadsheet-id>",
+	Short: "Delete a chart from a spreadsheet",
+	Long:  "Deletes an embedded chart by its chart ID.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsDeleteChart,
+}
+
+var sheetsAddConditionalFormatCmd = &cobra.Command{
+	Use:   "add-conditional-format <spreadsheet-id> <range>",
+	Short: "Add a conditional formatting rule",
+	Long: `Adds a conditional formatting rule to a range of cells.
+
+Rule types:
+  >              Number greater than value
+  <              Number less than value
+  =              Number equal to value
+  !=             Number not equal to value
+  contains       Text contains value
+  not-contains   Text does not contain value
+  blank          Cell is blank
+  not-blank      Cell is not blank
+  formula        Custom formula (value is the formula)`,
+	Args: cobra.ExactArgs(2),
+	RunE: runSheetsAddConditionalFormat,
+}
+
+var sheetsListConditionalFormatsCmd = &cobra.Command{
+	Use:   "list-conditional-formats <spreadsheet-id>",
+	Short: "List conditional formatting rules",
+	Long:  "Lists all conditional formatting rules for a specific sheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsListConditionalFormats,
+}
+
+var sheetsDeleteConditionalFormatCmd = &cobra.Command{
+	Use:   "delete-conditional-format <spreadsheet-id>",
+	Short: "Delete a conditional formatting rule",
+	Long:  "Deletes a conditional formatting rule by its index within a sheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsDeleteConditionalFormat,
+}
+
 func init() {
 	rootCmd.AddCommand(sheetsCmd)
 	sheetsCmd.AddCommand(sheetsInfoCmd)
@@ -518,6 +577,45 @@ func init() {
 	sheetsCmd.AddCommand(sheetsAddFilterViewCmd)
 	sheetsAddFilterViewCmd.Flags().String("name", "", "Title for the filter view (required)")
 	sheetsAddFilterViewCmd.MarkFlagRequired("name")
+
+	// Add-chart command
+	sheetsCmd.AddCommand(sheetsAddChartCmd)
+	sheetsAddChartCmd.Flags().String("type", "", "Chart type: BAR, LINE, AREA, COLUMN, SCATTER, PIE, COMBO (required)")
+	sheetsAddChartCmd.Flags().String("data", "", "Data range (e.g., Sheet1!A1:B10) (required)")
+	sheetsAddChartCmd.Flags().String("title", "", "Chart title")
+	sheetsAddChartCmd.Flags().String("sheet", "", "Sheet to place chart on (defaults to new sheet)")
+	sheetsAddChartCmd.MarkFlagRequired("type")
+	sheetsAddChartCmd.MarkFlagRequired("data")
+
+	// List-charts command
+	sheetsCmd.AddCommand(sheetsListChartsCmd)
+
+	// Delete-chart command
+	sheetsCmd.AddCommand(sheetsDeleteChartCmd)
+	sheetsDeleteChartCmd.Flags().Int64("chart-id", 0, "Chart ID to delete (required)")
+	sheetsDeleteChartCmd.MarkFlagRequired("chart-id")
+
+	// Add-conditional-format command
+	sheetsCmd.AddCommand(sheetsAddConditionalFormatCmd)
+	sheetsAddConditionalFormatCmd.Flags().String("rule", "", "Condition type: >, <, =, !=, contains, not-contains, blank, not-blank, formula (required)")
+	sheetsAddConditionalFormatCmd.Flags().String("value", "", "Comparison value (required for >, <, =, !=, contains, not-contains, formula)")
+	sheetsAddConditionalFormatCmd.Flags().String("bg-color", "", "Background color (hex, e.g., #FFFF00)")
+	sheetsAddConditionalFormatCmd.Flags().String("color", "", "Text color (hex, e.g., #FF0000)")
+	sheetsAddConditionalFormatCmd.Flags().Bool("bold", false, "Make matching text bold")
+	sheetsAddConditionalFormatCmd.Flags().Bool("italic", false, "Make matching text italic")
+	sheetsAddConditionalFormatCmd.MarkFlagRequired("rule")
+
+	// List-conditional-formats command
+	sheetsCmd.AddCommand(sheetsListConditionalFormatsCmd)
+	sheetsListConditionalFormatsCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsListConditionalFormatsCmd.MarkFlagRequired("sheet")
+
+	// Delete-conditional-format command
+	sheetsCmd.AddCommand(sheetsDeleteConditionalFormatCmd)
+	sheetsDeleteConditionalFormatCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsDeleteConditionalFormatCmd.Flags().Int64("index", 0, "0-based index of the rule to delete (required)")
+	sheetsDeleteConditionalFormatCmd.MarkFlagRequired("sheet")
+	sheetsDeleteConditionalFormatCmd.MarkFlagRequired("index")
 }
 
 func runSheetsInfo(cmd *cobra.Command, args []string) error {
@@ -2473,5 +2571,476 @@ func runSheetsAddFilterView(cmd *cobra.Command, args []string) error {
 		"name":           name,
 		"filter_view_id": filterViewID,
 		"range":          rangeStr,
+	})
+}
+
+func runSheetsAddChart(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	chartType, _ := cmd.Flags().GetString("type")
+	dataRange, _ := cmd.Flags().GetString("data")
+	title, _ := cmd.Flags().GetString("title")
+	sheetName, _ := cmd.Flags().GetString("sheet")
+
+	chartType = strings.ToUpper(chartType)
+
+	validTypes := map[string]bool{"BAR": true, "LINE": true, "AREA": true, "COLUMN": true, "SCATTER": true, "PIE": true, "COMBO": true}
+	if !validTypes[chartType] {
+		return p.PrintError(fmt.Errorf("unknown chart type: %s (valid: BAR, LINE, AREA, COLUMN, SCATTER, PIE, COMBO)", chartType))
+	}
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, dataRange)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to parse data range: %w", err))
+	}
+
+	sourceRange := &sheets.ChartSourceRange{Sources: []*sheets.GridRange{gridRange}}
+	chartData := &sheets.ChartData{SourceRange: sourceRange}
+
+	spec := &sheets.ChartSpec{Title: title}
+
+	if chartType == "PIE" {
+		spec.PieChart = &sheets.PieChartSpec{
+			Domain: chartData,
+			Series: &sheets.ChartData{SourceRange: sourceRange},
+		}
+	} else {
+		spec.BasicChart = &sheets.BasicChartSpec{
+			ChartType: chartType,
+			Domains: []*sheets.BasicChartDomain{
+				{Domain: chartData},
+			},
+			Series: []*sheets.BasicChartSeries{
+				{Series: &sheets.ChartData{SourceRange: sourceRange}},
+			},
+		}
+	}
+
+	position := &sheets.EmbeddedObjectPosition{}
+	if sheetName != "" {
+		sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		position.OverlayPosition = &sheets.OverlayPosition{
+			AnchorCell: &sheets.GridCoordinate{
+				SheetId:     sheetID,
+				RowIndex:    0,
+				ColumnIndex: 0,
+			},
+		}
+	} else {
+		position.NewSheet = true
+	}
+
+	requests := []*sheets.Request{
+		{
+			AddChart: &sheets.AddChartRequest{
+				Chart: &sheets.EmbeddedChart{
+					Spec:     spec,
+					Position: position,
+				},
+			},
+		},
+	}
+
+	resp, err := svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add chart: %w", err))
+	}
+
+	var chartID int64
+	if len(resp.Replies) > 0 && resp.Replies[0].AddChart != nil && resp.Replies[0].AddChart.Chart != nil {
+		chartID = resp.Replies[0].AddChart.Chart.ChartId
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "added",
+		"spreadsheet": spreadsheetID,
+		"chart_id":    chartID,
+		"type":        chartType,
+		"title":       title,
+		"data_range":  dataRange,
+	})
+}
+
+func runSheetsListCharts(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+
+	spreadsheet, err := svc.Spreadsheets.Get(spreadsheetID).Fields("sheets.charts,sheets.properties").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get spreadsheet: %w", err))
+	}
+
+	var charts []map[string]interface{}
+	for _, sheet := range spreadsheet.Sheets {
+		for _, chart := range sheet.Charts {
+			chartInfo := map[string]interface{}{
+				"chart_id": chart.ChartId,
+				"sheet":    sheet.Properties.Title,
+				"sheet_id": sheet.Properties.SheetId,
+			}
+			if chart.Spec != nil {
+				chartInfo["title"] = chart.Spec.Title
+				if chart.Spec.BasicChart != nil {
+					chartInfo["type"] = chart.Spec.BasicChart.ChartType
+				} else if chart.Spec.PieChart != nil {
+					chartInfo["type"] = "PIE"
+				}
+			}
+			charts = append(charts, chartInfo)
+		}
+	}
+
+	if charts == nil {
+		charts = []map[string]interface{}{}
+	}
+
+	return p.Print(map[string]interface{}{
+		"spreadsheet": spreadsheetID,
+		"charts":      charts,
+		"count":       len(charts),
+	})
+}
+
+func runSheetsDeleteChart(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	chartID, _ := cmd.Flags().GetInt64("chart-id")
+
+	requests := []*sheets.Request{
+		{
+			DeleteEmbeddedObject: &sheets.DeleteEmbeddedObjectRequest{
+				ObjectId: chartID,
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete chart: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "deleted",
+		"spreadsheet": spreadsheetID,
+		"chart_id":    chartID,
+	})
+}
+
+// mapConditionType maps user-friendly rule names to Sheets API condition types.
+func mapConditionType(rule string) (string, error) {
+	switch rule {
+	case ">":
+		return "NUMBER_GREATER", nil
+	case "<":
+		return "NUMBER_LESS", nil
+	case "=":
+		return "NUMBER_EQ", nil
+	case "!=":
+		return "NUMBER_NOT_EQ", nil
+	case "contains":
+		return "TEXT_CONTAINS", nil
+	case "not-contains":
+		return "TEXT_NOT_CONTAINS", nil
+	case "blank":
+		return "BLANK", nil
+	case "not-blank":
+		return "NOT_BLANK", nil
+	case "formula":
+		return "CUSTOM_FORMULA", nil
+	default:
+		return "", fmt.Errorf("unknown rule type: %s (valid: >, <, =, !=, contains, not-contains, blank, not-blank, formula)", rule)
+	}
+}
+
+func runSheetsAddConditionalFormat(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+	rule, _ := cmd.Flags().GetString("rule")
+	value, _ := cmd.Flags().GetString("value")
+	bgColor, _ := cmd.Flags().GetString("bg-color")
+	textColor, _ := cmd.Flags().GetString("color")
+	bold, _ := cmd.Flags().GetBool("bold")
+	italic, _ := cmd.Flags().GetBool("italic")
+
+	conditionType, err := mapConditionType(rule)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	conditionValues := []*sheets.ConditionValue{}
+	if value != "" {
+		conditionValues = append(conditionValues, &sheets.ConditionValue{UserEnteredValue: value})
+	}
+
+	cellFormat := &sheets.CellFormat{}
+	hasFormat := false
+
+	if bgColor != "" {
+		color, err := parseSheetsHexColor(bgColor)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		cellFormat.BackgroundColorStyle = &sheets.ColorStyle{RgbColor: color}
+		hasFormat = true
+	}
+
+	if textColor != "" {
+		color, err := parseSheetsHexColor(textColor)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		cellFormat.TextFormat = &sheets.TextFormat{}
+		cellFormat.TextFormat.ForegroundColorStyle = &sheets.ColorStyle{RgbColor: color}
+		hasFormat = true
+	}
+
+	if bold || italic {
+		if cellFormat.TextFormat == nil {
+			cellFormat.TextFormat = &sheets.TextFormat{}
+		}
+		cellFormat.TextFormat.Bold = bold
+		cellFormat.TextFormat.Italic = italic
+		hasFormat = true
+	}
+
+	if !hasFormat {
+		cellFormat.BackgroundColorStyle = &sheets.ColorStyle{
+			RgbColor: &sheets.Color{Red: 1.0, Green: 1.0, Blue: 0.0},
+		}
+	}
+
+	conditionalRule := &sheets.ConditionalFormatRule{
+		Ranges: []*sheets.GridRange{gridRange},
+		BooleanRule: &sheets.BooleanRule{
+			Condition: &sheets.BooleanCondition{
+				Type:   conditionType,
+				Values: conditionValues,
+			},
+			Format: cellFormat,
+		},
+	}
+
+	requests := []*sheets.Request{
+		{
+			AddConditionalFormatRule: &sheets.AddConditionalFormatRuleRequest{
+				Rule:  conditionalRule,
+				Index: 0,
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add conditional format: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":         "added",
+		"spreadsheet":    spreadsheetID,
+		"range":          rangeStr,
+		"condition_type": conditionType,
+		"value":          value,
+	})
+}
+
+func runSheetsListConditionalFormats(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+
+	spreadsheet, err := svc.Spreadsheets.Get(spreadsheetID).Fields("sheets.conditionalFormats,sheets.properties").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get spreadsheet: %w", err))
+	}
+
+	var rules []map[string]interface{}
+	found := false
+	for _, sheet := range spreadsheet.Sheets {
+		if sheet.Properties.Title == sheetName {
+			found = true
+			for i, rule := range sheet.ConditionalFormats {
+				ruleInfo := map[string]interface{}{
+					"index": i,
+				}
+
+				if len(rule.Ranges) > 0 {
+					ranges := make([]map[string]interface{}, len(rule.Ranges))
+					for j, r := range rule.Ranges {
+						ranges[j] = map[string]interface{}{
+							"sheet_id":  r.SheetId,
+							"start_row": r.StartRowIndex,
+							"end_row":   r.EndRowIndex,
+							"start_col": r.StartColumnIndex,
+							"end_col":   r.EndColumnIndex,
+						}
+					}
+					ruleInfo["ranges"] = ranges
+				}
+
+				if rule.BooleanRule != nil {
+					if rule.BooleanRule.Condition != nil {
+						condition := map[string]interface{}{
+							"type": rule.BooleanRule.Condition.Type,
+						}
+						if len(rule.BooleanRule.Condition.Values) > 0 {
+							values := make([]string, len(rule.BooleanRule.Condition.Values))
+							for k, v := range rule.BooleanRule.Condition.Values {
+								values[k] = v.UserEnteredValue
+							}
+							condition["values"] = values
+						}
+						ruleInfo["condition"] = condition
+					}
+					if rule.BooleanRule.Format != nil {
+						format := map[string]interface{}{}
+						if rule.BooleanRule.Format.TextFormat != nil {
+							format["bold"] = rule.BooleanRule.Format.TextFormat.Bold
+							format["italic"] = rule.BooleanRule.Format.TextFormat.Italic
+						}
+						ruleInfo["format"] = format
+					}
+				}
+
+				rules = append(rules, ruleInfo)
+			}
+			break
+		}
+	}
+
+	if !found {
+		return p.PrintError(fmt.Errorf("sheet '%s' not found", sheetName))
+	}
+
+	if rules == nil {
+		rules = []map[string]interface{}{}
+	}
+
+	return p.Print(map[string]interface{}{
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+		"rules":       rules,
+		"count":       len(rules),
+	})
+}
+
+func runSheetsDeleteConditionalFormat(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+	index, _ := cmd.Flags().GetInt64("index")
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			DeleteConditionalFormatRule: &sheets.DeleteConditionalFormatRuleRequest{
+				SheetId: sheetID,
+				Index:   index,
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete conditional format rule: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "deleted",
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+		"index":       index,
 	})
 }

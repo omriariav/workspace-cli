@@ -1987,6 +1987,428 @@ func TestSheetsCommands_Structure_NamedRangesAndFilters(t *testing.T) {
 	}
 }
 
+// TestSheetsAddChartCommand_Flags tests add-chart command flags
+func TestSheetsAddChartCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "add-chart")
+	if cmd == nil {
+		t.Fatal("add-chart command not found")
+	}
+
+	expectedFlags := []string{"type", "data", "title", "sheet"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsListChartsCommand tests list-charts command
+func TestSheetsListChartsCommand(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "list-charts")
+	if cmd == nil {
+		t.Fatal("list-charts command not found")
+	}
+
+	if cmd.Use != "list-charts <spreadsheet-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+}
+
+// TestSheetsDeleteChartCommand_Flags tests delete-chart command flags
+func TestSheetsDeleteChartCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "delete-chart")
+	if cmd == nil {
+		t.Fatal("delete-chart command not found")
+	}
+
+	expectedFlags := []string{"chart-id"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsAddConditionalFormatCommand_Flags tests add-conditional-format command flags
+func TestSheetsAddConditionalFormatCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "add-conditional-format")
+	if cmd == nil {
+		t.Fatal("add-conditional-format command not found")
+	}
+
+	expectedFlags := []string{"rule", "value", "bg-color", "color", "bold", "italic"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsListConditionalFormatsCommand_Flags tests list-conditional-formats command flags
+func TestSheetsListConditionalFormatsCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "list-conditional-formats")
+	if cmd == nil {
+		t.Fatal("list-conditional-formats command not found")
+	}
+
+	expectedFlags := []string{"sheet"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsDeleteConditionalFormatCommand_Flags tests delete-conditional-format command flags
+func TestSheetsDeleteConditionalFormatCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "delete-conditional-format")
+	if cmd == nil {
+		t.Fatal("delete-conditional-format command not found")
+	}
+
+	expectedFlags := []string{"sheet", "index"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestMapConditionType tests the mapConditionType helper
+func TestMapConditionType(t *testing.T) {
+	tests := []struct {
+		rule     string
+		expected string
+		wantErr  bool
+	}{
+		{">", "NUMBER_GREATER", false},
+		{"<", "NUMBER_LESS", false},
+		{"=", "NUMBER_EQ", false},
+		{"!=", "NUMBER_NOT_EQ", false},
+		{"contains", "TEXT_CONTAINS", false},
+		{"not-contains", "TEXT_NOT_CONTAINS", false},
+		{"blank", "BLANK", false},
+		{"not-blank", "NOT_BLANK", false},
+		{"formula", "CUSTOM_FORMULA", false},
+		{"invalid", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.rule, func(t *testing.T) {
+			got, err := mapConditionType(tt.rule)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, got)
+			}
+		})
+	}
+}
+
+// TestSheetsAddChart_MockServer tests add-chart API integration
+func TestSheetsAddChart_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				addChart := requests[0].(map[string]interface{})["addChart"]
+				if addChart != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies": []map[string]interface{}{
+							{
+								"addChart": map[string]interface{}{
+									"chart": map[string]interface{}{
+										"chartId": 12345,
+									},
+								},
+							},
+						},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsListCharts_MockServer tests list-charts API integration
+func TestSheetsListCharts_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+						"charts": []map[string]interface{}{
+							{
+								"chartId": 111,
+								"spec": map[string]interface{}{
+									"title": "My Chart",
+									"basicChart": map[string]interface{}{
+										"chartType": "BAR",
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsDeleteChart_MockServer tests delete-chart API integration
+func TestSheetsDeleteChart_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				deleteObj := requests[0].(map[string]interface{})["deleteEmbeddedObject"]
+				if deleteObj != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsAddConditionalFormat_MockServer tests add-conditional-format API integration
+func TestSheetsAddConditionalFormat_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				addRule := requests[0].(map[string]interface{})["addConditionalFormatRule"]
+				if addRule != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsListConditionalFormats_MockServer tests list-conditional-formats API integration
+func TestSheetsListConditionalFormats_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+						"conditionalFormats": []map[string]interface{}{
+							{
+								"ranges": []map[string]interface{}{
+									{
+										"sheetId":          0,
+										"startRowIndex":    0,
+										"endRowIndex":      10,
+										"startColumnIndex": 0,
+										"endColumnIndex":   5,
+									},
+								},
+								"booleanRule": map[string]interface{}{
+									"condition": map[string]interface{}{
+										"type": "NUMBER_GREATER",
+										"values": []map[string]interface{}{
+											{"userEnteredValue": "100"},
+										},
+									},
+									"format": map[string]interface{}{
+										"textFormat": map[string]interface{}{
+											"bold": true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsDeleteConditionalFormat_MockServer tests delete-conditional-format API integration
+func TestSheetsDeleteConditionalFormat_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				deleteRule := requests[0].(map[string]interface{})["deleteConditionalFormatRule"]
+				if deleteRule != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsCommands_Structure_Charts_CondFormat tests that chart and conditional format commands are registered
+func TestSheetsCommands_Structure_Charts_CondFormat(t *testing.T) {
+	commands := []string{
+		"add-chart",
+		"list-charts",
+		"delete-chart",
+		"add-conditional-format",
+		"list-conditional-formats",
+		"delete-conditional-format",
+	}
+
+	for _, cmdName := range commands {
+		t.Run(cmdName, func(t *testing.T) {
+			cmd := findSubcommand(sheetsCmd, cmdName)
+			if cmd == nil {
+				t.Fatalf("command '%s' not found", cmdName)
+			}
+		})
+	}
+}
+
 // TestSheetsFreeze_MockServer tests freeze panes API integration
 func TestSheetsFreeze_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

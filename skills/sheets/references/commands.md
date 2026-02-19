@@ -1,6 +1,6 @@
 # Sheets Commands Reference
 
-Complete flag and option reference for `gws sheets` commands — 32 commands total.
+Complete flag and option reference for `gws sheets` commands — 38 commands total.
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
@@ -756,3 +756,194 @@ gws sheets add-filter-view 1abc123xyz "A1:F50" --name "Q1 Data"
 - Multiple filter views can exist on the same sheet
 - The response includes the `filter_view_id`
 - Unlike basic filters, filter views are per-user and don't change the shared view
+
+---
+
+## gws sheets add-chart
+
+Adds an embedded chart to a spreadsheet.
+
+```
+Usage: gws sheets add-chart <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--type` | string | | Yes | Chart type: `BAR`, `LINE`, `AREA`, `COLUMN`, `SCATTER`, `PIE`, `COMBO` |
+| `--data` | string | | Yes | Data range (e.g., `Sheet1!A1:B10`) |
+| `--title` | string | | No | Chart title |
+| `--sheet` | string | | No | Sheet to place chart on (defaults to new chart sheet) |
+
+### Examples
+
+```bash
+# Add a bar chart from data in A1:B10
+gws sheets add-chart 1abc123xyz --type BAR --data "Sheet1!A1:B10" --title "Sales"
+
+# Add a pie chart
+gws sheets add-chart 1abc123xyz --type PIE --data "Sheet1!A1:B5" --title "Distribution"
+
+# Add a line chart overlaid on an existing sheet
+gws sheets add-chart 1abc123xyz --type LINE --data "Sheet1!A1:C20" --sheet "Sheet1"
+```
+
+### Notes
+
+- PIE charts use a different internal spec than other chart types
+- Without `--sheet`, the chart is placed on a new dedicated chart sheet
+- With `--sheet`, the chart is overlaid on the specified sheet at position A1
+- Valid types: BAR, LINE, AREA, COLUMN, SCATTER, PIE, COMBO
+
+---
+
+## gws sheets list-charts
+
+Lists all embedded charts in a spreadsheet.
+
+```
+Usage: gws sheets list-charts <spreadsheet-id>
+```
+
+No additional flags. Returns chart IDs, titles, types, and which sheet each chart is on.
+
+---
+
+## gws sheets delete-chart
+
+Deletes an embedded chart by its chart ID.
+
+```
+Usage: gws sheets delete-chart <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--chart-id` | int | | Yes | Chart ID to delete |
+
+### Examples
+
+```bash
+# Delete chart with ID 12345
+gws sheets delete-chart 1abc123xyz --chart-id 12345
+
+# List charts first, then delete
+gws sheets list-charts 1abc123xyz
+gws sheets delete-chart 1abc123xyz --chart-id <id-from-list>
+```
+
+---
+
+## gws sheets add-conditional-format
+
+Adds a conditional formatting rule to a range of cells.
+
+```
+Usage: gws sheets add-conditional-format <spreadsheet-id> <range> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--rule` | string | | Yes | Condition type (see table below) |
+| `--value` | string | | Depends | Comparison value |
+| `--bg-color` | string | | No | Background color (hex, e.g., `#FFFF00`) |
+| `--color` | string | | No | Text color (hex, e.g., `#FF0000`) |
+| `--bold` | bool | false | No | Make matching text bold |
+| `--italic` | bool | false | No | Make matching text italic |
+
+### Rule Types
+
+| Rule | API Type | Needs `--value`? |
+|------|----------|-----------------|
+| `>` | NUMBER_GREATER | Yes |
+| `<` | NUMBER_LESS | Yes |
+| `=` | NUMBER_EQ | Yes |
+| `!=` | NUMBER_NOT_EQ | Yes |
+| `contains` | TEXT_CONTAINS | Yes |
+| `not-contains` | TEXT_NOT_CONTAINS | Yes |
+| `blank` | BLANK | No |
+| `not-blank` | NOT_BLANK | No |
+| `formula` | CUSTOM_FORMULA | Yes (formula string) |
+
+### Examples
+
+```bash
+# Highlight cells > 100 in yellow
+gws sheets add-conditional-format 1abc123xyz "Sheet1!A1:D10" --rule ">" --value "100" --bg-color "#FFFF00"
+
+# Bold cells containing "URGENT"
+gws sheets add-conditional-format 1abc123xyz "Sheet1!A1:A100" --rule "contains" --value "URGENT" --bold
+
+# Red text for negative numbers
+gws sheets add-conditional-format 1abc123xyz "B2:B100" --rule "<" --value "0" --color "#FF0000"
+
+# Highlight blank cells
+gws sheets add-conditional-format 1abc123xyz "Sheet1!A1:D10" --rule "blank" --bg-color "#FFCCCC"
+
+# Custom formula
+gws sheets add-conditional-format 1abc123xyz "A1:A100" --rule "formula" --value "=A1>B1" --bold --italic
+```
+
+### Notes
+
+- If no format flags are specified, defaults to yellow background
+- Colors must be in hex format: `#RRGGBB`
+- New rules are inserted at index 0 (highest priority)
+- Unbounded ranges (`A:A`, `1:1`) are not supported
+
+---
+
+## gws sheets list-conditional-formats
+
+Lists all conditional formatting rules for a specific sheet.
+
+```
+Usage: gws sheets list-conditional-formats <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--sheet` | string | | Yes | Sheet name |
+
+### Examples
+
+```bash
+# List all conditional format rules on Sheet1
+gws sheets list-conditional-formats 1abc123xyz --sheet "Sheet1"
+```
+
+### Notes
+
+- Returns rule index, condition type, values, ranges, and format details
+- Use the index from the output with `delete-conditional-format`
+
+---
+
+## gws sheets delete-conditional-format
+
+Deletes a conditional formatting rule by its index within a sheet.
+
+```
+Usage: gws sheets delete-conditional-format <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--sheet` | string | | Yes | Sheet name |
+| `--index` | int | | Yes | 0-based index of the rule to delete |
+
+### Examples
+
+```bash
+# Delete the first (highest priority) conditional format rule
+gws sheets delete-conditional-format 1abc123xyz --sheet "Sheet1" --index 0
+
+# List rules first, then delete by index
+gws sheets list-conditional-formats 1abc123xyz --sheet "Sheet1"
+gws sheets delete-conditional-format 1abc123xyz --sheet "Sheet1" --index 2
+```
+
+### Notes
+
+- Get rule indices from `list-conditional-formats`
+- Indices are 0-based
+- Deleting a rule shifts the indices of subsequent rules

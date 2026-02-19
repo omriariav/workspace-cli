@@ -266,6 +266,12 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws sheets add-filter <id> <range>` | Set basic filter on range |
 | `gws sheets clear-filter <id>` | Clear basic filter (`--sheet`) |
 | `gws sheets add-filter-view <id> <range>` | Add filter view (`--name`) |
+| `gws sheets add-chart <id>` | Add embedded chart (`--type`, `--data`, `--title`, `--sheet`) |
+| `gws sheets list-charts <id>` | List all charts in a spreadsheet |
+| `gws sheets delete-chart <id>` | Delete a chart (`--chart-id`) |
+| `gws sheets add-conditional-format <id> <range>` | Add conditional format rule (`--rule`, `--value`, `--bg-color`, `--bold`) |
+| `gws sheets list-conditional-formats <id>` | List conditional format rules (`--sheet`) |
+| `gws sheets delete-conditional-format <id>` | Delete conditional format rule (`--sheet`, `--index`) |
 
 ### Slides
 
