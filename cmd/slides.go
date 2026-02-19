@@ -3125,6 +3125,13 @@ func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 	size, _ := cmd.Flags().GetString("size")
 	downloadPath, _ := cmd.Flags().GetString("download")
 
+	// Validate size before any API calls
+	validSizes := map[string]bool{"SMALL": true, "MEDIUM": true, "LARGE": true}
+	sizeUpper := strings.ToUpper(size)
+	if !validSizes[sizeUpper] {
+		return p.PrintError(fmt.Errorf("invalid size '%s': must be SMALL, MEDIUM, or LARGE", size))
+	}
+
 	// Resolve slide flag: could be a slide object ID or a 1-based number
 	pageObjectID := slideFlag
 	if num, err := strconv.Atoi(slideFlag); err == nil && num > 0 {
@@ -3139,13 +3146,6 @@ func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 		pageObjectID = presentation.Slides[num-1].ObjectId
 	}
 
-	// Validate size
-	validSizes := map[string]bool{"SMALL": true, "MEDIUM": true, "LARGE": true}
-	sizeUpper := strings.ToUpper(size)
-	if !validSizes[sizeUpper] {
-		return p.PrintError(fmt.Errorf("invalid size '%s': must be SMALL, MEDIUM, or LARGE", size))
-	}
-
 	thumbnail, err := svc.Presentations.Pages.GetThumbnail(presentationID, pageObjectID).
 		ThumbnailPropertiesThumbnailSize(sizeUpper).
 		Do()
@@ -3154,9 +3154,9 @@ func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 	}
 
 	result := map[string]interface{}{
-		"contentUrl": thumbnail.ContentUrl,
-		"width":      thumbnail.Width,
-		"height":     thumbnail.Height,
+		"content_url": thumbnail.ContentUrl,
+		"width":       thumbnail.Width,
+		"height":      thumbnail.Height,
 	}
 
 	if downloadPath != "" {
@@ -3165,23 +3165,30 @@ func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return p.PrintError(fmt.Errorf("failed to download thumbnail: %w", err))
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			return p.PrintError(fmt.Errorf("failed to download thumbnail: HTTP %d", resp.StatusCode))
 		}
 
 		f, err := os.Create(downloadPath)
 		if err != nil {
+			resp.Body.Close()
 			return p.PrintError(fmt.Errorf("failed to create file: %w", err))
 		}
-		defer f.Close()
 
 		if _, err := io.Copy(f, resp.Body); err != nil {
+			f.Close()
+			resp.Body.Close()
 			return p.PrintError(fmt.Errorf("failed to write thumbnail file: %w", err))
 		}
+		resp.Body.Close()
 
-		result["savedTo"] = downloadPath
+		if err := f.Close(); err != nil {
+			return p.PrintError(fmt.Errorf("failed to finalize thumbnail file: %w", err))
+		}
+
+		result["saved_to"] = downloadPath
 	}
 
 	return p.Print(result)
