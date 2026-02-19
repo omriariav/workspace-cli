@@ -46,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.23.1** - Fix batch-write/batch-read StringSlice→StringArray for JSON values with commas.
+**v1.24.0** - Contacts full People API parity (9 new commands), Forms full API parity (4 new commands).
 
 ## Roadmap
 
