@@ -368,6 +368,7 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 				"insert-rows", "delete-rows", "insert-cols", "delete-cols",
 				"rename-sheet", "duplicate-sheet",
 				"merge", "unmerge", "sort", "find-replace",
+				"copy-to", "batch-read", "batch-write",
 			},
 		},
 		"slides": {

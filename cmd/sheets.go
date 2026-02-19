@@ -256,6 +256,45 @@ var sheetsFreezeCmd = &cobra.Command{
 	RunE:  runSheetsFreeze,
 }
 
+var sheetsCopyToCmd = &cobra.Command{
+	Use:   "copy-to <spreadsheet-id>",
+	Short: "Copy a sheet to another spreadsheet",
+	Long:  "Copies a sheet tab from one spreadsheet to another spreadsheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsCopyTo,
+}
+
+var sheetsBatchReadCmd = &cobra.Command{
+	Use:   "batch-read <spreadsheet-id>",
+	Short: "Read multiple ranges",
+	Long: `Reads multiple ranges from a spreadsheet in a single API call.
+
+Range format examples:
+  --ranges "Sheet1!A1:D10"    - Specific range in Sheet1
+  --ranges "A1:B5"            - Range in first sheet
+  --ranges "Sheet2!A1:C10"    - Range in Sheet2
+
+Multiple ranges can be specified by repeating the --ranges flag.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSheetsBatchRead,
+}
+
+var sheetsBatchWriteCmd = &cobra.Command{
+	Use:   "batch-write <spreadsheet-id>",
+	Short: "Write to multiple ranges",
+	Long: `Writes values to multiple ranges in a spreadsheet in a single API call.
+
+Each range-values pair is specified with --range and --values flags.
+The nth --range corresponds to the nth --values.
+
+Example:
+  gws sheets batch-write SPREADSHEET_ID \
+    --range "A1:B2" --values '[[1,2],[3,4]]' \
+    --range "Sheet2!A1:B1" --values '[["x","y"]]'`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSheetsBatchWrite,
+}
+
 func init() {
 	rootCmd.AddCommand(sheetsCmd)
 	sheetsCmd.AddCommand(sheetsInfoCmd)
@@ -388,6 +427,27 @@ func init() {
 	sheetsFindReplaceCmd.Flags().Bool("entire-cell", false, "Match entire cell contents only")
 	sheetsFindReplaceCmd.MarkFlagRequired("find")
 	sheetsFindReplaceCmd.MarkFlagRequired("replace")
+
+	// Copy-to command
+	sheetsCmd.AddCommand(sheetsCopyToCmd)
+	sheetsCopyToCmd.Flags().Int64("sheet-id", 0, "Source sheet ID to copy (required)")
+	sheetsCopyToCmd.Flags().String("destination", "", "Destination spreadsheet ID (required)")
+	sheetsCopyToCmd.MarkFlagRequired("sheet-id")
+	sheetsCopyToCmd.MarkFlagRequired("destination")
+
+	// Batch-read command
+	sheetsCmd.AddCommand(sheetsBatchReadCmd)
+	sheetsBatchReadCmd.Flags().StringSlice("ranges", nil, "Ranges to read (can be repeated)")
+	sheetsBatchReadCmd.Flags().String("value-render", "FORMATTED_VALUE", "Value render option: FORMATTED_VALUE, UNFORMATTED_VALUE, FORMULA")
+	sheetsBatchReadCmd.MarkFlagRequired("ranges")
+
+	// Batch-write command
+	sheetsCmd.AddCommand(sheetsBatchWriteCmd)
+	sheetsBatchWriteCmd.Flags().StringSlice("range", nil, "Target ranges (can be repeated, pairs with --values)")
+	sheetsBatchWriteCmd.Flags().StringSlice("values", nil, "JSON arrays of values (can be repeated, pairs with --range)")
+	sheetsBatchWriteCmd.Flags().String("value-input", "USER_ENTERED", "Value input option: RAW, USER_ENTERED")
+	sheetsBatchWriteCmd.MarkFlagRequired("range")
+	sheetsBatchWriteCmd.MarkFlagRequired("values")
 }
 
 func runSheetsInfo(cmd *cobra.Command, args []string) error {
@@ -1925,5 +1985,139 @@ func runSheetsFreeze(cmd *cobra.Command, args []string) error {
 		"sheet":       sheetName,
 		"frozen_rows": freezeRows,
 		"frozen_cols": freezeCols,
+	})
+}
+
+func runSheetsCopyTo(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetID, _ := cmd.Flags().GetInt64("sheet-id")
+	destination, _ := cmd.Flags().GetString("destination")
+
+	req := &sheets.CopySheetToAnotherSpreadsheetRequest{
+		DestinationSpreadsheetId: destination,
+	}
+
+	resp, err := svc.Spreadsheets.Sheets.CopyTo(spreadsheetID, sheetID, req).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to copy sheet: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":             "copied",
+		"source_spreadsheet": spreadsheetID,
+		"source_sheet_id":    sheetID,
+		"destination":        destination,
+		"new_sheet_id":       resp.SheetId,
+		"new_sheet_title":    resp.Title,
+		"new_sheet_index":    resp.Index,
+	})
+}
+
+func runSheetsBatchRead(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	ranges, _ := cmd.Flags().GetStringSlice("ranges")
+	valueRender, _ := cmd.Flags().GetString("value-render")
+
+	resp, err := svc.Spreadsheets.Values.BatchGet(spreadsheetID).
+		Ranges(ranges...).
+		ValueRenderOption(valueRender).
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to batch read: %w", err))
+	}
+
+	results := make([]map[string]interface{}, 0, len(resp.ValueRanges))
+	for _, vr := range resp.ValueRanges {
+		results = append(results, map[string]interface{}{
+			"range": vr.Range,
+			"data":  vr.Values,
+			"rows":  len(vr.Values),
+		})
+	}
+
+	return p.Print(map[string]interface{}{
+		"spreadsheet": resp.SpreadsheetId,
+		"ranges":      results,
+		"range_count": len(results),
+	})
+}
+
+func runSheetsBatchWrite(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	ranges, _ := cmd.Flags().GetStringSlice("range")
+	valuesStrs, _ := cmd.Flags().GetStringSlice("values")
+	valueInput, _ := cmd.Flags().GetString("value-input")
+
+	if len(ranges) != len(valuesStrs) {
+		return p.PrintError(fmt.Errorf("number of --range flags (%d) must match number of --values flags (%d)", len(ranges), len(valuesStrs)))
+	}
+
+	data := make([]*sheets.ValueRange, 0, len(ranges))
+	for i, rangeStr := range ranges {
+		var rawValues [][]interface{}
+		if err := json.Unmarshal([]byte(valuesStrs[i]), &rawValues); err != nil {
+			return p.PrintError(fmt.Errorf("invalid JSON for values[%d]: %w", i, err))
+		}
+		data = append(data, &sheets.ValueRange{
+			Range:  rangeStr,
+			Values: rawValues,
+		})
+	}
+
+	req := &sheets.BatchUpdateValuesRequest{
+		ValueInputOption: valueInput,
+		Data:             data,
+	}
+
+	resp, err := svc.Spreadsheets.Values.BatchUpdate(spreadsheetID, req).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to batch write: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":         "written",
+		"spreadsheet":    resp.SpreadsheetId,
+		"ranges_updated": resp.TotalUpdatedSheets,
+		"rows_updated":   resp.TotalUpdatedRows,
+		"cells_updated":  resp.TotalUpdatedCells,
 	})
 }

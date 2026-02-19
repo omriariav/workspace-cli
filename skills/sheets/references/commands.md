@@ -1,6 +1,6 @@
 # Sheets Commands Reference
 
-Complete flag and option reference for `gws sheets` commands — 27 commands total.
+Complete flag and option reference for `gws sheets` commands — 30 commands total.
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
@@ -476,3 +476,114 @@ gws sheets freeze 1abc123xyz --sheet "Sheet1" --rows 0 --cols 0
 - Frozen columns remain visible when scrolling horizontally
 - Common pattern: freeze 1 row (header) and/or 1 column (labels)
 - To unfreeze completely, set both `--rows 0 --cols 0`
+
+---
+
+## gws sheets copy-to
+
+Copies a sheet tab from one spreadsheet to another.
+
+```
+Usage: gws sheets copy-to <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--sheet-id` | int | 0 | Yes | Source sheet ID to copy |
+| `--destination` | string | | Yes | Destination spreadsheet ID |
+
+### Examples
+
+```bash
+# Copy sheet 0 to another spreadsheet
+gws sheets copy-to 1abc123xyz --sheet-id 0 --destination 2def456uvw
+
+# Copy sheet by ID (get IDs from gws sheets list)
+gws sheets copy-to 1abc123xyz --sheet-id 12345 --destination 2def456uvw
+```
+
+### Notes
+
+- Use `gws sheets list <id>` to find sheet IDs
+- The copied sheet appears as a new tab in the destination spreadsheet
+- The copy inherits all data, formatting, and conditional formatting
+
+---
+
+## gws sheets batch-read
+
+Reads multiple ranges from a spreadsheet in a single API call.
+
+```
+Usage: gws sheets batch-read <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--ranges` | strings | | Yes | Ranges to read (can be repeated) |
+| `--value-render` | string | `FORMATTED_VALUE` | No | Value render option |
+
+**Value render options:**
+- `FORMATTED_VALUE` — Values as displayed in the UI (default)
+- `UNFORMATTED_VALUE` — Raw unformatted values
+- `FORMULA` — Formulas instead of computed values
+
+### Examples
+
+```bash
+# Read two ranges
+gws sheets batch-read 1abc123xyz --ranges "Sheet1!A1:B5" --ranges "Sheet2!A1:C10"
+
+# Read with formulas visible
+gws sheets batch-read 1abc123xyz --ranges "A1:D10" --ranges "E1:F10" --value-render FORMULA
+
+# Read from multiple sheets
+gws sheets batch-read 1abc123xyz --ranges "Sales!A1:D100" --ranges "Inventory!A1:C50" --ranges "Summary!A1:B10"
+```
+
+### Notes
+
+- More efficient than multiple `gws sheets read` calls
+- Each range in the response includes its own data array
+- Ranges can span different sheets within the same spreadsheet
+
+---
+
+## gws sheets batch-write
+
+Writes values to multiple ranges in a single API call.
+
+```
+Usage: gws sheets batch-write <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--range` | strings | | Yes | Target ranges (pairs with `--values`) |
+| `--values` | strings | | Yes | JSON arrays of values (pairs with `--range`) |
+| `--value-input` | string | `USER_ENTERED` | No | Value input option |
+
+**Value input options:**
+- `USER_ENTERED` — Values parsed as if typed by a user (default)
+- `RAW` — Values stored exactly as provided
+
+### Examples
+
+```bash
+# Write to two ranges
+gws sheets batch-write 1abc123xyz \
+  --range "A1:B2" --values '[[1,2],[3,4]]' \
+  --range "Sheet2!A1:B1" --values '[["x","y"]]'
+
+# Write raw values (no formula parsing)
+gws sheets batch-write 1abc123xyz \
+  --range "A1:C1" --values '[["=SUM(B1:B10)","hello",42]]' \
+  --value-input RAW
+```
+
+### Notes
+
+- The nth `--range` flag pairs with the nth `--values` flag
+- Number of `--range` flags must match number of `--values` flags
+- Values must be JSON arrays (e.g., `'[["a","b"],["c","d"]]'`)
+- More efficient than multiple `gws sheets write` calls

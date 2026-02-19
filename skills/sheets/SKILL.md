@@ -9,7 +9,7 @@ metadata:
 
 # Google Sheets (gws sheets)
 
-`gws sheets` provides CLI access to Google Sheets with structured JSON output. This is the largest skill with 19 commands covering full spreadsheet management.
+`gws sheets` provides CLI access to Google Sheets with structured JSON output. This skill has 22 commands covering full spreadsheet management including batch operations.
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
@@ -47,6 +47,13 @@ For initial setup, see the `gws-auth` skill.
 | Write JSON data | `gws sheets write <id> "A1" --values-json '[["a","b"],["c","d"]]'` |
 | Append rows | `gws sheets append <id> "Sheet1" --values "x,y,z"` |
 | Clear cells | `gws sheets clear <id> "Sheet1!A1:D10"` |
+
+### Batch & Cross-Spreadsheet Operations
+| Task | Command |
+|------|---------|
+| Read multiple ranges | `gws sheets batch-read <id> --ranges "A1:B5" --ranges "Sheet2!A1:C10"` |
+| Write multiple ranges | `gws sheets batch-write <id> --range "A1:B2" --values '[[1,2],[3,4]]'` |
+| Copy sheet to another | `gws sheets copy-to <id> --sheet-id 0 --destination <dest-id>` |
 
 ### Sheet Management
 | Task | Command |
@@ -244,6 +251,39 @@ gws sheets freeze <id> --sheet <name> --rows <n> --cols <n>
 - `--sheet string` — Sheet name (required)
 - `--rows int` — Number of rows to freeze
 - `--cols int` — Number of columns to freeze
+
+### copy-to — Copy a sheet to another spreadsheet
+
+```bash
+gws sheets copy-to <spreadsheet-id> --sheet-id <id> --destination <dest-spreadsheet-id>
+```
+
+**Flags:**
+- `--sheet-id int` — Source sheet ID to copy (required)
+- `--destination string` — Destination spreadsheet ID (required)
+
+### batch-read — Read multiple ranges
+
+```bash
+gws sheets batch-read <spreadsheet-id> --ranges "A1:B5" --ranges "Sheet2!A1:C10" [flags]
+```
+
+**Flags:**
+- `--ranges strings` — Ranges to read (can be repeated, required)
+- `--value-render string` — Value render option: `FORMATTED_VALUE`, `UNFORMATTED_VALUE`, `FORMULA` (default: "FORMATTED_VALUE")
+
+### batch-write — Write to multiple ranges
+
+```bash
+gws sheets batch-write <spreadsheet-id> --range "A1:B2" --values '[[1,2],[3,4]]' [flags]
+```
+
+**Flags:**
+- `--range strings` — Target ranges (can be repeated, pairs with `--values`, required)
+- `--values strings` — JSON arrays of values (can be repeated, pairs with `--range`, required)
+- `--value-input string` — Value input option: `RAW`, `USER_ENTERED` (default: "USER_ENTERED")
+
+The nth `--range` pairs with the nth `--values`.
 
 ## Output Modes
 
