@@ -13,6 +13,16 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 
 ## Completed
 
+### v1.24.0
+- [x] Contacts: full People API parity — update, batch-create/update/delete, directory search, photos, resolve (9 new commands, PR #125)
+- [x] Forms: full API parity — create, update, get, response (4 new commands, PR #124)
+- [x] Auth: added forms.body and directory.readonly scopes
+
+### v1.23.0
+- [x] Docs: trash command with permanent delete option (PR #106)
+- [x] Sheets: copy-to, batch-read, batch-write (PR #105)
+- [x] Slides: page thumbnails with download (PR #107)
+
 ### v1.22.0
 - [x] Gmail: full API parity — drafts CRUD, label CRUD, batch-modify/batch-delete, thread trash/untrash/delete, attachment download (18 new commands, PR #101)
 - [x] Calendar: full API parity — event get/quick-add/instances/move, calendar CRUD, ACL/sharing, subscriptions, freebusy, colors, settings (20 new commands, PR #103)
