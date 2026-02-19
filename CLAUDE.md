@@ -46,7 +46,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.23.0** - Docs trash command, Sheets batch ops (copy-to, batch-read, batch-write), Slides page thumbnails.
+**v1.23.1** - Fix batch-write/batch-read StringSlice→StringArray for JSON values with commas.
 
 ## Roadmap
 

@@ -1517,6 +1517,49 @@ func TestSheetsBatchRead_MockServer(t *testing.T) {
 	}
 }
 
+// TestSheetsBatchWrite_JSONValues tests that --values flag correctly handles JSON
+// with commas and quotes (regression: StringSlice CSV-parses and breaks JSON)
+func TestSheetsBatchWrite_JSONValues(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "batch-write")
+	if cmd == nil {
+		t.Fatal("batch-write command not found")
+	}
+
+	// Simulate the flags that would be passed on the CLI.
+	// StringSlice would CSV-parse '[[\"hello\",\"world\"]]' and split on commas,
+	// producing broken fragments. StringArray keeps each flag occurrence intact.
+	flags := cmd.Flags()
+
+	// Reset flags for isolated test
+	flags.Set("ranges", "Sheet1!A1:B2")
+	flags.Set("values", `[["hello","world"],["foo","bar"]]`)
+
+	ranges, err := flags.GetStringArray("ranges")
+	if err != nil {
+		t.Fatalf("failed to get ranges: %v", err)
+	}
+	values, err := flags.GetStringArray("values")
+	if err != nil {
+		t.Fatalf("failed to get values: %v", err)
+	}
+
+	if len(ranges) != 1 {
+		t.Fatalf("expected 1 range, got %d: %v", len(ranges), ranges)
+	}
+	if len(values) != 1 {
+		t.Fatalf("expected 1 value entry, got %d: %v", len(values), values)
+	}
+
+	// Verify the JSON is intact and parseable
+	var parsed [][]interface{}
+	if err := json.Unmarshal([]byte(values[0]), &parsed); err != nil {
+		t.Fatalf("values JSON should be parseable, got error: %v\nraw value: %q", err, values[0])
+	}
+	if len(parsed) != 2 || len(parsed[0]) != 2 {
+		t.Errorf("expected 2x2 array, got %v", parsed)
+	}
+}
+
 // TestSheetsBatchWrite_MockServer tests batch-write API integration
 func TestSheetsBatchWrite_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

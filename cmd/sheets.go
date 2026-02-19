@@ -437,14 +437,14 @@ func init() {
 
 	// Batch-read command
 	sheetsCmd.AddCommand(sheetsBatchReadCmd)
-	sheetsBatchReadCmd.Flags().StringSlice("ranges", nil, "Ranges to read (can be repeated)")
+	sheetsBatchReadCmd.Flags().StringArray("ranges", nil, "Ranges to read (can be repeated)")
 	sheetsBatchReadCmd.Flags().String("value-render", "FORMATTED_VALUE", "Value render option: FORMATTED_VALUE, UNFORMATTED_VALUE, FORMULA")
 	sheetsBatchReadCmd.MarkFlagRequired("ranges")
 
 	// Batch-write command
 	sheetsCmd.AddCommand(sheetsBatchWriteCmd)
-	sheetsBatchWriteCmd.Flags().StringSlice("ranges", nil, "Target ranges (can be repeated, pairs with --values)")
-	sheetsBatchWriteCmd.Flags().StringSlice("values", nil, "JSON arrays of values (can be repeated, pairs with --ranges)")
+	sheetsBatchWriteCmd.Flags().StringArray("ranges", nil, "Target ranges (can be repeated, pairs with --values)")
+	sheetsBatchWriteCmd.Flags().StringArray("values", nil, "JSON arrays of values (can be repeated, pairs with --ranges)")
 	sheetsBatchWriteCmd.Flags().String("value-input", "USER_ENTERED", "Value input option: RAW, USER_ENTERED")
 	sheetsBatchWriteCmd.MarkFlagRequired("ranges")
 	sheetsBatchWriteCmd.MarkFlagRequired("values")
@@ -2041,7 +2041,7 @@ func runSheetsBatchRead(cmd *cobra.Command, args []string) error {
 	}
 
 	spreadsheetID := args[0]
-	ranges, _ := cmd.Flags().GetStringSlice("ranges")
+	ranges, _ := cmd.Flags().GetStringArray("ranges")
 	valueRender, _ := cmd.Flags().GetString("value-render")
 
 	resp, err := svc.Spreadsheets.Values.BatchGet(spreadsheetID).
@@ -2083,8 +2083,8 @@ func runSheetsBatchWrite(cmd *cobra.Command, args []string) error {
 	}
 
 	spreadsheetID := args[0]
-	ranges, _ := cmd.Flags().GetStringSlice("ranges")
-	valuesStrs, _ := cmd.Flags().GetStringSlice("values")
+	ranges, _ := cmd.Flags().GetStringArray("ranges")
+	valuesStrs, _ := cmd.Flags().GetStringArray("values")
 	valueInput, _ := cmd.Flags().GetString("value-input")
 
 	if len(ranges) != len(valuesStrs) {
