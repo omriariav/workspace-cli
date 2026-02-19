@@ -22,6 +22,15 @@ func TestContactsCommands(t *testing.T) {
 		{"get", "get <resource-name>"},
 		{"create", "create"},
 		{"delete", "delete <resource-name>"},
+		{"update", "update <resource-name>"},
+		{"batch-create", "batch-create"},
+		{"batch-update", "batch-update"},
+		{"batch-delete", "batch-delete"},
+		{"directory", "directory"},
+		{"directory-search", "directory-search"},
+		{"photo", "photo <resource-name>"},
+		{"delete-photo", "delete-photo <resource-name>"},
+		{"resolve", "resolve"},
 	}
 
 	for _, tt := range tests {
@@ -61,6 +70,108 @@ func TestContactsCreateCommand_Flags(t *testing.T) {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected --%s flag", flag)
 		}
+	}
+}
+
+// TestContactsUpdateCommand_Flags tests update command flags
+func TestContactsUpdateCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(contactsCmd, "update")
+	if cmd == nil {
+		t.Fatal("contacts update command not found")
+	}
+
+	flags := []string{"name", "email", "phone", "organization", "title", "etag"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+// TestContactsBatchCreateCommand_Flags tests batch-create command flags
+func TestContactsBatchCreateCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(contactsCmd, "batch-create")
+	if cmd == nil {
+		t.Fatal("contacts batch-create command not found")
+	}
+
+	if cmd.Flags().Lookup("file") == nil {
+		t.Error("expected --file flag")
+	}
+}
+
+// TestContactsBatchUpdateCommand_Flags tests batch-update command flags
+func TestContactsBatchUpdateCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(contactsCmd, "batch-update")
+	if cmd == nil {
+		t.Fatal("contacts batch-update command not found")
+	}
+
+	if cmd.Flags().Lookup("file") == nil {
+		t.Error("expected --file flag")
+	}
+}
+
+// TestContactsBatchDeleteCommand_Flags tests batch-delete command flags
+func TestContactsBatchDeleteCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(contactsCmd, "batch-delete")
+	if cmd == nil {
+		t.Fatal("contacts batch-delete command not found")
+	}
+
+	if cmd.Flags().Lookup("resources") == nil {
+		t.Error("expected --resources flag")
+	}
+}
+
+// TestContactsDirectoryCommand_Flags tests directory command flags
+func TestContactsDirectoryCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(contactsCmd, "directory")
+	if cmd == nil {
+		t.Fatal("contacts directory command not found")
+	}
+
+	if cmd.Flags().Lookup("max") == nil {
+		t.Error("expected --max flag")
+	}
+}
+
+// TestContactsDirectorySearchCommand_Flags tests directory-search command flags
+func TestContactsDirectorySearchCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(contactsCmd, "directory-search")
+	if cmd == nil {
+		t.Fatal("contacts directory-search command not found")
+	}
+
+	flags := []string{"query", "max"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+// TestContactsPhotoCommand_Flags tests photo command flags
+func TestContactsPhotoCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(contactsCmd, "photo")
+	if cmd == nil {
+		t.Fatal("contacts photo command not found")
+	}
+
+	if cmd.Flags().Lookup("file") == nil {
+		t.Error("expected --file flag")
+	}
+}
+
+// TestContactsResolveCommand_Flags tests resolve command flags
+func TestContactsResolveCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(contactsCmd, "resolve")
+	if cmd == nil {
+		t.Fatal("contacts resolve command not found")
+	}
+
+	if cmd.Flags().Lookup("ids") == nil {
+		t.Error("expected --ids flag")
 	}
 }
 
@@ -300,10 +411,456 @@ func TestContactsDelete_Success(t *testing.T) {
 	}
 }
 
+// TestContactsUpdate_Success tests updating a contact
+func TestContactsUpdate_Success(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/people/c123:updateContact": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "PATCH" {
+				t.Errorf("expected PATCH, got %s", r.Method)
+			}
+
+			updateMask := r.URL.Query().Get("updatePersonFields")
+			if updateMask == "" {
+				t.Error("expected updatePersonFields parameter")
+			}
+
+			json.NewEncoder(w).Encode(&people.Person{
+				ResourceName: "people/c123",
+				Etag:         "etag2",
+				Names:        []*people.Name{{DisplayName: "Jane Doe"}},
+				EmailAddresses: []*people.EmailAddress{
+					{Value: "jane@example.com"},
+				},
+			})
+		},
+	}
+
+	server := mockPeopleServer(t, handlers)
+	defer server.Close()
+
+	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create people service: %v", err)
+	}
+
+	person := &people.Person{
+		Etag:  "etag1",
+		Names: []*people.Name{{UnstructuredName: "Jane Doe"}},
+		EmailAddresses: []*people.EmailAddress{
+			{Value: "jane@example.com"},
+		},
+	}
+
+	updated, err := svc.People.UpdateContact("people/c123", person).
+		UpdatePersonFields("names,emailAddresses").
+		PersonFields(personFields).
+		Do()
+	if err != nil {
+		t.Fatalf("failed to update contact: %v", err)
+	}
+
+	if updated.ResourceName != "people/c123" {
+		t.Errorf("expected resource name 'people/c123', got '%s'", updated.ResourceName)
+	}
+	if updated.Names[0].DisplayName != "Jane Doe" {
+		t.Errorf("expected 'Jane Doe', got '%s'", updated.Names[0].DisplayName)
+	}
+}
+
+// TestContactsBatchCreate_Success tests batch creating contacts
+func TestContactsBatchCreate_Success(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/people:batchCreateContacts": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+
+			json.NewEncoder(w).Encode(&people.BatchCreateContactsResponse{
+				CreatedPeople: []*people.PersonResponse{
+					{
+						Person: &people.Person{
+							ResourceName: "people/c100",
+							Names:        []*people.Name{{DisplayName: "Contact One"}},
+						},
+					},
+					{
+						Person: &people.Person{
+							ResourceName: "people/c101",
+							Names:        []*people.Name{{DisplayName: "Contact Two"}},
+						},
+					},
+				},
+			})
+		},
+	}
+
+	server := mockPeopleServer(t, handlers)
+	defer server.Close()
+
+	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create people service: %v", err)
+	}
+
+	req := &people.BatchCreateContactsRequest{
+		Contacts: []*people.ContactToCreate{
+			{ContactPerson: &people.Person{Names: []*people.Name{{UnstructuredName: "Contact One"}}}},
+			{ContactPerson: &people.Person{Names: []*people.Name{{UnstructuredName: "Contact Two"}}}},
+		},
+		ReadMask: personFields,
+	}
+
+	resp, err := svc.People.BatchCreateContacts(req).Do()
+	if err != nil {
+		t.Fatalf("failed to batch create contacts: %v", err)
+	}
+
+	if len(resp.CreatedPeople) != 2 {
+		t.Errorf("expected 2 created people, got %d", len(resp.CreatedPeople))
+	}
+	if resp.CreatedPeople[0].Person.ResourceName != "people/c100" {
+		t.Errorf("expected 'people/c100', got '%s'", resp.CreatedPeople[0].Person.ResourceName)
+	}
+}
+
+// TestContactsBatchUpdate_Success tests batch updating contacts
+func TestContactsBatchUpdate_Success(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/people:batchUpdateContacts": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+
+			json.NewEncoder(w).Encode(&people.BatchUpdateContactsResponse{
+				UpdateResult: map[string]people.PersonResponse{
+					"people/c100": {
+						Person: &people.Person{
+							ResourceName: "people/c100",
+							Names:        []*people.Name{{DisplayName: "Updated One"}},
+						},
+					},
+				},
+			})
+		},
+	}
+
+	server := mockPeopleServer(t, handlers)
+	defer server.Close()
+
+	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create people service: %v", err)
+	}
+
+	req := &people.BatchUpdateContactsRequest{
+		Contacts: map[string]people.Person{
+			"people/c100": {
+				Etag:  "etag1",
+				Names: []*people.Name{{UnstructuredName: "Updated One"}},
+			},
+		},
+		UpdateMask: "names",
+		ReadMask:   personFields,
+	}
+
+	resp, err := svc.People.BatchUpdateContacts(req).Do()
+	if err != nil {
+		t.Fatalf("failed to batch update contacts: %v", err)
+	}
+
+	if len(resp.UpdateResult) != 1 {
+		t.Errorf("expected 1 update result, got %d", len(resp.UpdateResult))
+	}
+	result, ok := resp.UpdateResult["people/c100"]
+	if !ok {
+		t.Fatal("expected people/c100 in update results")
+	}
+	if result.Person.Names[0].DisplayName != "Updated One" {
+		t.Errorf("expected 'Updated One', got '%s'", result.Person.Names[0].DisplayName)
+	}
+}
+
+// TestContactsBatchDelete_Success tests batch deleting contacts
+func TestContactsBatchDelete_Success(t *testing.T) {
+	deleteCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/people:batchDeleteContacts": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+			deleteCalled = true
+			json.NewEncoder(w).Encode(map[string]interface{}{})
+		},
+	}
+
+	server := mockPeopleServer(t, handlers)
+	defer server.Close()
+
+	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create people service: %v", err)
+	}
+
+	req := &people.BatchDeleteContactsRequest{
+		ResourceNames: []string{"people/c100", "people/c101"},
+	}
+
+	_, err = svc.People.BatchDeleteContacts(req).Do()
+	if err != nil {
+		t.Fatalf("failed to batch delete contacts: %v", err)
+	}
+
+	if !deleteCalled {
+		t.Error("batch delete endpoint was not called")
+	}
+}
+
+// TestContactsDirectory_Success tests listing directory people
+func TestContactsDirectory_Success(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/people:listDirectoryPeople": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+
+			json.NewEncoder(w).Encode(&people.ListDirectoryPeopleResponse{
+				People: []*people.Person{
+					{
+						ResourceName: "people/d1",
+						Names:        []*people.Name{{DisplayName: "Directory User"}},
+						EmailAddresses: []*people.EmailAddress{
+							{Value: "user@company.com"},
+						},
+					},
+				},
+			})
+		},
+	}
+
+	server := mockPeopleServer(t, handlers)
+	defer server.Close()
+
+	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create people service: %v", err)
+	}
+
+	resp, err := svc.People.ListDirectoryPeople().
+		ReadMask(personFields).
+		Sources("DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE").
+		PageSize(50).
+		Do()
+	if err != nil {
+		t.Fatalf("failed to list directory people: %v", err)
+	}
+
+	if len(resp.People) != 1 {
+		t.Errorf("expected 1 person, got %d", len(resp.People))
+	}
+	if resp.People[0].Names[0].DisplayName != "Directory User" {
+		t.Errorf("expected 'Directory User', got '%s'", resp.People[0].Names[0].DisplayName)
+	}
+}
+
+// TestContactsDirectorySearch_Success tests searching directory people
+func TestContactsDirectorySearch_Success(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/people:searchDirectoryPeople": func(w http.ResponseWriter, r *http.Request) {
+			query := r.URL.Query().Get("query")
+			if query != "John" {
+				t.Errorf("expected query 'John', got '%s'", query)
+			}
+
+			json.NewEncoder(w).Encode(&people.SearchDirectoryPeopleResponse{
+				People: []*people.Person{
+					{
+						ResourceName: "people/d2",
+						Names:        []*people.Name{{DisplayName: "John Directory"}},
+						EmailAddresses: []*people.EmailAddress{
+							{Value: "john@company.com"},
+						},
+					},
+				},
+				TotalSize: 1,
+			})
+		},
+	}
+
+	server := mockPeopleServer(t, handlers)
+	defer server.Close()
+
+	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create people service: %v", err)
+	}
+
+	resp, err := svc.People.SearchDirectoryPeople().
+		Query("John").
+		ReadMask(personFields).
+		Sources("DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE").
+		PageSize(50).
+		Do()
+	if err != nil {
+		t.Fatalf("failed to search directory people: %v", err)
+	}
+
+	if len(resp.People) != 1 {
+		t.Errorf("expected 1 person, got %d", len(resp.People))
+	}
+	if resp.People[0].Names[0].DisplayName != "John Directory" {
+		t.Errorf("expected 'John Directory', got '%s'", resp.People[0].Names[0].DisplayName)
+	}
+}
+
+// TestContactsPhoto_Success tests updating a contact photo
+func TestContactsPhoto_Success(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/people/c123:updateContactPhoto": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "PATCH" {
+				t.Errorf("expected PATCH, got %s", r.Method)
+			}
+
+			var req people.UpdateContactPhotoRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if req.PhotoBytes == "" {
+				t.Error("expected non-empty photo bytes")
+			}
+
+			json.NewEncoder(w).Encode(&people.UpdateContactPhotoResponse{
+				Person: &people.Person{
+					ResourceName: "people/c123",
+					Names:        []*people.Name{{DisplayName: "John Doe"}},
+				},
+			})
+		},
+	}
+
+	server := mockPeopleServer(t, handlers)
+	defer server.Close()
+
+	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create people service: %v", err)
+	}
+
+	req := &people.UpdateContactPhotoRequest{
+		PhotoBytes:   "dGVzdHBob3Rv", // base64 of "testphoto"
+		PersonFields: personFields,
+	}
+
+	resp, err := svc.People.UpdateContactPhoto("people/c123", req).Do()
+	if err != nil {
+		t.Fatalf("failed to update contact photo: %v", err)
+	}
+
+	if resp.Person == nil {
+		t.Fatal("expected person in response")
+	}
+	if resp.Person.ResourceName != "people/c123" {
+		t.Errorf("expected 'people/c123', got '%s'", resp.Person.ResourceName)
+	}
+}
+
+// TestContactsDeletePhoto_Success tests deleting a contact photo
+func TestContactsDeletePhoto_Success(t *testing.T) {
+	deleteCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/people/c123:deleteContactPhoto": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "DELETE" {
+				t.Errorf("expected DELETE, got %s", r.Method)
+			}
+			deleteCalled = true
+			json.NewEncoder(w).Encode(&people.DeleteContactPhotoResponse{})
+		},
+	}
+
+	server := mockPeopleServer(t, handlers)
+	defer server.Close()
+
+	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create people service: %v", err)
+	}
+
+	_, err = svc.People.DeleteContactPhoto("people/c123").Do()
+	if err != nil {
+		t.Fatalf("failed to delete contact photo: %v", err)
+	}
+
+	if !deleteCalled {
+		t.Error("delete photo endpoint was not called")
+	}
+}
+
+// TestContactsResolve_Success tests resolving multiple contacts
+func TestContactsResolve_Success(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/people:batchGet": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+
+			resourceNames := r.URL.Query()["resourceNames"]
+			if len(resourceNames) != 2 {
+				t.Errorf("expected 2 resource names, got %d", len(resourceNames))
+			}
+
+			json.NewEncoder(w).Encode(&people.GetPeopleResponse{
+				Responses: []*people.PersonResponse{
+					{
+						Person: &people.Person{
+							ResourceName: "people/c1",
+							Names:        []*people.Name{{DisplayName: "John Doe"}},
+						},
+						RequestedResourceName: "people/c1",
+					},
+					{
+						Person: &people.Person{
+							ResourceName: "people/c2",
+							Names:        []*people.Name{{DisplayName: "Jane Smith"}},
+						},
+						RequestedResourceName: "people/c2",
+					},
+				},
+			})
+		},
+	}
+
+	server := mockPeopleServer(t, handlers)
+	defer server.Close()
+
+	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create people service: %v", err)
+	}
+
+	resp, err := svc.People.GetBatchGet().
+		ResourceNames("people/c1", "people/c2").
+		PersonFields(personFields).
+		Do()
+	if err != nil {
+		t.Fatalf("failed to resolve contacts: %v", err)
+	}
+
+	if len(resp.Responses) != 2 {
+		t.Errorf("expected 2 responses, got %d", len(resp.Responses))
+	}
+	if resp.Responses[0].Person.Names[0].DisplayName != "John Doe" {
+		t.Errorf("expected 'John Doe', got '%s'", resp.Responses[0].Person.Names[0].DisplayName)
+	}
+	if resp.Responses[1].Person.Names[0].DisplayName != "Jane Smith" {
+		t.Errorf("expected 'Jane Smith', got '%s'", resp.Responses[1].Person.Names[0].DisplayName)
+	}
+}
+
 // TestFormatPerson tests the formatPerson helper
 func TestFormatPerson(t *testing.T) {
 	person := &people.Person{
 		ResourceName: "people/c1",
+		Etag:         "abc123",
 		Names:        []*people.Name{{DisplayName: "Test User"}},
 		EmailAddresses: []*people.EmailAddress{
 			{Value: "test@example.com"},
@@ -321,6 +878,9 @@ func TestFormatPerson(t *testing.T) {
 
 	if result["resource_name"] != "people/c1" {
 		t.Errorf("expected resource_name 'people/c1', got '%v'", result["resource_name"])
+	}
+	if result["etag"] != "abc123" {
+		t.Errorf("expected etag 'abc123', got '%v'", result["etag"])
 	}
 	if result["name"] != "Test User" {
 		t.Errorf("expected name 'Test User', got '%v'", result["name"])
@@ -358,5 +918,8 @@ func TestFormatPerson_Minimal(t *testing.T) {
 	}
 	if _, ok := result["emails"]; ok {
 		t.Error("expected no emails field for person without emails")
+	}
+	if _, ok := result["etag"]; ok {
+		t.Error("expected no etag field for person without etag")
 	}
 }
