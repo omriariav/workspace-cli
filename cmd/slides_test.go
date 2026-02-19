@@ -2412,3 +2412,207 @@ func TestSlidesReorderSlides_Success(t *testing.T) {
 		t.Error("batchUpdate endpoint was not called")
 	}
 }
+
+func TestSlidesThumbnail_Flags(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "thumbnail")
+	if cmd == nil {
+		t.Fatal("slides thumbnail command not found")
+	}
+
+	if cmd.Use != "thumbnail <presentation-id>" {
+		t.Errorf("expected Use 'thumbnail <presentation-id>', got '%s'", cmd.Use)
+	}
+
+	slideFlag := cmd.Flags().Lookup("slide")
+	if slideFlag == nil {
+		t.Error("expected --slide flag")
+	}
+
+	sizeFlag := cmd.Flags().Lookup("size")
+	if sizeFlag == nil {
+		t.Error("expected --size flag")
+	}
+	if sizeFlag.DefValue != "MEDIUM" {
+		t.Errorf("expected --size default 'MEDIUM', got '%s'", sizeFlag.DefValue)
+	}
+
+	downloadFlag := cmd.Flags().Lookup("download")
+	if downloadFlag == nil {
+		t.Error("expected --download flag")
+	}
+}
+
+func TestSlidesThumbnail_GetByObjectID(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-thumb/pages/slide-abc/thumbnail": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+
+			sizeParam := r.URL.Query().Get("thumbnailProperties.thumbnailSize")
+			if sizeParam != "LARGE" {
+				t.Errorf("expected size LARGE, got '%s'", sizeParam)
+			}
+
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"contentUrl": "https://example.com/thumb.png",
+				"width":      1600,
+				"height":     900,
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	thumbnail, err := svc.Presentations.Pages.GetThumbnail("pres-thumb", "slide-abc").
+		ThumbnailPropertiesThumbnailSize("LARGE").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to get thumbnail: %v", err)
+	}
+
+	if thumbnail.ContentUrl != "https://example.com/thumb.png" {
+		t.Errorf("expected contentUrl 'https://example.com/thumb.png', got '%s'", thumbnail.ContentUrl)
+	}
+	if thumbnail.Width != 1600 {
+		t.Errorf("expected width 1600, got %d", thumbnail.Width)
+	}
+	if thumbnail.Height != 900 {
+		t.Errorf("expected height 900, got %d", thumbnail.Height)
+	}
+}
+
+func TestSlidesThumbnail_GetBySlideNumber(t *testing.T) {
+	getCalled := false
+	thumbnailCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-num": func(w http.ResponseWriter, r *http.Request) {
+			getCalled = true
+			json.NewEncoder(w).Encode(&slides.Presentation{
+				PresentationId: "pres-num",
+				Slides: []*slides.Page{
+					{ObjectId: "page-one"},
+					{ObjectId: "page-two"},
+					{ObjectId: "page-three"},
+				},
+			})
+		},
+		"/v1/presentations/pres-num/pages/page-two/thumbnail": func(w http.ResponseWriter, r *http.Request) {
+			thumbnailCalled = true
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"contentUrl": "https://example.com/page-two.png",
+				"width":      800,
+				"height":     450,
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	// Simulate slide number resolution: fetch presentation, then use slide object ID
+	pres, err := svc.Presentations.Get("pres-num").Do()
+	if err != nil {
+		t.Fatalf("failed to get presentation: %v", err)
+	}
+
+	slideNumber := 2
+	if slideNumber > len(pres.Slides) {
+		t.Fatalf("slide number %d out of range", slideNumber)
+	}
+	pageObjectID := pres.Slides[slideNumber-1].ObjectId
+
+	thumbnail, err := svc.Presentations.Pages.GetThumbnail("pres-num", pageObjectID).
+		ThumbnailPropertiesThumbnailSize("MEDIUM").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to get thumbnail: %v", err)
+	}
+
+	if !getCalled {
+		t.Error("presentation get endpoint was not called")
+	}
+	if !thumbnailCalled {
+		t.Error("thumbnail endpoint was not called")
+	}
+	if thumbnail.ContentUrl != "https://example.com/page-two.png" {
+		t.Errorf("expected contentUrl for page-two, got '%s'", thumbnail.ContentUrl)
+	}
+}
+
+func TestSlidesThumbnail_Download(t *testing.T) {
+	// Serve a thumbnail image
+	imageServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write([]byte("fake-png-data"))
+	}))
+	defer imageServer.Close()
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-dl/pages/slide-dl/thumbnail": func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"contentUrl": imageServer.URL + "/thumb.png",
+				"width":      800,
+				"height":     450,
+			})
+		},
+	}
+
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	thumbnail, err := svc.Presentations.Pages.GetThumbnail("pres-dl", "slide-dl").
+		ThumbnailPropertiesThumbnailSize("MEDIUM").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to get thumbnail: %v", err)
+	}
+
+	// Download the image
+	resp, err := http.Get(thumbnail.ContentUrl)
+	if err != nil {
+		t.Fatalf("failed to download thumbnail: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected HTTP 200, got %d", resp.StatusCode)
+	}
+
+	tmpFile, err := os.CreateTemp("", "thumbnail-*.png")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	_, err = io.Copy(tmpFile, resp.Body)
+	tmpFile.Close()
+	if err != nil {
+		t.Fatalf("failed to write thumbnail: %v", err)
+	}
+
+	data, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("failed to read downloaded file: %v", err)
+	}
+	if string(data) != "fake-png-data" {
+		t.Errorf("expected 'fake-png-data', got '%s'", string(data))
+	}
+}

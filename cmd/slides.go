@@ -3,8 +3,11 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
@@ -268,6 +271,14 @@ var slidesUngroupCmd = &cobra.Command{
 	RunE:  runSlidesUngroup,
 }
 
+var slidesThumbnailCmd = &cobra.Command{
+	Use:   "thumbnail <presentation-id>",
+	Short: "Get slide page thumbnail",
+	Long:  "Gets the thumbnail image URL for a specific slide page. Optionally downloads the image to a file.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSlidesThumbnail,
+}
+
 func init() {
 	rootCmd.AddCommand(slidesCmd)
 	slidesCmd.AddCommand(slidesInfoCmd)
@@ -298,6 +309,7 @@ func init() {
 	slidesCmd.AddCommand(slidesAddLineCmd)
 	slidesCmd.AddCommand(slidesGroupCmd)
 	slidesCmd.AddCommand(slidesUngroupCmd)
+	slidesCmd.AddCommand(slidesThumbnailCmd)
 
 	// Notes flags for read commands
 	slidesInfoCmd.Flags().Bool("notes", false, "Include speaker notes in output")
@@ -490,6 +502,12 @@ func init() {
 	// Ungroup flags
 	slidesUngroupCmd.Flags().String("group-id", "", "Object ID of the group to ungroup (required)")
 	slidesUngroupCmd.MarkFlagRequired("group-id")
+
+	// Thumbnail flags
+	slidesThumbnailCmd.Flags().String("slide", "", "Slide object ID or 1-based slide number (required)")
+	slidesThumbnailCmd.Flags().String("size", "MEDIUM", "Thumbnail size: SMALL, MEDIUM, LARGE")
+	slidesThumbnailCmd.Flags().String("download", "", "Download thumbnail image to this file path")
+	slidesThumbnailCmd.MarkFlagRequired("slide")
 }
 
 func runSlidesInfo(cmd *cobra.Command, args []string) error {
@@ -3085,4 +3103,84 @@ func runSlidesUngroup(cmd *cobra.Command, args []string) error {
 		"presentation_id": presentationID,
 		"group_id":        groupID,
 	})
+}
+
+func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	presentationID := args[0]
+	slideFlag, _ := cmd.Flags().GetString("slide")
+	size, _ := cmd.Flags().GetString("size")
+	downloadPath, _ := cmd.Flags().GetString("download")
+
+	// Resolve slide flag: could be a slide object ID or a 1-based number
+	pageObjectID := slideFlag
+	if num, err := strconv.Atoi(slideFlag); err == nil && num > 0 {
+		// It's a number — fetch presentation to resolve to object ID
+		presentation, err := svc.Presentations.Get(presentationID).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get presentation: %w", err))
+		}
+		if num > len(presentation.Slides) {
+			return p.PrintError(fmt.Errorf("slide number %d out of range (1-%d)", num, len(presentation.Slides)))
+		}
+		pageObjectID = presentation.Slides[num-1].ObjectId
+	}
+
+	// Validate size
+	validSizes := map[string]bool{"SMALL": true, "MEDIUM": true, "LARGE": true}
+	sizeUpper := strings.ToUpper(size)
+	if !validSizes[sizeUpper] {
+		return p.PrintError(fmt.Errorf("invalid size '%s': must be SMALL, MEDIUM, or LARGE", size))
+	}
+
+	thumbnail, err := svc.Presentations.Pages.GetThumbnail(presentationID, pageObjectID).
+		ThumbnailPropertiesThumbnailSize(sizeUpper).
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get thumbnail: %w", err))
+	}
+
+	result := map[string]interface{}{
+		"contentUrl": thumbnail.ContentUrl,
+		"width":      thumbnail.Width,
+		"height":     thumbnail.Height,
+	}
+
+	if downloadPath != "" {
+		resp, err := http.Get(thumbnail.ContentUrl)
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to download thumbnail: %w", err))
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return p.PrintError(fmt.Errorf("failed to download thumbnail: HTTP %d", resp.StatusCode))
+		}
+
+		f, err := os.Create(downloadPath)
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to create file: %w", err))
+		}
+		defer f.Close()
+
+		if _, err := io.Copy(f, resp.Body); err != nil {
+			return p.PrintError(fmt.Errorf("failed to write thumbnail file: %w", err))
+		}
+
+		result["savedTo"] = downloadPath
+	}
+
+	return p.Print(result)
 }
