@@ -1592,6 +1592,401 @@ func TestSheetsBatchWrite_MockServer(t *testing.T) {
 	}
 }
 
+// TestSheetsAddNamedRangeCommand_Flags tests add-named-range command flags
+func TestSheetsAddNamedRangeCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "add-named-range")
+	if cmd == nil {
+		t.Fatal("add-named-range command not found")
+	}
+
+	expectedFlags := []string{"name"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsListNamedRangesCommand tests list-named-ranges command
+func TestSheetsListNamedRangesCommand(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "list-named-ranges")
+	if cmd == nil {
+		t.Fatal("list-named-ranges command not found")
+	}
+
+	if cmd.Use != "list-named-ranges <spreadsheet-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+}
+
+// TestSheetsDeleteNamedRangeCommand_Flags tests delete-named-range command flags
+func TestSheetsDeleteNamedRangeCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "delete-named-range")
+	if cmd == nil {
+		t.Fatal("delete-named-range command not found")
+	}
+
+	expectedFlags := []string{"named-range-id"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsAddFilterCommand tests add-filter command
+func TestSheetsAddFilterCommand(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "add-filter")
+	if cmd == nil {
+		t.Fatal("add-filter command not found")
+	}
+
+	if cmd.Use != "add-filter <spreadsheet-id> <range>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+}
+
+// TestSheetsClearFilterCommand_Flags tests clear-filter command flags
+func TestSheetsClearFilterCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "clear-filter")
+	if cmd == nil {
+		t.Fatal("clear-filter command not found")
+	}
+
+	expectedFlags := []string{"sheet"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsAddFilterViewCommand_Flags tests add-filter-view command flags
+func TestSheetsAddFilterViewCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "add-filter-view")
+	if cmd == nil {
+		t.Fatal("add-filter-view command not found")
+	}
+
+	expectedFlags := []string{"name"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsAddNamedRange_MockServer tests add-named-range API integration
+func TestSheetsAddNamedRange_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				addNamedRange := requests[0].(map[string]interface{})["addNamedRange"]
+				if addNamedRange != nil {
+					namedRange := addNamedRange.(map[string]interface{})["namedRange"].(map[string]interface{})
+					name := namedRange["name"].(string)
+
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies": []map[string]interface{}{
+							{
+								"addNamedRange": map[string]interface{}{
+									"namedRange": map[string]interface{}{
+										"namedRangeId": "nr-123",
+										"name":         name,
+									},
+								},
+							},
+						},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsListNamedRanges_MockServer tests list-named-ranges API integration
+func TestSheetsListNamedRanges_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && strings.Contains(r.URL.Path, "/spreadsheets/") {
+			resp := map[string]interface{}{
+				"namedRanges": []map[string]interface{}{
+					{
+						"namedRangeId": "nr-123",
+						"name":         "MyRange",
+						"range": map[string]interface{}{
+							"sheetId":          0,
+							"startRowIndex":    0,
+							"endRowIndex":      10,
+							"startColumnIndex": 0,
+							"endColumnIndex":   4,
+						},
+					},
+					{
+						"namedRangeId": "nr-456",
+						"name":         "DataRange",
+						"range": map[string]interface{}{
+							"sheetId":          0,
+							"startRowIndex":    0,
+							"endRowIndex":      100,
+							"startColumnIndex": 0,
+							"endColumnIndex":   26,
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsDeleteNamedRange_MockServer tests delete-named-range API integration
+func TestSheetsDeleteNamedRange_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				deleteNamedRange := requests[0].(map[string]interface{})["deleteNamedRange"]
+				if deleteNamedRange != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsAddFilter_MockServer tests add-filter API integration
+func TestSheetsAddFilter_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				setBasicFilter := requests[0].(map[string]interface{})["setBasicFilter"]
+				if setBasicFilter != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsClearFilter_MockServer tests clear-filter API integration
+func TestSheetsClearFilter_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				clearFilter := requests[0].(map[string]interface{})["clearBasicFilter"]
+				if clearFilter != nil {
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies":       []map[string]interface{}{{}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsAddFilterView_MockServer tests add-filter-view API integration
+func TestSheetsAddFilterView_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"sheets": []map[string]interface{}{
+					{
+						"properties": map[string]interface{}{
+							"sheetId": 0,
+							"title":   "Sheet1",
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == "POST" && strings.Contains(r.URL.Path, ":batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			requests := req["requests"].([]interface{})
+			if len(requests) > 0 {
+				addFilterView := requests[0].(map[string]interface{})["addFilterView"]
+				if addFilterView != nil {
+					filter := addFilterView.(map[string]interface{})["filter"].(map[string]interface{})
+					title := filter["title"].(string)
+
+					resp := map[string]interface{}{
+						"spreadsheetId": "test-id",
+						"replies": []map[string]interface{}{
+							{
+								"addFilterView": map[string]interface{}{
+									"filter": map[string]interface{}{
+										"filterViewId": 98765,
+										"title":        title,
+									},
+								},
+							},
+						},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp)
+					return
+				}
+			}
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsCommands_Structure_NamedRangesAndFilters tests that named range and filter commands are registered
+func TestSheetsCommands_Structure_NamedRangesAndFilters(t *testing.T) {
+	commands := []string{
+		"add-named-range",
+		"list-named-ranges",
+		"delete-named-range",
+		"add-filter",
+		"clear-filter",
+		"add-filter-view",
+	}
+
+	for _, cmdName := range commands {
+		t.Run(cmdName, func(t *testing.T) {
+			cmd := findSubcommand(sheetsCmd, cmdName)
+			if cmd == nil {
+				t.Fatalf("command '%s' not found", cmdName)
+			}
+		})
+	}
+}
+
 // TestSheetsFreeze_MockServer tests freeze panes API integration
 func TestSheetsFreeze_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,6 @@
 # Sheets Commands Reference
 
-Complete flag and option reference for `gws sheets` commands — 30 commands total.
+Complete flag and option reference for `gws sheets` commands — 32 commands total.
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
@@ -14,7 +14,7 @@ Complete flag and option reference for `gws sheets` commands — 30 commands tot
 
 ## Range Format Reference
 
-Ranges are used by `read`, `write`, `append`, `clear`, `merge`, `unmerge`, `sort`, and `format`.
+Ranges are used by `read`, `write`, `append`, `clear`, `merge`, `unmerge`, `sort`, `format`, `add-named-range`, `add-filter`, and `add-filter-view`.
 
 | Format | Example | Description |
 |--------|---------|-------------|
@@ -587,3 +587,172 @@ gws sheets batch-write 1abc123xyz \
 - Number of `--ranges` flags must match number of `--values` flags
 - Values must be JSON arrays (e.g., `'[["a","b"],["c","d"]]'`)
 - More efficient than multiple `gws sheets write` calls
+
+---
+
+## gws sheets add-named-range
+
+Adds a named range to a spreadsheet.
+
+```
+Usage: gws sheets add-named-range <spreadsheet-id> <range> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--name` | string | | Yes | Name for the named range |
+
+### Examples
+
+```bash
+# Create a named range for a data table
+gws sheets add-named-range 1abc123xyz "Sheet1!A1:D100" --name "SalesData"
+
+# Create a named range in a specific sheet
+gws sheets add-named-range 1abc123xyz "Inventory!B2:F50" --name "StockLevels"
+```
+
+### Notes
+
+- The response includes the `named_range_id` which is needed for deletion
+- Named ranges can be used in formulas (e.g., `=SUM(SalesData)`)
+- Range must include both start and end cells (e.g., `A1:D10`)
+
+---
+
+## gws sheets list-named-ranges
+
+Lists all named ranges in a spreadsheet.
+
+```
+Usage: gws sheets list-named-ranges <spreadsheet-id>
+```
+
+No additional flags.
+
+### Examples
+
+```bash
+# List all named ranges
+gws sheets list-named-ranges 1abc123xyz
+```
+
+### Notes
+
+- Returns name, `named_range_id`, and range coordinates for each named range
+- Use the `named_range_id` with `delete-named-range` to remove a range
+
+---
+
+## gws sheets delete-named-range
+
+Deletes a named range from a spreadsheet.
+
+```
+Usage: gws sheets delete-named-range <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--named-range-id` | string | | Yes | ID of the named range to delete |
+
+### Examples
+
+```bash
+# Delete a named range by ID (get IDs from list-named-ranges)
+gws sheets delete-named-range 1abc123xyz --named-range-id "nr-abc123"
+```
+
+### Notes
+
+- Use `list-named-ranges` to find named range IDs
+- Deleting a named range does not delete the underlying data
+
+---
+
+## gws sheets add-filter
+
+Sets a basic filter on a range in a spreadsheet.
+
+```
+Usage: gws sheets add-filter <spreadsheet-id> <range>
+```
+
+No additional flags — the range is positional.
+
+### Examples
+
+```bash
+# Add a filter to a data range
+gws sheets add-filter 1abc123xyz "Sheet1!A1:D100"
+
+# Add a filter in the first sheet
+gws sheets add-filter 1abc123xyz "A1:F50"
+```
+
+### Notes
+
+- Only one basic filter is allowed per sheet
+- Setting a new filter replaces any existing basic filter on the sheet
+- Basic filters add dropdown arrows to the header row for column filtering
+- Range must include both start and end cells
+
+---
+
+## gws sheets clear-filter
+
+Clears the basic filter from a sheet.
+
+```
+Usage: gws sheets clear-filter <spreadsheet-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--sheet` | string | | Yes | Sheet name |
+
+### Examples
+
+```bash
+# Clear the basic filter from Sheet1
+gws sheets clear-filter 1abc123xyz --sheet "Sheet1"
+
+# Clear filter from a named sheet
+gws sheets clear-filter 1abc123xyz --sheet "Data"
+```
+
+### Notes
+
+- Only removes the filter — does not affect the underlying data
+- If no filter exists on the sheet, this is a no-op
+
+---
+
+## gws sheets add-filter-view
+
+Creates a new filter view for a range in a spreadsheet.
+
+```
+Usage: gws sheets add-filter-view <spreadsheet-id> <range> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--name` | string | | Yes | Title for the filter view |
+
+### Examples
+
+```bash
+# Create a filter view
+gws sheets add-filter-view 1abc123xyz "Sheet1!A1:D100" --name "Active Items"
+
+# Create a filter view in the first sheet
+gws sheets add-filter-view 1abc123xyz "A1:F50" --name "Q1 Data"
+```
+
+### Notes
+
+- Filter views are saved named views that don't affect other users
+- Multiple filter views can exist on the same sheet
+- The response includes the `filter_view_id`
+- Unlike basic filters, filter views are per-user and don't change the shared view

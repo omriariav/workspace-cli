@@ -9,7 +9,7 @@ metadata:
 
 # Google Sheets (gws sheets)
 
-`gws sheets` provides CLI access to Google Sheets with structured JSON output. This skill has 22 commands covering full spreadsheet management including batch operations.
+`gws sheets` provides CLI access to Google Sheets with structured JSON output. This skill has 32 commands covering full spreadsheet management including batch operations, named ranges, and filters.
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
@@ -70,6 +70,20 @@ For initial setup, see the `gws-auth` skill.
 | Delete rows | `gws sheets delete-rows <id> --sheet "Sheet1" --from 5 --to 8` |
 | Insert columns | `gws sheets insert-cols <id> --sheet "Sheet1" --at 2 --count 1` |
 | Delete columns | `gws sheets delete-cols <id> --sheet "Sheet1" --from 2 --to 4` |
+
+### Named Ranges
+| Task | Command |
+|------|---------|
+| Add a named range | `gws sheets add-named-range <id> "Sheet1!A1:D10" --name "MyRange"` |
+| List named ranges | `gws sheets list-named-ranges <id>` |
+| Delete a named range | `gws sheets delete-named-range <id> --named-range-id "nr-123"` |
+
+### Filters
+| Task | Command |
+|------|---------|
+| Add a basic filter | `gws sheets add-filter <id> "Sheet1!A1:D10"` |
+| Clear a basic filter | `gws sheets clear-filter <id> --sheet "Sheet1"` |
+| Add a filter view | `gws sheets add-filter-view <id> "Sheet1!A1:D10" --name "My View"` |
 
 ### Cell Operations
 | Task | Command |
@@ -284,6 +298,60 @@ gws sheets batch-write <spreadsheet-id> --ranges "A1:B2" --values '[[1,2],[3,4]]
 - `--value-input string` — Value input option: `RAW`, `USER_ENTERED` (default: "USER_ENTERED")
 
 The nth `--ranges` pairs with the nth `--values`.
+
+### add-named-range — Add a named range
+
+```bash
+gws sheets add-named-range <spreadsheet-id> <range> --name <name>
+```
+
+**Flags:**
+- `--name string` — Name for the named range (required)
+
+### list-named-ranges — List named ranges
+
+```bash
+gws sheets list-named-ranges <spreadsheet-id>
+```
+
+### delete-named-range — Delete a named range
+
+```bash
+gws sheets delete-named-range <spreadsheet-id> --named-range-id <id>
+```
+
+**Flags:**
+- `--named-range-id string` — ID of the named range to delete (required)
+
+Use `list-named-ranges` to find the IDs.
+
+### add-filter — Add a basic filter
+
+```bash
+gws sheets add-filter <spreadsheet-id> <range>
+```
+
+Sets a basic filter on the specified range. Only one basic filter per sheet.
+
+### clear-filter — Clear a basic filter
+
+```bash
+gws sheets clear-filter <spreadsheet-id> --sheet <name>
+```
+
+**Flags:**
+- `--sheet string` — Sheet name (required)
+
+### add-filter-view — Add a filter view
+
+```bash
+gws sheets add-filter-view <spreadsheet-id> <range> --name <title>
+```
+
+**Flags:**
+- `--name string` — Title for the filter view (required)
+
+Filter views are saved views that don't affect other users.
 
 ## Output Modes
 

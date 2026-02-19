@@ -402,6 +402,12 @@ func TestSheetsCommands(t *testing.T) {
 		{"copy-to"},
 		{"batch-read"},
 		{"batch-write"},
+		{"add-named-range"},
+		{"list-named-ranges"},
+		{"delete-named-range"},
+		{"add-filter"},
+		{"clear-filter"},
+		{"add-filter-view"},
 	}
 
 	for _, tt := range tests {

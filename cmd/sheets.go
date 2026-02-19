@@ -295,6 +295,54 @@ Example:
 	RunE: runSheetsBatchWrite,
 }
 
+var sheetsAddNamedRangeCmd = &cobra.Command{
+	Use:   "add-named-range <spreadsheet-id> <range>",
+	Short: "Add a named range",
+	Long:  "Adds a named range to a spreadsheet.",
+	Args:  cobra.ExactArgs(2),
+	RunE:  runSheetsAddNamedRange,
+}
+
+var sheetsListNamedRangesCmd = &cobra.Command{
+	Use:   "list-named-ranges <spreadsheet-id>",
+	Short: "List named ranges",
+	Long:  "Lists all named ranges in a spreadsheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsListNamedRanges,
+}
+
+var sheetsDeleteNamedRangeCmd = &cobra.Command{
+	Use:   "delete-named-range <spreadsheet-id>",
+	Short: "Delete a named range",
+	Long:  "Deletes a named range from a spreadsheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsDeleteNamedRange,
+}
+
+var sheetsAddFilterCmd = &cobra.Command{
+	Use:   "add-filter <spreadsheet-id> <range>",
+	Short: "Add a basic filter",
+	Long:  "Sets a basic filter on a range in a spreadsheet.",
+	Args:  cobra.ExactArgs(2),
+	RunE:  runSheetsAddFilter,
+}
+
+var sheetsClearFilterCmd = &cobra.Command{
+	Use:   "clear-filter <spreadsheet-id>",
+	Short: "Clear a basic filter",
+	Long:  "Clears the basic filter from a sheet.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSheetsClearFilter,
+}
+
+var sheetsAddFilterViewCmd = &cobra.Command{
+	Use:   "add-filter-view <spreadsheet-id> <range>",
+	Short: "Add a filter view",
+	Long:  "Creates a new filter view for a range in a spreadsheet.",
+	Args:  cobra.ExactArgs(2),
+	RunE:  runSheetsAddFilterView,
+}
+
 func init() {
 	rootCmd.AddCommand(sheetsCmd)
 	sheetsCmd.AddCommand(sheetsInfoCmd)
@@ -448,6 +496,28 @@ func init() {
 	sheetsBatchWriteCmd.Flags().String("value-input", "USER_ENTERED", "Value input option: RAW, USER_ENTERED")
 	sheetsBatchWriteCmd.MarkFlagRequired("ranges")
 	sheetsBatchWriteCmd.MarkFlagRequired("values")
+
+	// Named range commands
+	sheetsCmd.AddCommand(sheetsAddNamedRangeCmd)
+	sheetsAddNamedRangeCmd.Flags().String("name", "", "Name for the named range (required)")
+	sheetsAddNamedRangeCmd.MarkFlagRequired("name")
+
+	sheetsCmd.AddCommand(sheetsListNamedRangesCmd)
+
+	sheetsCmd.AddCommand(sheetsDeleteNamedRangeCmd)
+	sheetsDeleteNamedRangeCmd.Flags().String("named-range-id", "", "ID of the named range to delete (required)")
+	sheetsDeleteNamedRangeCmd.MarkFlagRequired("named-range-id")
+
+	// Filter commands
+	sheetsCmd.AddCommand(sheetsAddFilterCmd)
+
+	sheetsCmd.AddCommand(sheetsClearFilterCmd)
+	sheetsClearFilterCmd.Flags().String("sheet", "", "Sheet name (required)")
+	sheetsClearFilterCmd.MarkFlagRequired("sheet")
+
+	sheetsCmd.AddCommand(sheetsAddFilterViewCmd)
+	sheetsAddFilterViewCmd.Flags().String("name", "", "Title for the filter view (required)")
+	sheetsAddFilterViewCmd.MarkFlagRequired("name")
 }
 
 func runSheetsInfo(cmd *cobra.Command, args []string) error {
@@ -2119,5 +2189,289 @@ func runSheetsBatchWrite(cmd *cobra.Command, args []string) error {
 		"sheets_updated": resp.TotalUpdatedSheets,
 		"rows_updated":   resp.TotalUpdatedRows,
 		"cells_updated":  resp.TotalUpdatedCells,
+	})
+}
+
+func runSheetsAddNamedRange(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+	name, _ := cmd.Flags().GetString("name")
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			AddNamedRange: &sheets.AddNamedRangeRequest{
+				NamedRange: &sheets.NamedRange{
+					Name:  name,
+					Range: gridRange,
+				},
+			},
+		},
+	}
+
+	resp, err := svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add named range: %w", err))
+	}
+
+	var namedRangeID string
+	if len(resp.Replies) > 0 && resp.Replies[0].AddNamedRange != nil && resp.Replies[0].AddNamedRange.NamedRange != nil {
+		namedRangeID = resp.Replies[0].AddNamedRange.NamedRange.NamedRangeId
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":         "added",
+		"spreadsheet":    spreadsheetID,
+		"name":           name,
+		"named_range_id": namedRangeID,
+		"range":          rangeStr,
+	})
+}
+
+func runSheetsListNamedRanges(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+
+	spreadsheet, err := svc.Spreadsheets.Get(spreadsheetID).Fields("namedRanges").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get named ranges: %w", err))
+	}
+
+	namedRanges := make([]map[string]interface{}, 0, len(spreadsheet.NamedRanges))
+	for _, nr := range spreadsheet.NamedRanges {
+		entry := map[string]interface{}{
+			"name":           nr.Name,
+			"named_range_id": nr.NamedRangeId,
+		}
+		if nr.Range != nil {
+			entry["range"] = map[string]interface{}{
+				"sheet_id":     nr.Range.SheetId,
+				"start_row":    nr.Range.StartRowIndex,
+				"end_row":      nr.Range.EndRowIndex,
+				"start_column": nr.Range.StartColumnIndex,
+				"end_column":   nr.Range.EndColumnIndex,
+			}
+		}
+		namedRanges = append(namedRanges, entry)
+	}
+
+	return p.Print(map[string]interface{}{
+		"named_ranges": namedRanges,
+		"count":        len(namedRanges),
+	})
+}
+
+func runSheetsDeleteNamedRange(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	namedRangeID, _ := cmd.Flags().GetString("named-range-id")
+
+	requests := []*sheets.Request{
+		{
+			DeleteNamedRange: &sheets.DeleteNamedRangeRequest{
+				NamedRangeId: namedRangeID,
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to delete named range: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":         "deleted",
+		"spreadsheet":    spreadsheetID,
+		"named_range_id": namedRangeID,
+	})
+}
+
+func runSheetsAddFilter(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			SetBasicFilter: &sheets.SetBasicFilterRequest{
+				Filter: &sheets.BasicFilter{
+					Range: gridRange,
+				},
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add filter: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "added",
+		"spreadsheet": spreadsheetID,
+		"range":       rangeStr,
+	})
+}
+
+func runSheetsClearFilter(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	sheetName, _ := cmd.Flags().GetString("sheet")
+
+	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			ClearBasicFilter: &sheets.ClearBasicFilterRequest{
+				SheetId: sheetID,
+			},
+		},
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to clear filter: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "cleared",
+		"spreadsheet": spreadsheetID,
+		"sheet":       sheetName,
+	})
+}
+
+func runSheetsAddFilterView(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+	name, _ := cmd.Flags().GetString("name")
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	requests := []*sheets.Request{
+		{
+			AddFilterView: &sheets.AddFilterViewRequest{
+				Filter: &sheets.FilterView{
+					Title: name,
+					Range: gridRange,
+				},
+			},
+		},
+	}
+
+	resp, err := svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add filter view: %w", err))
+	}
+
+	var filterViewID int64
+	if len(resp.Replies) > 0 && resp.Replies[0].AddFilterView != nil && resp.Replies[0].AddFilterView.Filter != nil {
+		filterViewID = resp.Replies[0].AddFilterView.Filter.FilterViewId
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":         "added",
+		"spreadsheet":    spreadsheetID,
+		"name":           name,
+		"filter_view_id": filterViewID,
+		"range":          rangeStr,
 	})
 }
