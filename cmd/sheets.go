@@ -2612,9 +2612,24 @@ func runSheetsAddChart(cmd *cobra.Command, args []string) error {
 	spec := &sheets.ChartSpec{Title: title}
 
 	if chartType == "PIE" {
+		// PIE: first column = labels (domain), remaining columns = data (series)
+		domainRange := &sheets.GridRange{
+			SheetId:          gridRange.SheetId,
+			StartRowIndex:    gridRange.StartRowIndex,
+			EndRowIndex:      gridRange.EndRowIndex,
+			StartColumnIndex: gridRange.StartColumnIndex,
+			EndColumnIndex:   gridRange.StartColumnIndex + 1,
+		}
+		seriesRange := &sheets.GridRange{
+			SheetId:          gridRange.SheetId,
+			StartRowIndex:    gridRange.StartRowIndex,
+			EndRowIndex:      gridRange.EndRowIndex,
+			StartColumnIndex: gridRange.StartColumnIndex + 1,
+			EndColumnIndex:   gridRange.EndColumnIndex,
+		}
 		spec.PieChart = &sheets.PieChartSpec{
-			Domain: chartData,
-			Series: &sheets.ChartData{SourceRange: sourceRange},
+			Domain: &sheets.ChartData{SourceRange: &sheets.ChartSourceRange{Sources: []*sheets.GridRange{domainRange}}},
+			Series: &sheets.ChartData{SourceRange: &sheets.ChartSourceRange{Sources: []*sheets.GridRange{seriesRange}}},
 		}
 	} else {
 		spec.BasicChart = &sheets.BasicChartSpec{
@@ -2823,6 +2838,12 @@ func runSheetsAddConditionalFormat(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
+	// Validate --value is provided for rules that require it
+	needsValue := map[string]bool{">": true, "<": true, "=": true, "!=": true, "contains": true, "not-contains": true, "formula": true}
+	if needsValue[rule] && value == "" {
+		return p.PrintError(fmt.Errorf("--value is required for rule type %q", rule))
+	}
+
 	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
 	if err != nil {
 		return p.PrintError(err)
@@ -3015,6 +3036,10 @@ func runSheetsDeleteConditionalFormat(cmd *cobra.Command, args []string) error {
 	spreadsheetID := args[0]
 	sheetName, _ := cmd.Flags().GetString("sheet")
 	index, _ := cmd.Flags().GetInt64("index")
+
+	if index < 0 {
+		return p.PrintError(fmt.Errorf("--index must be >= 0, got %d", index))
+	}
 
 	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
 	if err != nil {
