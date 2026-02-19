@@ -445,6 +445,7 @@ func TestSlidesCommands(t *testing.T) {
 		{"add-line"},
 		{"group"},
 		{"ungroup"},
+		{"thumbnail"},
 	}
 
 	for _, tt := range tests {

@@ -68,6 +68,7 @@ For initial setup, see the `gws-auth` skill.
 | Add a line | `gws slides add-line <id> --slide-number 1 --start-x 50 --start-y 50 --end-x 300 --end-y 200` |
 | Group elements | `gws slides group <id> --object-ids "obj1,obj2,obj3"` |
 | Ungroup elements | `gws slides ungroup <id> --group-id <group-id>` |
+| Get slide thumbnail | `gws slides thumbnail <id> --slide <slide-id-or-number>` |
 
 ## Detailed Usage
 
@@ -423,6 +424,19 @@ gws slides ungroup <presentation-id> --group-id <id>
 
 **Flags:**
 - `--group-id string` — Object ID of the group to ungroup (required)
+
+### thumbnail — Get slide page thumbnail
+
+```bash
+gws slides thumbnail <presentation-id> --slide <slide-id-or-number> [flags]
+```
+
+Gets a thumbnail image URL for a specific slide page.
+
+**Flags:**
+- `--slide string` — Slide object ID or 1-based slide number (required)
+- `--size string` — Thumbnail size: `SMALL`, `MEDIUM`, `LARGE` (default: "MEDIUM")
+- `--download string` — Download thumbnail to file path instead of returning URL
 
 ## Output Modes
 

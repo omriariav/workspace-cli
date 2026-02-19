@@ -535,3 +535,19 @@ Usage: gws slides ungroup <presentation-id> [flags]
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
 | `--group-id` | string | | Yes | Object ID of the group to ungroup |
+
+---
+
+## gws slides thumbnail
+
+Gets a thumbnail image URL for a specific slide page.
+
+```
+Usage: gws slides thumbnail <presentation-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--slide` | string | | Yes | Slide object ID or 1-based slide number |
+| `--size` | string | `MEDIUM` | No | Thumbnail size: SMALL, MEDIUM, LARGE |
+| `--download` | string | | No | Download thumbnail to file path |
