@@ -453,9 +453,17 @@ func runFormsUpdate(cmd *cobra.Command, args []string) error {
 	title, _ := cmd.Flags().GetString("title")
 	description, _ := cmd.Flags().GetString("description")
 
+	hasFile := cmd.Flags().Changed("file")
+	hasTitle := cmd.Flags().Changed("title")
+	hasDescription := cmd.Flags().Changed("description")
+
+	if hasFile && (hasTitle || hasDescription) {
+		return p.PrintError(fmt.Errorf("--file cannot be combined with --title or --description"))
+	}
+
 	var batchReq forms.BatchUpdateFormRequest
 
-	if filePath != "" {
+	if hasFile {
 		// Read batch update request from file
 		data, err := os.ReadFile(filePath)
 		if err != nil {
@@ -465,11 +473,11 @@ func runFormsUpdate(cmd *cobra.Command, args []string) error {
 		if err := json.Unmarshal(data, &batchReq); err != nil {
 			return p.PrintError(fmt.Errorf("failed to parse JSON: %w", err))
 		}
-	} else if title != "" || description != "" {
+	} else if hasTitle || hasDescription {
 		// Build simple update request for title/description
 		var requests []*forms.Request
 
-		if title != "" {
+		if hasTitle {
 			requests = append(requests, &forms.Request{
 				UpdateFormInfo: &forms.UpdateFormInfoRequest{
 					Info: &forms.Info{
@@ -480,7 +488,7 @@ func runFormsUpdate(cmd *cobra.Command, args []string) error {
 			})
 		}
 
-		if description != "" {
+		if hasDescription {
 			requests = append(requests, &forms.Request{
 				UpdateFormInfo: &forms.UpdateFormInfoRequest{
 					Info: &forms.Info{
