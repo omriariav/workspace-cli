@@ -3165,21 +3165,24 @@ func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return p.PrintError(fmt.Errorf("failed to download thumbnail: %w", err))
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			return p.PrintError(fmt.Errorf("failed to download thumbnail: HTTP %d", resp.StatusCode))
 		}
 
 		f, err := os.Create(downloadPath)
 		if err != nil {
+			resp.Body.Close()
 			return p.PrintError(fmt.Errorf("failed to create file: %w", err))
 		}
 
 		if _, err := io.Copy(f, resp.Body); err != nil {
 			f.Close()
+			resp.Body.Close()
 			return p.PrintError(fmt.Errorf("failed to write thumbnail file: %w", err))
 		}
+		resp.Body.Close()
 
 		if err := f.Close(); err != nil {
 			return p.PrintError(fmt.Errorf("failed to finalize thumbnail file: %w", err))
