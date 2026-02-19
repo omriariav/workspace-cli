@@ -284,7 +284,6 @@ Lists people in the organization's directory. Requires directory.readonly scope.
 
 **Flags:**
 - `--max int` — Maximum number of directory people to return (default 50)
-- `--query string` — Filter directory results
 
 **Examples:**
 ```bash

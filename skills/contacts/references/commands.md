@@ -377,6 +377,8 @@ Returns:
 - `status` — Always `"created"`
 - `contacts` — Array of created contact objects
 - `count` — Number of contacts created
+- `failed` — Array of failed entries with `index`, `code`, and `message` (only present on partial failure)
+- `failed_count` — Number of failed entries (only present on partial failure)
 
 ### Examples
 
@@ -430,6 +432,8 @@ Returns:
 - `status` — Always `"updated"`
 - `results` — Map of resource names to updated contact objects
 - `count` — Number of contacts updated
+- `failed` — Array of failed entries with `resource_name`, `code`, and `message` (only present on partial failure)
+- `failed_count` — Number of failed entries (only present on partial failure)
 
 ### Examples
 
@@ -497,7 +501,6 @@ Usage: gws contacts directory [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--max` | int | 50 | Maximum number of directory people to return |
-| `--query` | string | | Filter directory results |
 
 ### Output Fields (JSON)
 
