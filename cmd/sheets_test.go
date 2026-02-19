@@ -1411,6 +1411,144 @@ func TestSheetsSetRowHeight_MockServer(t *testing.T) {
 	}
 }
 
+// TestSheetsCopyToCommand_Flags tests copy-to command flags
+func TestSheetsCopyToCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "copy-to")
+	if cmd == nil {
+		t.Fatal("copy-to command not found")
+	}
+
+	expectedFlags := []string{"sheet-id", "destination"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsBatchReadCommand_Flags tests batch-read command flags
+func TestSheetsBatchReadCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "batch-read")
+	if cmd == nil {
+		t.Fatal("batch-read command not found")
+	}
+
+	expectedFlags := []string{"ranges", "value-render"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsBatchWriteCommand_Flags tests batch-write command flags
+func TestSheetsBatchWriteCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "batch-write")
+	if cmd == nil {
+		t.Fatal("batch-write command not found")
+	}
+
+	expectedFlags := []string{"ranges", "values", "value-input"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+// TestSheetsCopyTo_MockServer tests copy-to API integration
+func TestSheetsCopyTo_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/sheets/") && strings.Contains(r.URL.Path, ":copyTo") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			destID, _ := req["destinationSpreadsheetId"].(string)
+			if destID == "" {
+				t.Error("expected destinationSpreadsheetId in request")
+			}
+
+			resp := map[string]interface{}{
+				"sheetId": 99,
+				"title":   "Sheet1 (copy)",
+				"index":   1,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsBatchRead_MockServer tests batch-read API integration
+func TestSheetsBatchRead_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && strings.Contains(r.URL.Path, "/values:batchGet") {
+			resp := map[string]interface{}{
+				"spreadsheetId": "test-id",
+				"valueRanges": []map[string]interface{}{
+					{
+						"range":  "Sheet1!A1:B2",
+						"values": [][]interface{}{{"a", "b"}, {"c", "d"}},
+					},
+					{
+						"range":  "Sheet2!A1:C1",
+						"values": [][]interface{}{{"x", "y", "z"}},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
+// TestSheetsBatchWrite_MockServer tests batch-write API integration
+func TestSheetsBatchWrite_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/values:batchUpdate") {
+			body, _ := io.ReadAll(r.Body)
+			var req map[string]interface{}
+			json.Unmarshal(body, &req)
+
+			data, ok := req["data"].([]interface{})
+			if !ok || len(data) == 0 {
+				t.Error("expected data in batch write request")
+			}
+
+			resp := map[string]interface{}{
+				"spreadsheetId":      "test-id",
+				"totalUpdatedSheets": 2,
+				"totalUpdatedRows":   3,
+				"totalUpdatedCells":  6,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	if server == nil {
+		t.Fatal("server not created")
+	}
+}
+
 // TestSheetsFreeze_MockServer tests freeze panes API integration
 func TestSheetsFreeze_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

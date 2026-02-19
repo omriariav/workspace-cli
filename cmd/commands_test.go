@@ -399,6 +399,9 @@ func TestSheetsCommands(t *testing.T) {
 		{"set-column-width"},
 		{"set-row-height"},
 		{"freeze"},
+		{"copy-to"},
+		{"batch-read"},
+		{"batch-write"},
 	}
 
 	for _, tt := range tests {
