@@ -1091,9 +1091,9 @@ func runDocsTrash(cmd *cobra.Command, args []string) error {
 		}
 
 		return p.Print(map[string]interface{}{
-			"status": "deleted",
-			"id":     docID,
-			"name":   file.Name,
+			"status":      "deleted",
+			"document_id": docID,
+			"name":        file.Name,
 		})
 	}
 
@@ -1104,8 +1104,8 @@ func runDocsTrash(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(map[string]interface{}{
-		"status": "trashed",
-		"id":     docID,
-		"name":   file.Name,
+		"status":      "trashed",
+		"document_id": docID,
+		"name":        file.Name,
 	})
 }
