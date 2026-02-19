@@ -367,6 +367,7 @@ func TestDocsCommands(t *testing.T) {
 		{"set-paragraph-style"},
 		{"add-list"},
 		{"remove-list"},
+		{"trash"},
 	}
 
 	for _, tt := range tests {
