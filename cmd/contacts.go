@@ -428,9 +428,10 @@ func runContactsUpdate(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("at least one field to update must be specified (--name, --email, --phone, --organization, --title)"))
 	}
 
-	// Fetch existing contact to get source metadata required by the API
+	// Fetch existing contact — include metadata for source/etag required by the API
+	fetchFields := append(updateFields, "metadata")
 	existing, err := svc.People.Get(resourceName).
-		PersonFields(strings.Join(updateFields, ",")).
+		PersonFields(strings.Join(fetchFields, ",")).
 		Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to fetch contact for update: %w", err))
