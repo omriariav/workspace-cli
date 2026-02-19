@@ -131,11 +131,8 @@ func TestContactsDirectoryCommand_Flags(t *testing.T) {
 		t.Fatal("contacts directory command not found")
 	}
 
-	flags := []string{"max", "query"}
-	for _, flag := range flags {
-		if cmd.Flags().Lookup(flag) == nil {
-			t.Errorf("expected --%s flag", flag)
-		}
+	if cmd.Flags().Lookup("max") == nil {
+		t.Error("expected --max flag")
 	}
 }
 

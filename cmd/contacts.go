@@ -172,7 +172,6 @@ func init() {
 
 	// Directory flags
 	contactsDirectoryCmd.Flags().Int64("max", 50, "Maximum number of directory people to return")
-	contactsDirectoryCmd.Flags().String("query", "", "Filter directory results")
 
 	// Directory search flags
 	contactsDirectorySearchCmd.Flags().String("query", "", "Search query (required)")
@@ -488,6 +487,10 @@ func runContactsBatchCreate(cmd *cobra.Command, args []string) error {
 	var contacts []*people.Person
 	if err := json.Unmarshal(data, &contacts); err != nil {
 		return p.PrintError(fmt.Errorf("failed to parse JSON file: %w", err))
+	}
+
+	if len(contacts) == 0 {
+		return p.PrintError(fmt.Errorf("no contacts found in file"))
 	}
 
 	contactsToCreate := make([]*people.ContactToCreate, len(contacts))
@@ -819,16 +822,20 @@ func runContactsResolve(cmd *cobra.Command, args []string) error {
 	}
 
 	results := make([]map[string]interface{}, 0, len(resp.Responses))
+	var notFound []string
 	for _, pr := range resp.Responses {
 		if pr.Person != nil {
 			results = append(results, formatPerson(pr.Person))
+		} else {
+			notFound = append(notFound, pr.RequestedResourceName)
 		}
 	}
 
-	return p.Print(map[string]interface{}{
-		"contacts": results,
-		"count":    len(results),
-	})
+	out := map[string]interface{}{"contacts": results, "count": len(results)}
+	if len(notFound) > 0 {
+		out["not_found"] = notFound
+	}
+	return p.Print(out)
 }
 
 // formatPerson converts a People API Person into a display map.
