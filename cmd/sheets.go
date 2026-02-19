@@ -2613,6 +2613,9 @@ func runSheetsAddChart(cmd *cobra.Command, args []string) error {
 
 	if chartType == "PIE" {
 		// PIE: first column = labels (domain), remaining columns = data (series)
+		if gridRange.EndColumnIndex-gridRange.StartColumnIndex < 2 {
+			return p.PrintError(fmt.Errorf("PIE chart requires at least 2 columns (labels + data), got range with %d column(s)", gridRange.EndColumnIndex-gridRange.StartColumnIndex))
+		}
 		domainRange := &sheets.GridRange{
 			SheetId:          gridRange.SheetId,
 			StartRowIndex:    gridRange.StartRowIndex,
