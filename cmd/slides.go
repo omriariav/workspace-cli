@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
@@ -3159,7 +3160,8 @@ func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 	}
 
 	if downloadPath != "" {
-		resp, err := http.Get(thumbnail.ContentUrl)
+		httpClient := &http.Client{Timeout: 30 * time.Second}
+		resp, err := httpClient.Get(thumbnail.ContentUrl)
 		if err != nil {
 			return p.PrintError(fmt.Errorf("failed to download thumbnail: %w", err))
 		}

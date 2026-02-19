@@ -2425,12 +2425,12 @@ func TestSlidesThumbnail_Flags(t *testing.T) {
 
 	slideFlag := cmd.Flags().Lookup("slide")
 	if slideFlag == nil {
-		t.Error("expected --slide flag")
+		t.Fatal("expected --slide flag")
 	}
 
 	sizeFlag := cmd.Flags().Lookup("size")
 	if sizeFlag == nil {
-		t.Error("expected --size flag")
+		t.Fatal("expected --size flag")
 	}
 	if sizeFlag.DefValue != "MEDIUM" {
 		t.Errorf("expected --size default 'MEDIUM', got '%s'", sizeFlag.DefValue)
@@ -2438,7 +2438,7 @@ func TestSlidesThumbnail_Flags(t *testing.T) {
 
 	downloadFlag := cmd.Flags().Lookup("download")
 	if downloadFlag == nil {
-		t.Error("expected --download flag")
+		t.Fatal("expected --download flag")
 	}
 }
 
