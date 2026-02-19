@@ -436,6 +436,23 @@ func runFormsCreate(cmd *cobra.Command, args []string) error {
 
 func runFormsUpdate(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
+
+	// Validate flags before creating API client
+	filePath, _ := cmd.Flags().GetString("file")
+	title, _ := cmd.Flags().GetString("title")
+	description, _ := cmd.Flags().GetString("description")
+
+	hasFile := cmd.Flags().Changed("file")
+	hasTitle := cmd.Flags().Changed("title")
+	hasDescription := cmd.Flags().Changed("description")
+
+	if hasFile && (hasTitle || hasDescription) {
+		return p.PrintError(fmt.Errorf("--file cannot be combined with --title or --description"))
+	}
+	if !hasFile && !hasTitle && !hasDescription {
+		return p.PrintError(fmt.Errorf("provide --file, --title, or --description"))
+	}
+
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -449,17 +466,6 @@ func runFormsUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	formID := args[0]
-	filePath, _ := cmd.Flags().GetString("file")
-	title, _ := cmd.Flags().GetString("title")
-	description, _ := cmd.Flags().GetString("description")
-
-	hasFile := cmd.Flags().Changed("file")
-	hasTitle := cmd.Flags().Changed("title")
-	hasDescription := cmd.Flags().Changed("description")
-
-	if hasFile && (hasTitle || hasDescription) {
-		return p.PrintError(fmt.Errorf("--file cannot be combined with --title or --description"))
-	}
 
 	var batchReq forms.BatchUpdateFormRequest
 
@@ -500,8 +506,6 @@ func runFormsUpdate(cmd *cobra.Command, args []string) error {
 		}
 
 		batchReq.Requests = requests
-	} else {
-		return p.PrintError(fmt.Errorf("provide --file, --title, or --description"))
 	}
 
 	resp, err := svc.Forms.BatchUpdate(formID, &batchReq).Do()
