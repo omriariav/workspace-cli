@@ -397,7 +397,7 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 		},
 		"forms": {
 			parentCmd:   formsCmd,
-			subcommands: []string{"info", "responses"},
+			subcommands: []string{"info", "get", "responses", "response", "create", "update"},
 		},
 		"contacts": {
 			parentCmd:   contactsCmd,

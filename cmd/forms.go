@@ -58,6 +58,7 @@ var formsCreateCmd = &cobra.Command{
 Examples:
   gws forms create --title "Feedback Survey"
   gws forms create --title "Team Poll" --description "Weekly team feedback"`,
+	Args: cobra.NoArgs,
 	RunE: runFormsCreate,
 }
 
