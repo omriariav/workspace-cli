@@ -497,7 +497,6 @@ Usage: gws contacts directory [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--max` | int | 50 | Maximum number of directory people to return |
-| `--query` | string | | Filter directory results |
 
 ### Output Fields (JSON)
 

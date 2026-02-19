@@ -409,43 +409,76 @@ func runContactsUpdate(cmd *cobra.Command, args []string) error {
 	title, _ := cmd.Flags().GetString("title")
 	etag, _ := cmd.Flags().GetString("etag")
 
-	// Build the person object and update mask from provided flags
-	person := &people.Person{}
+	// Determine which fields the user wants to update
 	var updateFields []string
-
-	if etag != "" {
-		person.Etag = etag
-	}
-
-	if name != "" {
-		person.Names = []*people.Name{{UnstructuredName: name}}
+	if cmd.Flags().Changed("name") {
 		updateFields = append(updateFields, "names")
 	}
-
-	if email != "" {
-		person.EmailAddresses = []*people.EmailAddress{{Value: email}}
+	if cmd.Flags().Changed("email") {
 		updateFields = append(updateFields, "emailAddresses")
 	}
-
-	if phone != "" {
-		person.PhoneNumbers = []*people.PhoneNumber{{Value: phone}}
+	if cmd.Flags().Changed("phone") {
 		updateFields = append(updateFields, "phoneNumbers")
 	}
-
-	if organization != "" || title != "" {
-		org := &people.Organization{}
-		if organization != "" {
-			org.Name = organization
-		}
-		if title != "" {
-			org.Title = title
-		}
-		person.Organizations = []*people.Organization{org}
+	if cmd.Flags().Changed("organization") || cmd.Flags().Changed("title") {
 		updateFields = append(updateFields, "organizations")
 	}
 
 	if len(updateFields) == 0 {
 		return p.PrintError(fmt.Errorf("at least one field to update must be specified (--name, --email, --phone, --organization, --title)"))
+	}
+
+	// Fetch existing contact to get source metadata required by the API
+	existing, err := svc.People.Get(resourceName).
+		PersonFields(strings.Join(updateFields, ",")).
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to fetch contact for update: %w", err))
+	}
+
+	// Use the existing person as base and merge updates
+	person := existing
+
+	if etag != "" {
+		person.Etag = etag
+	}
+
+	if cmd.Flags().Changed("name") {
+		if name != "" {
+			person.Names = []*people.Name{{UnstructuredName: name}}
+		} else {
+			person.Names = nil
+		}
+	}
+
+	if cmd.Flags().Changed("email") {
+		if email != "" {
+			person.EmailAddresses = []*people.EmailAddress{{Value: email}}
+		} else {
+			person.EmailAddresses = nil
+		}
+	}
+
+	if cmd.Flags().Changed("phone") {
+		if phone != "" {
+			person.PhoneNumbers = []*people.PhoneNumber{{Value: phone}}
+		} else {
+			person.PhoneNumbers = nil
+		}
+	}
+
+	if cmd.Flags().Changed("organization") || cmd.Flags().Changed("title") {
+		org := &people.Organization{}
+		if len(person.Organizations) > 0 {
+			org = person.Organizations[0]
+		}
+		if cmd.Flags().Changed("organization") {
+			org.Name = organization
+		}
+		if cmd.Flags().Changed("title") {
+			org.Title = title
+		}
+		person.Organizations = []*people.Organization{org}
 	}
 
 	updateMask := strings.Join(updateFields, ",")
@@ -511,17 +544,30 @@ func runContactsBatchCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	results := make([]map[string]interface{}, 0, len(resp.CreatedPeople))
-	for _, pr := range resp.CreatedPeople {
+	var failed []map[string]interface{}
+	for i, pr := range resp.CreatedPeople {
 		if pr.Person != nil {
 			results = append(results, formatPerson(pr.Person))
+		} else {
+			entry := map[string]interface{}{"index": i}
+			if pr.Status != nil {
+				entry["code"] = pr.Status.Code
+				entry["message"] = pr.Status.Message
+			}
+			failed = append(failed, entry)
 		}
 	}
 
-	return p.Print(map[string]interface{}{
+	out := map[string]interface{}{
 		"status":   "created",
 		"contacts": results,
 		"count":    len(results),
-	})
+	}
+	if len(failed) > 0 {
+		out["failed"] = failed
+		out["failed_count"] = len(failed)
+	}
+	return p.Print(out)
 }
 
 func runContactsBatchUpdate(cmd *cobra.Command, args []string) error {
@@ -574,17 +620,30 @@ func runContactsBatchUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	results := make(map[string]interface{}, len(resp.UpdateResult))
+	var failed []map[string]interface{}
 	for resourceName, pr := range resp.UpdateResult {
 		if pr.Person != nil {
 			results[resourceName] = formatPerson(pr.Person)
+		} else {
+			entry := map[string]interface{}{"resource_name": resourceName}
+			if pr.Status != nil {
+				entry["code"] = pr.Status.Code
+				entry["message"] = pr.Status.Message
+			}
+			failed = append(failed, entry)
 		}
 	}
 
-	return p.Print(map[string]interface{}{
+	out := map[string]interface{}{
 		"status":  "updated",
 		"results": results,
 		"count":   len(results),
-	})
+	}
+	if len(failed) > 0 {
+		out["failed"] = failed
+		out["failed_count"] = len(failed)
+	}
+	return p.Print(out)
 }
 
 func runContactsBatchDelete(cmd *cobra.Command, args []string) error {
@@ -697,23 +756,43 @@ func runContactsDirectorySearch(cmd *cobra.Command, args []string) error {
 	query, _ := cmd.Flags().GetString("query")
 	maxResults, _ := cmd.Flags().GetInt64("max")
 
+	var allPeople []*people.Person
+	pageToken := ""
 	pageSize := maxResults
 	if pageSize > 500 {
-		pageSize = 500
+		pageSize = 500 // API max for SearchDirectoryPeople
 	}
 
-	resp, err := svc.People.SearchDirectoryPeople().
-		Query(query).
-		ReadMask(personFields).
-		Sources("DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE").
-		PageSize(pageSize).
-		Do()
-	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to search directory people: %w", err))
+	for {
+		call := svc.People.SearchDirectoryPeople().
+			Query(query).
+			ReadMask(personFields).
+			Sources("DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE").
+			PageSize(pageSize)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+
+		resp, err := call.Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to search directory people: %w", err))
+		}
+
+		allPeople = append(allPeople, resp.People...)
+
+		if resp.NextPageToken == "" || int64(len(allPeople)) >= maxResults {
+			break
+		}
+		pageToken = resp.NextPageToken
 	}
 
-	results := make([]map[string]interface{}, 0, len(resp.People))
-	for _, person := range resp.People {
+	// Trim to max
+	if int64(len(allPeople)) > maxResults {
+		allPeople = allPeople[:maxResults]
+	}
+
+	results := make([]map[string]interface{}, 0, len(allPeople))
+	for _, person := range allPeople {
 		results = append(results, formatPerson(person))
 	}
 
@@ -823,17 +902,29 @@ func runContactsResolve(cmd *cobra.Command, args []string) error {
 
 	results := make([]map[string]interface{}, 0, len(resp.Responses))
 	var notFound []string
+	var errors []map[string]interface{}
 	for _, pr := range resp.Responses {
 		if pr.Person != nil {
 			results = append(results, formatPerson(pr.Person))
-		} else {
+		} else if pr.Status != nil && pr.Status.Code == 5 {
+			// Code 5 = NOT_FOUND
 			notFound = append(notFound, pr.RequestedResourceName)
+		} else {
+			entry := map[string]interface{}{"resource_name": pr.RequestedResourceName}
+			if pr.Status != nil {
+				entry["code"] = pr.Status.Code
+				entry["message"] = pr.Status.Message
+			}
+			errors = append(errors, entry)
 		}
 	}
 
 	out := map[string]interface{}{"contacts": results, "count": len(results)}
 	if len(notFound) > 0 {
 		out["not_found"] = notFound
+	}
+	if len(errors) > 0 {
+		out["errors"] = errors
 	}
 	return p.Print(out)
 }
