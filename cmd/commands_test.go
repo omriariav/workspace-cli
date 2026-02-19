@@ -408,6 +408,12 @@ func TestSheetsCommands(t *testing.T) {
 		{"add-filter"},
 		{"clear-filter"},
 		{"add-filter-view"},
+		{"add-chart"},
+		{"list-charts"},
+		{"delete-chart"},
+		{"add-conditional-format"},
+		{"list-conditional-formats"},
+		{"delete-conditional-format"},
 	}
 
 	for _, tt := range tests {

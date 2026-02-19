@@ -9,7 +9,7 @@ metadata:
 
 # Google Sheets (gws sheets)
 
-`gws sheets` provides CLI access to Google Sheets with structured JSON output. This skill has 32 commands covering full spreadsheet management including batch operations, named ranges, and filters.
+`gws sheets` provides CLI access to Google Sheets with structured JSON output. This skill has 38 commands covering full spreadsheet management including batch operations, named ranges, filters, charts, and conditional formatting.
 
 > **Disclaimer:** `gws` is not the official Google CLI. This is an independent, open-source project not endorsed by or affiliated with Google.
 
@@ -96,6 +96,20 @@ For initial setup, see the `gws-auth` skill.
 | Set column width | `gws sheets set-column-width <id> --sheet "Sheet1" --col A --width 200` |
 | Set row height | `gws sheets set-row-height <id> --sheet "Sheet1" --row 1 --height 50` |
 | Freeze panes | `gws sheets freeze <id> --sheet "Sheet1" --rows 1 --cols 1` |
+
+### Charts
+| Task | Command |
+|------|---------|
+| Add a chart | `gws sheets add-chart <id> --type BAR --data "Sheet1!A1:B10"` |
+| List charts | `gws sheets list-charts <id>` |
+| Delete a chart | `gws sheets delete-chart <id> --chart-id 12345` |
+
+### Conditional Formatting
+| Task | Command |
+|------|---------|
+| Add a rule | `gws sheets add-conditional-format <id> "A1:D10" --rule ">" --value "100" --bg-color "#FFFF00"` |
+| List rules | `gws sheets list-conditional-formats <id> --sheet "Sheet1"` |
+| Delete a rule | `gws sheets delete-conditional-format <id> --sheet "Sheet1" --index 0` |
 
 ## Detailed Usage
 
@@ -352,6 +366,66 @@ gws sheets add-filter-view <spreadsheet-id> <range> --name <title>
 - `--name string` — Title for the filter view (required)
 
 Filter views are saved views that don't affect other users.
+
+### add-chart — Add a chart
+
+```bash
+gws sheets add-chart <spreadsheet-id> [flags]
+```
+
+**Flags:**
+- `--type string` — Chart type: BAR, LINE, AREA, COLUMN, SCATTER, PIE, COMBO (required)
+- `--data string` — Data range, e.g., "Sheet1!A1:B10" (required)
+- `--title string` — Chart title
+- `--sheet string` — Sheet to place chart on (defaults to new sheet)
+
+### list-charts — List charts
+
+```bash
+gws sheets list-charts <spreadsheet-id>
+```
+
+### delete-chart — Delete a chart
+
+```bash
+gws sheets delete-chart <spreadsheet-id> --chart-id <id>
+```
+
+**Flags:**
+- `--chart-id int` — Chart ID to delete (required). Get IDs from `list-charts`.
+
+### add-conditional-format — Add a conditional formatting rule
+
+```bash
+gws sheets add-conditional-format <spreadsheet-id> <range> [flags]
+```
+
+**Flags:**
+- `--rule string` — Condition type (required): `>`, `<`, `=`, `!=`, `contains`, `not-contains`, `blank`, `not-blank`, `formula`
+- `--value string` — Comparison value (required for most rules)
+- `--bg-color string` — Background color (hex, e.g., "#FFFF00")
+- `--color string` — Text color (hex, e.g., "#FF0000")
+- `--bold` — Make matching text bold
+- `--italic` — Make matching text italic
+
+### list-conditional-formats — List conditional formatting rules
+
+```bash
+gws sheets list-conditional-formats <spreadsheet-id> --sheet <name>
+```
+
+**Flags:**
+- `--sheet string` — Sheet name (required)
+
+### delete-conditional-format — Delete a conditional formatting rule
+
+```bash
+gws sheets delete-conditional-format <spreadsheet-id> --sheet <name> --index <n>
+```
+
+**Flags:**
+- `--sheet string` — Sheet name (required)
+- `--index int` — 0-based index of the rule to delete (required). Get indices from `list-conditional-formats`.
 
 ## Output Modes
 
