@@ -52,7 +52,7 @@ For initial setup, see the `gws-auth` skill.
 | Task | Command |
 |------|---------|
 | Read multiple ranges | `gws sheets batch-read <id> --ranges "A1:B5" --ranges "Sheet2!A1:C10"` |
-| Write multiple ranges | `gws sheets batch-write <id> --range "A1:B2" --values '[[1,2],[3,4]]'` |
+| Write multiple ranges | `gws sheets batch-write <id> --ranges "A1:B2" --values '[[1,2],[3,4]]'` |
 | Copy sheet to another | `gws sheets copy-to <id> --sheet-id 0 --destination <dest-id>` |
 
 ### Sheet Management
@@ -275,15 +275,15 @@ gws sheets batch-read <spreadsheet-id> --ranges "A1:B5" --ranges "Sheet2!A1:C10"
 ### batch-write — Write to multiple ranges
 
 ```bash
-gws sheets batch-write <spreadsheet-id> --range "A1:B2" --values '[[1,2],[3,4]]' [flags]
+gws sheets batch-write <spreadsheet-id> --ranges "A1:B2" --values '[[1,2],[3,4]]' [flags]
 ```
 
 **Flags:**
-- `--range strings` — Target ranges (can be repeated, pairs with `--values`, required)
-- `--values strings` — JSON arrays of values (can be repeated, pairs with `--range`, required)
+- `--ranges strings` — Target ranges (can be repeated, pairs with `--values`, required)
+- `--values strings` — JSON arrays of values (can be repeated, pairs with `--ranges`, required)
 - `--value-input string` — Value input option: `RAW`, `USER_ENTERED` (default: "USER_ENTERED")
 
-The nth `--range` pairs with the nth `--values`.
+The nth `--ranges` pairs with the nth `--values`.
 
 ## Output Modes
 

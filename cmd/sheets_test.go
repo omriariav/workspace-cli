@@ -1448,7 +1448,7 @@ func TestSheetsBatchWriteCommand_Flags(t *testing.T) {
 		t.Fatal("batch-write command not found")
 	}
 
-	expectedFlags := []string{"range", "values", "value-input"}
+	expectedFlags := []string{"ranges", "values", "value-input"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)

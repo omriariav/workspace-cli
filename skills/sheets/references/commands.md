@@ -559,8 +559,8 @@ Usage: gws sheets batch-write <spreadsheet-id> [flags]
 
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
-| `--range` | strings | | Yes | Target ranges (pairs with `--values`) |
-| `--values` | strings | | Yes | JSON arrays of values (pairs with `--range`) |
+| `--ranges` | strings | | Yes | Target ranges (pairs with `--values`) |
+| `--values` | strings | | Yes | JSON arrays of values (pairs with `--ranges`) |
 | `--value-input` | string | `USER_ENTERED` | No | Value input option |
 
 **Value input options:**
@@ -572,18 +572,18 @@ Usage: gws sheets batch-write <spreadsheet-id> [flags]
 ```bash
 # Write to two ranges
 gws sheets batch-write 1abc123xyz \
-  --range "A1:B2" --values '[[1,2],[3,4]]' \
-  --range "Sheet2!A1:B1" --values '[["x","y"]]'
+  --ranges "A1:B2" --values '[[1,2],[3,4]]' \
+  --ranges "Sheet2!A1:B1" --values '[["x","y"]]'
 
 # Write raw values (no formula parsing)
 gws sheets batch-write 1abc123xyz \
-  --range "A1:C1" --values '[["=SUM(B1:B10)","hello",42]]' \
+  --ranges "A1:C1" --values '[["=SUM(B1:B10)","hello",42]]' \
   --value-input RAW
 ```
 
 ### Notes
 
-- The nth `--range` flag pairs with the nth `--values` flag
-- Number of `--range` flags must match number of `--values` flags
+- The nth `--ranges` flag pairs with the nth `--values` flag
+- Number of `--ranges` flags must match number of `--values` flags
 - Values must be JSON arrays (e.g., `'[["a","b"],["c","d"]]'`)
 - More efficient than multiple `gws sheets write` calls

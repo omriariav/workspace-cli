@@ -284,13 +284,13 @@ var sheetsBatchWriteCmd = &cobra.Command{
 	Short: "Write to multiple ranges",
 	Long: `Writes values to multiple ranges in a spreadsheet in a single API call.
 
-Each range-values pair is specified with --range and --values flags.
-The nth --range corresponds to the nth --values.
+Each range-values pair is specified with --ranges and --values flags.
+The nth --ranges corresponds to the nth --values.
 
 Example:
   gws sheets batch-write SPREADSHEET_ID \
-    --range "A1:B2" --values '[[1,2],[3,4]]' \
-    --range "Sheet2!A1:B1" --values '[["x","y"]]'`,
+    --ranges "A1:B2" --values '[[1,2],[3,4]]' \
+    --ranges "Sheet2!A1:B1" --values '[["x","y"]]'`,
 	Args: cobra.ExactArgs(1),
 	RunE: runSheetsBatchWrite,
 }
@@ -443,10 +443,10 @@ func init() {
 
 	// Batch-write command
 	sheetsCmd.AddCommand(sheetsBatchWriteCmd)
-	sheetsBatchWriteCmd.Flags().StringSlice("range", nil, "Target ranges (can be repeated, pairs with --values)")
-	sheetsBatchWriteCmd.Flags().StringSlice("values", nil, "JSON arrays of values (can be repeated, pairs with --range)")
+	sheetsBatchWriteCmd.Flags().StringSlice("ranges", nil, "Target ranges (can be repeated, pairs with --values)")
+	sheetsBatchWriteCmd.Flags().StringSlice("values", nil, "JSON arrays of values (can be repeated, pairs with --ranges)")
 	sheetsBatchWriteCmd.Flags().String("value-input", "USER_ENTERED", "Value input option: RAW, USER_ENTERED")
-	sheetsBatchWriteCmd.MarkFlagRequired("range")
+	sheetsBatchWriteCmd.MarkFlagRequired("ranges")
 	sheetsBatchWriteCmd.MarkFlagRequired("values")
 }
 
@@ -2083,12 +2083,12 @@ func runSheetsBatchWrite(cmd *cobra.Command, args []string) error {
 	}
 
 	spreadsheetID := args[0]
-	ranges, _ := cmd.Flags().GetStringSlice("range")
+	ranges, _ := cmd.Flags().GetStringSlice("ranges")
 	valuesStrs, _ := cmd.Flags().GetStringSlice("values")
 	valueInput, _ := cmd.Flags().GetString("value-input")
 
 	if len(ranges) != len(valuesStrs) {
-		return p.PrintError(fmt.Errorf("number of --range flags (%d) must match number of --values flags (%d)", len(ranges), len(valuesStrs)))
+		return p.PrintError(fmt.Errorf("number of --ranges flags (%d) must match number of --values flags (%d)", len(ranges), len(valuesStrs)))
 	}
 
 	data := make([]*sheets.ValueRange, 0, len(ranges))
@@ -2116,7 +2116,7 @@ func runSheetsBatchWrite(cmd *cobra.Command, args []string) error {
 	return p.Print(map[string]interface{}{
 		"status":         "written",
 		"spreadsheet":    resp.SpreadsheetId,
-		"ranges_updated": resp.TotalUpdatedSheets,
+		"sheets_updated": resp.TotalUpdatedSheets,
 		"rows_updated":   resp.TotalUpdatedRows,
 		"cells_updated":  resp.TotalUpdatedCells,
 	})
