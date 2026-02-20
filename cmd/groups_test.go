@@ -41,7 +41,7 @@ func TestGroupsListCommand_Flags(t *testing.T) {
 
 	maxFlag := cmd.Flags().Lookup("max")
 	if maxFlag == nil {
-		t.Error("expected --max flag")
+		t.Fatal("expected --max flag")
 	}
 	if maxFlag.DefValue != "50" {
 		t.Errorf("expected --max default 50, got %s", maxFlag.DefValue)
@@ -49,12 +49,12 @@ func TestGroupsListCommand_Flags(t *testing.T) {
 
 	domainFlag := cmd.Flags().Lookup("domain")
 	if domainFlag == nil {
-		t.Error("expected --domain flag")
+		t.Fatal("expected --domain flag")
 	}
 
 	userEmailFlag := cmd.Flags().Lookup("user-email")
 	if userEmailFlag == nil {
-		t.Error("expected --user-email flag")
+		t.Fatal("expected --user-email flag")
 	}
 }
 
@@ -82,7 +82,7 @@ func TestGroupsMembersCommand_Flags(t *testing.T) {
 
 	maxFlag := cmd.Flags().Lookup("max")
 	if maxFlag == nil {
-		t.Error("expected --max flag")
+		t.Fatal("expected --max flag")
 	}
 	if maxFlag.DefValue != "50" {
 		t.Errorf("expected --max default 50, got %s", maxFlag.DefValue)
@@ -90,7 +90,7 @@ func TestGroupsMembersCommand_Flags(t *testing.T) {
 
 	roleFlag := cmd.Flags().Lookup("role")
 	if roleFlag == nil {
-		t.Error("expected --role flag")
+		t.Fatal("expected --role flag")
 	}
 }
 
@@ -136,16 +136,16 @@ func TestGroupsList_MockServer(t *testing.T) {
 			resp := &admin.Groups{
 				Groups: []*admin.Group{
 					{
-						Id:                "group-1",
-						Email:             "eng@example.com",
-						Name:              "Engineering",
-						Description:       "Engineering team",
+						Id:                 "group-1",
+						Email:              "eng@example.com",
+						Name:               "Engineering",
+						Description:        "Engineering team",
 						DirectMembersCount: 25,
 					},
 					{
-						Id:                "group-2",
-						Email:             "product@example.com",
-						Name:              "Product",
+						Id:                 "group-2",
+						Email:              "product@example.com",
+						Name:               "Product",
 						DirectMembersCount: 10,
 					},
 				},
