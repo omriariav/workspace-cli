@@ -97,22 +97,15 @@ Lesson learned (v1.22.0): agents sharing one working directory causes git branch
 
 ## PR Review Policy
 
-**No PR may be merged without a passing review from `claude-code-action[bot]`.**
-
-### Automated review (CI)
-- `claude-code-action` runs automatically on every PR open/update
-- Bot posts inline comments and an overall review as `claude-code-action[bot]`
-- PRs with Critical findings get `REQUEST_CHANGES` status
+**No PR may be merged without a review from `pr-reviewer` agent or Codex.**
 
 ### Agent team workflow
 1. Implementation agent: branch > implement > test > commit > push > `gh pr create`
-2. CI triggers `claude-code-action` review automatically
-3. If changes requested: implementation agent reads bot comments via
-   `gh pr view <N> --comments`, fixes issues, pushes (triggers re-review)
-4. Only merge after bot approves: `gh pr merge <N> --squash`
+2. Team lead reviews PR using `pr-reviewer` agent or Codex MCP
+3. If changes requested: implementation agent fixes issues, pushes
+4. Only merge after reviewer approves: `gh pr merge <N> --squash`
 
 ### Rules
-- NEVER run `gh pr merge` without a prior approved review on the latest commit
-- Implementation agent must NOT self-review (bot provides independent review)
-- Use `@claude` in PR comments to ask the bot follow-up questions
+- NEVER run `gh pr merge` without a prior review on the latest commit
+- Implementation agent must NOT self-review (separate reviewer provides independent review)
 - For local pre-flight review: run `/code-review` before pushing
