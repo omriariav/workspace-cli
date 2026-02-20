@@ -44,7 +44,7 @@ func TestKeepListCommand_Flags(t *testing.T) {
 
 	maxFlag := cmd.Flags().Lookup("max")
 	if maxFlag == nil {
-		t.Error("expected --max flag")
+		t.Fatal("expected --max flag")
 	}
 	if maxFlag.DefValue != "20" {
 		t.Errorf("expected --max default '20', got '%s'", maxFlag.DefValue)
