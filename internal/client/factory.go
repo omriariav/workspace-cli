@@ -10,12 +10,14 @@ import (
 	"github.com/omriariav/workspace-cli/internal/auth"
 	"github.com/omriariav/workspace-cli/internal/config"
 	"golang.org/x/oauth2"
+	admin "google.golang.org/api/admin/directory/v1"
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/chat/v1"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/forms/v1"
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/keep/v1"
 	"google.golang.org/api/option"
 	"google.golang.org/api/people/v1"
 	"google.golang.org/api/sheets/v4"
@@ -41,6 +43,8 @@ type Factory struct {
 	chat     *chat.Service
 	forms    *forms.Service
 	people   *people.Service
+	admin    *admin.Service
+	keep     *keep.Service
 }
 
 // NewFactory creates a new client factory.
@@ -279,6 +283,46 @@ func (f *Factory) Forms() (*forms.Service, error) {
 	}
 
 	f.forms = svc
+	return svc, nil
+}
+
+// Admin returns the Admin Directory API service client.
+func (f *Factory) Admin() (*admin.Service, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.checkServiceScopes("groups")
+
+	if f.admin != nil {
+		return f.admin, nil
+	}
+
+	svc, err := admin.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Admin Directory client: %w", err)
+	}
+
+	f.admin = svc
+	return svc, nil
+}
+
+// Keep returns the Keep API service client.
+func (f *Factory) Keep() (*keep.Service, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.checkServiceScopes("keep")
+
+	if f.keep != nil {
+		return f.keep, nil
+	}
+
+	svc, err := keep.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Keep client: %w", err)
+	}
+
+	f.keep = svc
 	return svc, nil
 }
 

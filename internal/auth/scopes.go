@@ -16,6 +16,8 @@ var ServiceScopes = map[string][]string{
 	"chat":     {"chat.spaces", "chat.messages", "chat.messages.create", "chat.memberships", "chat.messages.reactions", "chat.users.readstate"},
 	"forms":    {"forms.responses.readonly", "forms.body", "forms.body.readonly"},
 	"contacts": {"contacts.readonly", "contacts", "directory.readonly"},
+	"groups":   {"admin.directory.group.readonly", "admin.directory.group.member.readonly"},
+	"keep":     {"keep.readonly", "keep"},
 	"userinfo": {"userinfo.email"},
 }
 
@@ -26,7 +28,7 @@ func computeAllScopes() []string {
 	seen := make(map[string]bool)
 	var scopes []string
 	// Deterministic order: iterate known service names
-	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "userinfo"}
+	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "groups", "keep", "userinfo"}
 	for _, svc := range order {
 		for _, s := range ServiceScopes[svc] {
 			full := scopePrefix + s
@@ -82,7 +84,7 @@ func ServiceForScope(scope string) string {
 
 // ValidServiceNames returns all known service names.
 func ValidServiceNames() []string {
-	return []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts"}
+	return []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "groups", "keep"}
 }
 
 // ValidateServices checks that all service names are recognized.

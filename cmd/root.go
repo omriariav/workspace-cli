@@ -22,7 +22,8 @@ var rootCmd = &cobra.Command{
 	Long: `gws is a unified command-line interface for Google Workspace services.
 
 It provides structured, token-efficient access to Gmail, Calendar, Drive,
-Docs, Sheets, Slides, Tasks, Chat, Forms, and Custom Search.`,
+Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Groups, Keep,
+and Custom Search.`,
 }
 
 func Execute() error {
