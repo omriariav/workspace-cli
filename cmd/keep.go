@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
@@ -109,6 +110,9 @@ func runKeepGet(cmd *cobra.Command, args []string) error {
 	}
 
 	noteID := args[0]
+	if !strings.HasPrefix(noteID, "notes/") {
+		noteID = "notes/" + noteID
+	}
 
 	n, err := svc.Notes.Get(noteID).Do()
 	if err != nil {
