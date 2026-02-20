@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-`gws` is a unified CLI for Google Workspace built in Go (Cobra/Viper). It provides structured JSON output for 10+ Google services, designed for AI agents and scripting.
+`gws` is a unified CLI for Google Workspace built in Go (Cobra/Viper). It provides structured JSON output for 12 Google services, designed for AI agents and scripting.
 
 ## Architecture
 
@@ -26,10 +26,10 @@
 | `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze, copy-to, batch-read, batch-write, add-named-range, list-named-ranges, delete-named-range, add-filter, clear-filter, add-filter-view, add-chart, list-charts, delete-chart, add-conditional-format, list-conditional-formats, delete-conditional-format |
 | `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides, thumbnail |
 | `chat` | list, messages, members, send, get, update, delete, reactions, react, unreact, get-space, create-space, delete-space, update-space, search-spaces, find-dm, setup-space, get-member, add-member, remove-member, update-member, read-state, mark-read, thread-read-state, attachment, upload, download, events, event |
-| `contacts` | list, search, get, create, delete |
+| `contacts` | list, search, get, create, delete, update, batch-create, batch-update, batch-delete, directory, directory-search, photo, delete-photo, resolve |
 | `groups` | list, members |
 | `keep` | list, get, create |
-| `forms` | info, responses |
+| `forms` | info, get, responses, response, create, update |
 | `search` | web search (needs API key) |
 | `version` | Show version info |
 
@@ -45,20 +45,20 @@ go run ./cmd/gws    # or go run .
 - Client ID/Secret: env vars `GWS_CLIENT_ID`, `GWS_CLIENT_SECRET` or config file
 - Token: `~/.config/gws/token.json` (auto-refreshes)
 - All scopes requested upfront in `internal/auth/scopes.go`
+- Groups requires Admin SDK API enabled + Workspace admin privileges
+- Keep requires Keep API enabled + Workspace Enterprise plan
 
 ## Current Version
 
-**v1.26.0** - Google Groups and Google Keep services (5 new commands).
+**v1.26.0** - Google Groups and Google Keep services (5 new commands), Codex CI review.
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for planned features. Remaining API parity issues:
-- Gmail: Settings API — vacation, filters, forwarding, send-as, IMAP/POP (#104)
-- Slides: page thumbnails (#98)
-- Sheets: copy-to, batch read/write (#97)
-- Docs: delete command (#96)
-- Forms: create form, batch update, get single response (#95)
-- Contacts: update, batch ops, directory search, photos (#94)
+See [ROADMAP.md](ROADMAP.md) for planned features. Remaining items:
+- Gmail: Settings API — vacation, filters, forwarding, send-as (#104)
+- Classroom: courses, assignments, submissions (#121)
+- Apps Script: list, get, run (#122)
+- Infrastructure: keychain storage, multi-account, Homebrew, jq filtering
 
 ## Implementation Patterns
 
@@ -78,10 +78,10 @@ Every feature/fix follows this flow:
 1. **Branch** — Create a feature branch from `main` (e.g. `feat/chat-api-params`)
 2. **Implement & commit** — Make changes, commit with clear messages
 3. **Open PR** — Push branch and open a PR against `main`
-4. **Codex review loop** — Use Codex to review the PR; iterate on feedback until it approves
+4. **Codex review loop** — Codex CI reviews automatically; iterate on feedback until clean
 5. **Merge** — Merge the PR into `main`
 6. **Release** — Bump version in Makefile, update CLAUDE.md version, tag release, update README
-7. **Tweet draft** — Write a short tweet announcing the new version and key changes
+7. **Tweet** — Write a short tweet announcing the new version and key changes
 
 ## Parallel Agent Sprints
 
@@ -91,11 +91,13 @@ For large multi-service features, use Claude Code agent teams with git worktrees
 2. **Create worktrees** — `git worktree add /tmp/{agent}-work feat/{service}` — one per agent so they don't clobber each other's working directory
 3. **Spawn agents** with `cwd` pointing to their worktree
 4. **Each agent**: implement → test → commit → push → open PR
-5. **Review loop**: pr-reviewer agent reviews each PR, agent iterates on feedback
+5. **Codex CI reviews** each PR automatically; agent fixes findings and pushes
 6. **Merge sequentially** (simplest first), rebase later PRs on updated main
 7. **Version bump** after all PRs merge
 
 Lesson learned (v1.22.0): agents sharing one working directory causes git branch switches to wipe uncommitted work. Always use separate worktrees.
+
+Lesson learned (v1.26.0): when branching from main with shared test expectations (e.g. expected subcommands list), each branch must only expect its own new commands — the full list is restored after merge.
 
 ## PR Review Policy
 
