@@ -64,15 +64,17 @@ func runGroupsList(cmd *cobra.Command, args []string) error {
 	domain, _ := cmd.Flags().GetString("domain")
 	userEmail, _ := cmd.Flags().GetString("user-email")
 
+	if domain != "" && userEmail != "" {
+		return p.PrintError(fmt.Errorf("--domain and --user-email are mutually exclusive"))
+	}
+
 	call := svc.Groups.List()
 
 	if domain != "" {
 		call = call.Domain(domain)
-	}
-	if userEmail != "" {
+	} else if userEmail != "" {
 		call = call.UserKey(userEmail)
-	}
-	if domain == "" && userEmail == "" {
+	} else {
 		call = call.Customer("my_customer")
 	}
 	call = call.MaxResults(maxResults)
