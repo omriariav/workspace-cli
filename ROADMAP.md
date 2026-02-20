@@ -13,6 +13,18 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 
 ## Completed
 
+### v1.26.0
+- [x] Groups: list groups, list members via Admin Directory API (2 new commands, PR #133)
+- [x] Keep: list notes, get note, create note via Keep API (3 new commands, PR #134)
+- [x] Auth: added admin.directory.group and keep scopes
+- [x] CI: Codex PR review workflow (openai/codex-action)
+
+### v1.25.0
+- [x] Sheets: Named Ranges — add, list, delete (3 new commands, PR #127)
+- [x] Sheets: Filters — set basic filter, clear filter, add filter view (3 new commands, PR #128)
+- [x] Sheets: Charts — add-chart, list-charts, delete-chart (3 new commands, PR #129)
+- [x] Sheets: Conditional Formatting — add, list, delete rules (3 new commands, PR #130)
+
 ### v1.24.0
 - [x] Contacts: full People API parity — update, batch-create/update/delete, directory search, photos, resolve (9 new commands, PR #125)
 - [x] Forms: full API parity — create, update, get, response (4 new commands, PR #124)
@@ -87,151 +99,25 @@ Feature roadmap for the Google Workspace CLI. Items are organized by priority an
 
 ---
 
-## Planned Features
+## Remaining API Gaps
 
-### Sheets Charts (P2, C)
+### Gmail Settings API (P2, M) — #104
 
-Create and manage charts in spreadsheets.
-
-```bash
-gws sheets add-chart <id> --type PIE --data "Sheet1!A1:B10" --title "Sales"
-# API: batchUpdate → addChart
-# Types: PIE, BAR, LINE, AREA, COLUMN, SCATTER
-
-gws sheets list-charts <id>
-# API: spreadsheets.get with fields=sheets.charts
-
-gws sheets delete-chart <id> --chart-id 123456
-# API: batchUpdate → deleteEmbeddedObject
-```
-
-### Sheets Named Ranges (P2, S)
-
-Manage named ranges for easier formula references.
+Vacation responder, filters, forwarding rules, send-as aliases, IMAP/POP settings.
 
 ```bash
-gws sheets add-named-range <id> --name "SalesData" --range "Sheet1!A1:D100"
-# API: batchUpdate → addNamedRange
-
-gws sheets list-named-ranges <id>
-# API: spreadsheets.get with fields=namedRanges
-
-gws sheets delete-named-range <id> --name "SalesData"
-# API: batchUpdate → deleteNamedRange
-```
-
-### Sheets Filters (P2, M)
-
-Add and manage filter views.
-
-```bash
-gws sheets add-filter <id> <range>
-# API: batchUpdate → setBasicFilter
-
-gws sheets clear-filter <id> --sheet "Sheet1"
-# API: batchUpdate → clearBasicFilter
-
-gws sheets add-filter-view <id> --name "Q1 Data" --range "Sheet1!A1:D100"
-# API: batchUpdate → addFilterView
-```
-
-### Sheets Conditional Formatting (P2, M)
-
-Apply conditional formatting rules.
-
-```bash
-gws sheets conditional-format <id> <range> --rule ">" --value 100 --bg-color green
-# API: batchUpdate → addConditionalFormatRule
-
-gws sheets list-conditional-formats <id> --sheet "Sheet1"
-# API: spreadsheets.get with fields=sheets.conditionalFormats
-
-gws sheets delete-conditional-format <id> --index 0 --sheet "Sheet1"
-# API: batchUpdate → deleteConditionalFormatRule
-```
-
-### Gmail Advanced (P2, S)
-
-Additional Gmail operations.
-
-```bash
-gws gmail labels
-# API: users.labels.list
-
-gws gmail label <message-id> --add "Important" --remove "Inbox"
-# API: users.messages.modify
-
-gws gmail trash <message-id>
-# API: users.messages.trash
-
-gws gmail archive <message-id>
-# API: users.messages.modify (remove INBOX label)
-```
-
-### Calendar Advanced (P2, S)
-
-Additional calendar operations.
-
-```bash
-gws calendar update <event-id> --title "New Title" --start "2024-01-20T10:00:00"
-# API: events.patch
-
-gws calendar delete <event-id>
-# API: events.delete
-
-gws calendar rsvp <event-id> --response accepted
-# API: events.patch (attendees[].responseStatus)
-```
-
-### Tasks Advanced (P2, S)
-
-Additional task operations.
-
-```bash
-gws tasks update <list-id> <task-id> --title "New Title" --due "2024-01-20"
-# API: tasks.patch
-
-gws tasks delete <list-id> <task-id>
-# API: tasks.delete
-
-gws tasks move <list-id> <task-id> --parent <parent-task-id>
-# API: tasks.move
+gws gmail vacation --enable --subject "OOO" --body "Back Jan 5"
+gws gmail filters
+gws gmail create-filter --from "noreply@" --action archive
+gws gmail forwarding --add user@example.com
+gws gmail send-as --list
 ```
 
 ---
 
-## New Services (Competitive Gaps — gogcli)
+## New Services
 
-Identified from comparison with [gogcli](https://github.com/steipete/gogcli).
-
-### Groups (P3, S) — Workspace only
-
-List and inspect Google Groups.
-
-```bash
-gws groups list
-# API: directory.groups.list (Admin SDK)
-
-gws groups members <group-email>
-# API: directory.members.list
-```
-
-### Keep (P3, M) — Workspace only
-
-Access Google Keep notes (Workspace accounts only).
-
-```bash
-gws keep list --max 20
-# API: notes.list
-
-gws keep get <note-id>
-# API: notes.get
-
-gws keep create --title "TODO" --text "Buy milk"
-# API: notes.create
-```
-
-### Classroom (P3, M)
+### Classroom (P3, M) — #121
 
 Access Google Classroom courses and assignments.
 
@@ -246,7 +132,7 @@ gws classroom submissions <course-id> <coursework-id>
 # API: studentSubmissions.list
 ```
 
-### Apps Script (P3, M)
+### Apps Script (P3, M) — #122
 
 Inspect and execute Google Apps Script projects.
 
@@ -263,15 +149,13 @@ gws apps-script run <script-id> --function "myFunction"
 
 ---
 
-## CLI Infrastructure (Competitive Gaps)
+## CLI Infrastructure
 
-Identified from comparison with [jenkins-cli](https://github.com/avivsinai/jenkins-cli) and [bitbucket-cli](https://github.com/avivsinai/bitbucket-cli).
-
-### OS keychain token storage (P2, M)
+### OS keychain token storage (P2, M) — #112
 
 Store OAuth tokens in OS keychain (macOS Keychain, Linux Secret Service) instead of plain JSON file at `~/.config/gws/token.json`. Both `bkt` ([go-keyring](https://github.com/zalando/go-keyring)) and `gogcli` use keyring-based credential storage.
 
-### Multi-account support (P2, C)
+### Multi-account support (P2, C) — #113
 
 Support multiple Google accounts with context switching, similar to `jk context use`, `bkt context create`, and `gogcli`'s email alias system.
 
@@ -282,80 +166,45 @@ gws context use work
 # or: GWS_CONTEXT=personal gws gmail list
 ```
 
-### Scoped authentication (P2, S)
+### Scoped authentication (P2, S) — #114
 
-Least-privilege auth with `--readonly` and `--drive-scope` flags to request only necessary permissions during login. gogcli implements this to avoid over-scoping. Currently gws requests all scopes upfront.
+Least-privilege auth — `gws auth login --services gmail,calendar` already exists. Could add `--readonly` for read-only scopes only.
 
-```bash
-gws auth login --readonly                    # read-only access
-gws auth login --scopes gmail,calendar       # specific services only
-```
+### Homebrew distribution (P2, S) — #115
 
-### Homebrew distribution (P2, S)
-
-Publish gws via Homebrew tap for easy installation. gogcli uses `brew install steipete/tap/gogcli`.
+Publish gws via Homebrew tap for easy installation.
 
 ```bash
 brew install omriariav/tap/gws
 ```
 
-### Service account support (P3, M)
+### Service account support (P3, M) — #116
 
-Support Google Workspace domain-wide delegation via service accounts, enabling server-side automation without interactive OAuth. gogcli supports this for Workspace admins.
+Support Google Workspace domain-wide delegation via service accounts, enabling server-side automation without interactive OAuth.
 
 ```bash
 gws auth login --service-account key.json --subject admin@company.com
 ```
 
-### jq / Go template filtering (P3, M)
+### jq / Go template filtering (P3, M) — #117
 
-Add `--jq` and `--template` flags for output filtering, matching `jk`'s approach.
+Add `--jq` and `--template` flags for output filtering.
 
 ```bash
 gws gmail list --max 5 --jq '.[].subject'
 gws calendar events --template '{{range .}}{{.summary}} at {{.start}}{{end}}'
 ```
 
-### Extension / plugin system (P3, C)
+### Extension / plugin system (P3, C) — #118
 
-Allow custom commands via git-cloned extensions, similar to `bkt`'s `bkt-<name>` convention.
+Allow custom commands via git-cloned extensions.
 
 ```bash
 gws extension install github.com/user/gws-calendar-sync
 gws calendar-sync  # runs extension
 ```
 
----
-
-## Feature Ideas (P3)
-
-### Forms Write (P3, C)
-
-Limited by Google Forms API capabilities.
-
-```bash
-gws forms create --title "Feedback Form"
-# API: forms.create (very limited)
-```
-
-Note: Forms API is primarily read-only. Programmatic form creation is limited.
-
-### Drive Sharing (P3, M)
-
-Manage file permissions.
-
-```bash
-gws drive share <file-id> --email user@example.com --role writer
-# API: permissions.create
-
-gws drive unshare <file-id> --email user@example.com
-# API: permissions.delete
-
-gws drive permissions <file-id>
-# API: permissions.list
-```
-
-### Batch Operations (P3, C)
+### Cross-service batch operations (P3, C) — #123
 
 Bulk operations across multiple files/items.
 
