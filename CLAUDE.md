@@ -97,15 +97,20 @@ Lesson learned (v1.22.0): agents sharing one working directory causes git branch
 
 ## PR Review Policy
 
-**No PR may be merged without a review from `pr-reviewer` agent or Codex.**
+**No PR may be merged without a passing Codex review.**
+
+### Automated review (CI)
+- `openai/codex-action` runs automatically on every PR open/update
+- Codex posts review comments on the PR
+- Review prompt lives in `.github/codex/prompts/review.md`
 
 ### Agent team workflow
 1. Implementation agent: branch > implement > test > commit > push > `gh pr create`
-2. Team lead reviews PR using `pr-reviewer` agent or Codex MCP
-3. If changes requested: implementation agent fixes issues, pushes
+2. CI triggers Codex review automatically
+3. If changes requested: implementation agent fixes issues, pushes (triggers re-review)
 4. Only merge after reviewer approves: `gh pr merge <N> --squash`
 
 ### Rules
 - NEVER run `gh pr merge` without a prior review on the latest commit
-- Implementation agent must NOT self-review (separate reviewer provides independent review)
+- Implementation agent must NOT self-review (Codex provides independent review)
 - For local pre-flight review: run `/code-review` before pushing
