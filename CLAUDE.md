@@ -27,6 +27,8 @@
 | `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides, thumbnail |
 | `chat` | list, messages, members, send, get, update, delete, reactions, react, unreact, get-space, create-space, delete-space, update-space, search-spaces, find-dm, setup-space, get-member, add-member, remove-member, update-member, read-state, mark-read, thread-read-state, attachment, upload, download, events, event |
 | `contacts` | list, search, get, create, delete |
+| `groups` | list, members |
+| `keep` | list, get, create |
 | `forms` | info, responses |
 | `search` | web search (needs API key) |
 | `version` | Show version info |
@@ -46,7 +48,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.25.0** - Sheets advanced features: Named Ranges, Filters, Charts, Conditional Formatting (12 new commands).
+**v1.26.0** - Google Groups and Google Keep services (5 new commands).
 
 ## Roadmap
 
