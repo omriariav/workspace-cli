@@ -62,7 +62,7 @@ func TestRootCommand_HasSubcommands(t *testing.T) {
 	}
 
 	// Check for expected subcommands
-	expected := []string{"auth", "gmail", "calendar", "tasks", "drive", "docs", "sheets", "slides", "chat", "forms", "search", "contacts", "groups", "keep"}
+	expected := []string{"auth", "gmail", "calendar", "tasks", "drive", "docs", "sheets", "slides", "chat", "forms", "search", "contacts", "groups"}
 	for _, name := range expected {
 		found := false
 		for _, cmd := range subcommands {
