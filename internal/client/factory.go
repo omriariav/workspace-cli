@@ -12,10 +12,10 @@ import (
 	"golang.org/x/oauth2"
 	admin "google.golang.org/api/admin/directory/v1"
 	"google.golang.org/api/calendar/v3"
-	driveactivity "google.golang.org/api/driveactivity/v2"
 	"google.golang.org/api/chat/v1"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/drive/v3"
+	driveactivity "google.golang.org/api/driveactivity/v2"
 	"google.golang.org/api/forms/v1"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/keep/v1"
@@ -34,16 +34,16 @@ type Factory struct {
 	grantedServices []string        // services granted at login time
 	scopeWarned     map[string]bool // track warnings to avoid repeats
 
-	gmail    *gmail.Service
-	calendar *calendar.Service
-	drive    *drive.Service
-	docs     *docs.Service
-	sheets   *sheets.Service
-	slides   *slides.Service
-	tasks    *tasks.Service
-	chat     *chat.Service
-	forms    *forms.Service
-	people   *people.Service
+	gmail         *gmail.Service
+	calendar      *calendar.Service
+	drive         *drive.Service
+	docs          *docs.Service
+	sheets        *sheets.Service
+	slides        *slides.Service
+	tasks         *tasks.Service
+	chat          *chat.Service
+	forms         *forms.Service
+	people        *people.Service
 	admin         *admin.Service
 	keep          *keep.Service
 	driveActivity *driveactivity.Service

@@ -1886,9 +1886,9 @@ func TestDriveActivity_MockServer(t *testing.T) {
 						Targets: []*driveactivity.Target{
 							{
 								DriveItem: &driveactivity.DriveItem{
-									Name:     "items/abc123",
-									Title:    "Test Document",
-									MimeType: "application/vnd.google-apps.document",
+									Name:      "items/abc123",
+									Title:     "Test Document",
+									MimeType:  "application/vnd.google-apps.document",
 									DriveFile: &driveactivity.DriveFile{},
 								},
 							},
