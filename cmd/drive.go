@@ -2350,7 +2350,7 @@ func runDriveActivity(cmd *cobra.Command, args []string) error {
 
 	// Validate --days
 	if days < 0 {
-		return p.PrintError(fmt.Errorf("--days must be a positive number"))
+		return p.PrintError(fmt.Errorf("--days must be non-negative"))
 	}
 
 	req := &driveactivity.QueryDriveActivityRequest{
@@ -2436,8 +2436,8 @@ func formatDriveActivity(a *driveactivity.DriveActivity) map[string]interface{} 
 		activity["primary_action"] = formatActionDetail(a.PrimaryActionDetail)
 	}
 
-	// All actions (if consolidated)
-	if len(a.Actions) > 1 {
+	// All actions
+	if len(a.Actions) > 0 {
 		actions := make([]map[string]interface{}, 0, len(a.Actions))
 		for _, action := range a.Actions {
 			act := map[string]interface{}{}

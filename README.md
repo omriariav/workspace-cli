@@ -211,6 +211,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws drive update-drive` | Update shared drive (`--id`, `--name`) |
 | `gws drive about` | Get drive storage and user info |
 | `gws drive changes` | List recent file changes (`--max`, `--page-token`) |
+| `gws drive activity` | Query activity history (`--item-id`, `--folder-id`, `--filter`, `--days`, `--max`) |
 
 ### Docs
 
