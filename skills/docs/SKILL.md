@@ -49,6 +49,35 @@ For initial setup, see the `gws-auth` skill.
 | Remove list | `gws docs remove-list <doc-id> --from 1 --to 50` |
 | Trash document | `gws docs trash <doc-id>` |
 | Permanently delete | `gws docs trash <doc-id> --permanent` |
+| Add a tab | `gws docs add-tab <doc-id> --title "Tab 2"` |
+| Delete a tab | `gws docs delete-tab <doc-id> --tab-id <id>` |
+| Rename a tab | `gws docs rename-tab <doc-id> --tab-id <id> --title "New Name"` |
+| Read specific tab | `gws docs read <doc-id> --tab "Tab 2"` |
+| Add an image | `gws docs add-image <doc-id> --uri <url>` |
+| Insert table row | `gws docs insert-table-row <doc-id> --table-start 5 --row 0 --col 0` |
+| Delete table row | `gws docs delete-table-row <doc-id> --table-start 5 --row 0 --col 0` |
+| Insert table column | `gws docs insert-table-col <doc-id> --table-start 5 --row 0 --col 0` |
+| Delete table column | `gws docs delete-table-col <doc-id> --table-start 5 --row 0 --col 0` |
+| Merge table cells | `gws docs merge-cells <doc-id> --table-start 5 --row 0 --col 0 --row-span 2 --col-span 2` |
+| Unmerge table cells | `gws docs unmerge-cells <doc-id> --table-start 5 --row 0 --col 0 --row-span 2 --col-span 2` |
+| Pin header rows | `gws docs pin-rows <doc-id> --table-start 5 --count 1` |
+| Insert page break | `gws docs page-break <doc-id> --at 10` |
+| Insert section break | `gws docs section-break <doc-id> --at 10` |
+| Add header | `gws docs add-header <doc-id>` |
+| Delete header | `gws docs delete-header <doc-id> <header-id>` |
+| Add footer | `gws docs add-footer <doc-id>` |
+| Delete footer | `gws docs delete-footer <doc-id> <footer-id>` |
+| Add named range | `gws docs add-named-range <doc-id> --name "range1" --from 1 --to 10` |
+| Delete named range | `gws docs delete-named-range <doc-id> --name "range1"` |
+| Add footnote | `gws docs add-footnote <doc-id> --at 5` |
+| Delete object | `gws docs delete-object <doc-id> <object-id>` |
+| Replace image | `gws docs replace-image <doc-id> --object-id <id> --uri <url>` |
+| Replace named range | `gws docs replace-named-range <doc-id> --name "range1" --text "new"` |
+| Update doc margins | `gws docs update-style <doc-id> --margin-top 72` |
+| Update section style | `gws docs update-section-style <doc-id> --from 1 --to 100 --column-count 2` |
+| Update cell style | `gws docs update-table-cell-style <doc-id> --table-start 5 --row 0 --col 0 --bg-color "#FF0000"` |
+| Update column width | `gws docs update-table-col-properties <doc-id> --table-start 5 --col-index 0 --width 200` |
+| Update row height | `gws docs update-table-row-style <doc-id> --table-start 5 --row 0 --min-height 50` |
 
 ## Detailed Usage
 

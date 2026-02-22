@@ -230,6 +230,34 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws docs add-list <id>` | Add bullet/numbered list (`--at`, `--type`, `--items`) |
 | `gws docs remove-list <id>` | Remove list formatting (`--from`, `--to`) |
 | `gws docs trash <id>` | Trash document (`--permanent` for hard delete) |
+| `gws docs add-tab <id>` | Add a tab (`--title`, `--index`) |
+| `gws docs delete-tab <id>` | Delete a tab (`--tab-id`) |
+| `gws docs rename-tab <id>` | Rename a tab (`--tab-id`, `--title`) |
+| `gws docs add-image <id>` | Insert image (`--uri`, `--at`, `--width`, `--height`) |
+| `gws docs insert-table-row <id>` | Insert table row (`--table-start`, `--row`, `--col`) |
+| `gws docs delete-table-row <id>` | Delete table row (`--table-start`, `--row`, `--col`) |
+| `gws docs insert-table-col <id>` | Insert table column (`--table-start`, `--row`, `--col`) |
+| `gws docs delete-table-col <id>` | Delete table column (`--table-start`, `--row`, `--col`) |
+| `gws docs merge-cells <id>` | Merge table cells (`--table-start`, `--row`, `--col`, `--row-span`, `--col-span`) |
+| `gws docs unmerge-cells <id>` | Unmerge table cells (`--table-start`, `--row`, `--col`, `--row-span`, `--col-span`) |
+| `gws docs pin-rows <id>` | Pin header rows (`--table-start`, `--count`) |
+| `gws docs page-break <id>` | Insert page break (`--at`) |
+| `gws docs section-break <id>` | Insert section break (`--at`, `--type`) |
+| `gws docs add-header <id>` | Add header (`--type`) |
+| `gws docs delete-header <id> <hid>` | Delete header |
+| `gws docs add-footer <id>` | Add footer (`--type`) |
+| `gws docs delete-footer <id> <fid>` | Delete footer |
+| `gws docs add-named-range <id>` | Create named range (`--name`, `--from`, `--to`) |
+| `gws docs delete-named-range <id>` | Delete named range (`--name` or `--id`) |
+| `gws docs add-footnote <id>` | Insert footnote (`--at`) |
+| `gws docs delete-object <id> <oid>` | Delete positioned object |
+| `gws docs replace-image <id>` | Replace image (`--object-id`, `--uri`) |
+| `gws docs replace-named-range <id>` | Replace named range text (`--name`/`--id`, `--text`) |
+| `gws docs update-style <id>` | Update doc margins (`--margin-top/bottom/left/right`) |
+| `gws docs update-section-style <id>` | Update section style (`--from`, `--to`, `--column-count`) |
+| `gws docs update-table-cell-style <id>` | Update cell style (`--table-start`, `--row`, `--col`, `--bg-color`) |
+| `gws docs update-table-col-properties <id>` | Update column width (`--table-start`, `--col-index`, `--width`) |
+| `gws docs update-table-row-style <id>` | Update row style (`--table-start`, `--row`, `--min-height`) |
 
 ### Sheets
 

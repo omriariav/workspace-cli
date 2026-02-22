@@ -792,7 +792,7 @@ func TestDocsCommands_ContentFormatFlag(t *testing.T) {
 
 // TestBuildTextRequests_Plaintext tests that plaintext mode creates InsertText
 func TestBuildTextRequests_Plaintext(t *testing.T) {
-	requests, err := buildTextRequests("Hello World", "plaintext", 1)
+	requests, err := buildTextRequests("Hello World", "plaintext", 1, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -813,7 +813,7 @@ func TestBuildTextRequests_Plaintext(t *testing.T) {
 // TestBuildTextRequests_Markdown tests that markdown mode creates InsertText with raw markdown
 func TestBuildTextRequests_Markdown(t *testing.T) {
 	mdText := "# Title\n\n**Bold** and *italic*"
-	requests, err := buildTextRequests(mdText, "markdown", 5)
+	requests, err := buildTextRequests(mdText, "markdown", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -835,7 +835,7 @@ func TestBuildTextRequests_Markdown(t *testing.T) {
 // TestBuildTextRequests_Richformat tests that richformat mode parses JSON requests
 func TestBuildTextRequests_Richformat(t *testing.T) {
 	jsonInput := `[{"insertText":{"location":{"index":1},"text":"Hello"}}]`
-	requests, err := buildTextRequests(jsonInput, "richformat", 1)
+	requests, err := buildTextRequests(jsonInput, "richformat", 1, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -852,7 +852,7 @@ func TestBuildTextRequests_Richformat(t *testing.T) {
 
 // TestBuildTextRequests_RichformatInvalid tests that invalid JSON returns error
 func TestBuildTextRequests_RichformatInvalid(t *testing.T) {
-	_, err := buildTextRequests("not json", "richformat", 1)
+	_, err := buildTextRequests("not json", "richformat", 1, "")
 	if err == nil {
 		t.Error("expected error for invalid richformat JSON")
 	}
@@ -860,7 +860,7 @@ func TestBuildTextRequests_RichformatInvalid(t *testing.T) {
 
 // TestBuildTextRequests_UnknownFormat tests that unknown format returns error
 func TestBuildTextRequests_UnknownFormat(t *testing.T) {
-	_, err := buildTextRequests("text", "unknown", 1)
+	_, err := buildTextRequests("text", "unknown", 1, "")
 	if err == nil {
 		t.Error("expected error for unknown format")
 	}
@@ -904,7 +904,7 @@ func TestDocsCreate_WithMarkdown(t *testing.T) {
 	}
 
 	mdText := "# Hello\n\n**Bold** text"
-	requests, err := buildTextRequests(mdText, "markdown", 1)
+	requests, err := buildTextRequests(mdText, "markdown", 1, "")
 	if err != nil {
 		t.Fatalf("failed to build requests: %v", err)
 	}
@@ -1498,5 +1498,452 @@ func TestDocsTrash_PermanentDelete(t *testing.T) {
 	}
 	if !deleteCalled {
 		t.Error("delete endpoint was not called")
+	}
+}
+
+// Tab helper tests
+
+func TestFlattenTabs(t *testing.T) {
+	tabs := []*docs.Tab{
+		{
+			TabProperties: &docs.TabProperties{TabId: "t1", Title: "Tab 1"},
+			ChildTabs: []*docs.Tab{
+				{TabProperties: &docs.TabProperties{TabId: "t1.1", Title: "Nested"}},
+			},
+		},
+		{TabProperties: &docs.TabProperties{TabId: "t2", Title: "Tab 2"}},
+	}
+
+	flat := flattenTabs(tabs)
+	if len(flat) != 3 {
+		t.Fatalf("expected 3 flattened tabs, got %d", len(flat))
+	}
+	if flat[0].TabProperties.TabId != "t1" {
+		t.Errorf("expected t1, got %s", flat[0].TabProperties.TabId)
+	}
+	if flat[1].TabProperties.TabId != "t1.1" {
+		t.Errorf("expected t1.1, got %s", flat[1].TabProperties.TabId)
+	}
+	if flat[2].TabProperties.TabId != "t2" {
+		t.Errorf("expected t2, got %s", flat[2].TabProperties.TabId)
+	}
+}
+
+func TestResolveTabID_ByID(t *testing.T) {
+	tabs := []*docs.Tab{
+		{TabProperties: &docs.TabProperties{TabId: "abc123", Title: "First"}},
+		{TabProperties: &docs.TabProperties{TabId: "def456", Title: "Second"}},
+	}
+
+	id, err := resolveTabID(tabs, "def456")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "def456" {
+		t.Errorf("expected def456, got %s", id)
+	}
+}
+
+func TestResolveTabID_ByTitle(t *testing.T) {
+	tabs := []*docs.Tab{
+		{TabProperties: &docs.TabProperties{TabId: "abc123", Title: "First Tab"}},
+		{TabProperties: &docs.TabProperties{TabId: "def456", Title: "Second Tab"}},
+	}
+
+	id, err := resolveTabID(tabs, "second tab")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "def456" {
+		t.Errorf("expected def456, got %s", id)
+	}
+}
+
+func TestResolveTabID_NotFound(t *testing.T) {
+	tabs := []*docs.Tab{
+		{TabProperties: &docs.TabProperties{TabId: "abc123", Title: "First"}},
+	}
+
+	_, err := resolveTabID(tabs, "nonexistent")
+	if err == nil {
+		t.Error("expected error for nonexistent tab")
+	}
+}
+
+func TestResolveTabID_AmbiguousTitle(t *testing.T) {
+	tabs := []*docs.Tab{
+		{TabProperties: &docs.TabProperties{TabId: "t1", Title: "Same Name"}},
+		{TabProperties: &docs.TabProperties{TabId: "t2", Title: "Same Name"}},
+	}
+
+	_, err := resolveTabID(tabs, "Same Name")
+	if err == nil {
+		t.Error("expected error for ambiguous title")
+	}
+	if !strings.Contains(err.Error(), "multiple tabs") {
+		t.Errorf("expected 'multiple tabs' in error, got: %s", err.Error())
+	}
+}
+
+func TestGetTabBody_FirstTab(t *testing.T) {
+	doc := &docs.Document{
+		Tabs: []*docs.Tab{
+			{
+				TabProperties: &docs.TabProperties{TabId: "t1"},
+				DocumentTab: &docs.DocumentTab{
+					Body: &docs.Body{Content: []*docs.StructuralElement{{EndIndex: 10}}},
+				},
+			},
+		},
+	}
+
+	body, err := getTabBody(doc, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body == nil {
+		t.Fatal("expected non-nil body")
+	}
+	if len(body.Content) != 1 {
+		t.Errorf("expected 1 content element, got %d", len(body.Content))
+	}
+}
+
+func TestGetTabBody_SpecificTab(t *testing.T) {
+	doc := &docs.Document{
+		Tabs: []*docs.Tab{
+			{
+				TabProperties: &docs.TabProperties{TabId: "t1"},
+				DocumentTab:   &docs.DocumentTab{Body: &docs.Body{Content: []*docs.StructuralElement{{EndIndex: 10}}}},
+			},
+			{
+				TabProperties: &docs.TabProperties{TabId: "t2"},
+				DocumentTab:   &docs.DocumentTab{Body: &docs.Body{Content: []*docs.StructuralElement{{EndIndex: 20}}}},
+			},
+		},
+	}
+
+	body, err := getTabBody(doc, "t2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body.Content[0].EndIndex != 20 {
+		t.Errorf("expected end index 20, got %d", body.Content[0].EndIndex)
+	}
+}
+
+func TestGetTabBody_FallbackToDocBody(t *testing.T) {
+	doc := &docs.Document{
+		Body: &docs.Body{Content: []*docs.StructuralElement{{EndIndex: 30}}},
+	}
+
+	body, err := getTabBody(doc, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body.Content[0].EndIndex != 30 {
+		t.Errorf("expected end index 30, got %d", body.Content[0].EndIndex)
+	}
+}
+
+func TestBuildTextRequests_WithTabID(t *testing.T) {
+	requests, err := buildTextRequests("Hello", "plaintext", 1, "tab123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if requests[0].InsertText.Location.TabId != "tab123" {
+		t.Errorf("expected TabId 'tab123', got '%s'", requests[0].InsertText.Location.TabId)
+	}
+}
+
+func TestBuildTextRequests_RichformatRejectsTabID(t *testing.T) {
+	_, err := buildTextRequests(`[{"insertText":{"location":{"index":1},"text":"x"}}]`, "richformat", 1, "tab123")
+	if err == nil {
+		t.Error("expected error for richformat with tabID")
+	}
+	if !strings.Contains(err.Error(), "--tab not supported") {
+		t.Errorf("expected '--tab not supported' in error, got: %s", err.Error())
+	}
+}
+
+// New command flag tests
+
+func TestDocsAddTabCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "add-tab")
+	if cmd == nil {
+		t.Fatal("docs add-tab command not found")
+	}
+	if cmd.Flags().Lookup("title") == nil {
+		t.Error("expected --title flag")
+	}
+	if cmd.Flags().Lookup("index") == nil {
+		t.Error("expected --index flag")
+	}
+}
+
+func TestDocsDeleteTabCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "delete-tab")
+	if cmd == nil {
+		t.Fatal("docs delete-tab command not found")
+	}
+	if cmd.Flags().Lookup("tab-id") == nil {
+		t.Error("expected --tab-id flag")
+	}
+}
+
+func TestDocsRenameTabCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "rename-tab")
+	if cmd == nil {
+		t.Fatal("docs rename-tab command not found")
+	}
+	if cmd.Flags().Lookup("tab-id") == nil {
+		t.Error("expected --tab-id flag")
+	}
+	if cmd.Flags().Lookup("title") == nil {
+		t.Error("expected --title flag")
+	}
+}
+
+func TestDocsAddImageCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "add-image")
+	if cmd == nil {
+		t.Fatal("docs add-image command not found")
+	}
+	for _, flag := range []string{"uri", "at", "width", "height"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsTableRowColCommands_Flags(t *testing.T) {
+	cmds := []string{"insert-table-row", "delete-table-row", "insert-table-col", "delete-table-col"}
+	for _, cmdName := range cmds {
+		t.Run(cmdName, func(t *testing.T) {
+			cmd := findSubcommand(docsCmd, cmdName)
+			if cmd == nil {
+				t.Fatalf("command '%s' not found", cmdName)
+			}
+			for _, flag := range []string{"table-start", "row", "col"} {
+				if cmd.Flags().Lookup(flag) == nil {
+					t.Errorf("expected --%s flag", flag)
+				}
+			}
+		})
+	}
+}
+
+func TestDocsMergeCellsCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "merge-cells")
+	if cmd == nil {
+		t.Fatal("docs merge-cells command not found")
+	}
+	for _, flag := range []string{"table-start", "row", "col", "row-span", "col-span"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsPinRowsCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "pin-rows")
+	if cmd == nil {
+		t.Fatal("docs pin-rows command not found")
+	}
+	for _, flag := range []string{"table-start", "count"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsPageBreakCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "page-break")
+	if cmd == nil {
+		t.Fatal("docs page-break command not found")
+	}
+	if cmd.Flags().Lookup("at") == nil {
+		t.Error("expected --at flag")
+	}
+}
+
+func TestDocsSectionBreakCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "section-break")
+	if cmd == nil {
+		t.Fatal("docs section-break command not found")
+	}
+	for _, flag := range []string{"at", "type"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsHeaderFooterCommands_Flags(t *testing.T) {
+	for _, cmdName := range []string{"add-header", "add-footer"} {
+		t.Run(cmdName, func(t *testing.T) {
+			cmd := findSubcommand(docsCmd, cmdName)
+			if cmd == nil {
+				t.Fatalf("command '%s' not found", cmdName)
+			}
+			if cmd.Flags().Lookup("type") == nil {
+				t.Error("expected --type flag")
+			}
+		})
+	}
+}
+
+func TestDocsNamedRangeCommands_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "add-named-range")
+	if cmd == nil {
+		t.Fatal("docs add-named-range command not found")
+	}
+	for _, flag := range []string{"name", "from", "to"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+
+	delCmd := findSubcommand(docsCmd, "delete-named-range")
+	if delCmd == nil {
+		t.Fatal("docs delete-named-range command not found")
+	}
+	for _, flag := range []string{"name", "id"} {
+		if delCmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsAddFootnoteCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "add-footnote")
+	if cmd == nil {
+		t.Fatal("docs add-footnote command not found")
+	}
+	if cmd.Flags().Lookup("at") == nil {
+		t.Error("expected --at flag")
+	}
+}
+
+func TestDocsReplaceImageCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "replace-image")
+	if cmd == nil {
+		t.Fatal("docs replace-image command not found")
+	}
+	for _, flag := range []string{"object-id", "uri"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsReplaceNamedRangeCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "replace-named-range")
+	if cmd == nil {
+		t.Fatal("docs replace-named-range command not found")
+	}
+	for _, flag := range []string{"name", "id", "text"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsUpdateStyleCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "update-style")
+	if cmd == nil {
+		t.Fatal("docs update-style command not found")
+	}
+	for _, flag := range []string{"margin-top", "margin-bottom", "margin-left", "margin-right"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsUpdateTableCellStyleCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "update-table-cell-style")
+	if cmd == nil {
+		t.Fatal("docs update-table-cell-style command not found")
+	}
+	for _, flag := range []string{"table-start", "row", "col", "row-span", "col-span", "bg-color", "padding"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsUpdateTableColPropertiesCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "update-table-col-properties")
+	if cmd == nil {
+		t.Fatal("docs update-table-col-properties command not found")
+	}
+	for _, flag := range []string{"table-start", "col-index", "width"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDocsUpdateTableRowStyleCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "update-table-row-style")
+	if cmd == nil {
+		t.Fatal("docs update-table-row-style command not found")
+	}
+	for _, flag := range []string{"table-start", "row", "min-height"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+// Tab persistent flag test
+func TestDocsPersistentTabFlag(t *testing.T) {
+	flag := docsCmd.PersistentFlags().Lookup("tab")
+	if flag == nil {
+		t.Fatal("expected persistent --tab flag on docs command")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("expected empty default for --tab, got '%s'", flag.DefValue)
+	}
+}
+
+func TestDocsReadTabIndexFlag(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "read")
+	if cmd == nil {
+		t.Fatal("docs read command not found")
+	}
+	flag := cmd.Flags().Lookup("tab-index")
+	if flag == nil {
+		t.Fatal("expected --tab-index flag on docs read")
+	}
+	if flag.DefValue != "-1" {
+		t.Errorf("expected default -1 for --tab-index, got '%s'", flag.DefValue)
+	}
+}
+
+// Test all new commands are registered
+func TestDocsCommands_NewCommands(t *testing.T) {
+	newCommands := []string{
+		"add-tab", "delete-tab", "rename-tab",
+		"add-image",
+		"insert-table-row", "delete-table-row", "insert-table-col", "delete-table-col",
+		"merge-cells", "unmerge-cells", "pin-rows",
+		"page-break", "section-break",
+		"add-header", "delete-header", "add-footer", "delete-footer",
+		"add-named-range", "delete-named-range",
+		"add-footnote", "delete-object",
+		"replace-image", "replace-named-range",
+		"update-style", "update-section-style",
+		"update-table-cell-style", "update-table-col-properties", "update-table-row-style",
+	}
+
+	for _, cmdName := range newCommands {
+		t.Run(cmdName, func(t *testing.T) {
+			cmd := findSubcommand(docsCmd, cmdName)
+			if cmd == nil {
+				t.Fatalf("command '%s' not found", cmdName)
+			}
+		})
 	}
 }
