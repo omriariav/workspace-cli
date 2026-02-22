@@ -2343,6 +2343,16 @@ func runDriveActivity(cmd *cobra.Command, args []string) error {
 	pageToken, _ := cmd.Flags().GetString("page-token")
 	noConsolidation, _ := cmd.Flags().GetBool("no-consolidation")
 
+	// Validate mutual exclusivity
+	if itemID != "" && folderID != "" {
+		return p.PrintError(fmt.Errorf("--item-id and --folder-id are mutually exclusive"))
+	}
+
+	// Validate --days
+	if days < 0 {
+		return p.PrintError(fmt.Errorf("--days must be a positive number"))
+	}
+
 	req := &driveactivity.QueryDriveActivityRequest{
 		PageSize: maxResults,
 	}
@@ -2358,7 +2368,7 @@ func runDriveActivity(cmd *cobra.Command, args []string) error {
 	var filterParts []string
 	if days > 0 {
 		cutoff := time.Now().AddDate(0, 0, -days)
-		filterParts = append(filterParts, fmt.Sprintf("time >= %d", cutoff.UnixMilli()))
+		filterParts = append(filterParts, fmt.Sprintf("time >= \"%s\"", cutoff.Format(time.RFC3339)))
 	}
 	if filter != "" {
 		filterParts = append(filterParts, filter)

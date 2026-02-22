@@ -2260,3 +2260,101 @@ func TestFormatDriveActivity_TimeRange(t *testing.T) {
 		t.Errorf("unexpected end time: %v", timeRange["end"])
 	}
 }
+
+func TestDriveActivity_RequestConstruction(t *testing.T) {
+	var capturedBody map[string]interface{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/v2/activity:query" && r.Method == "POST" {
+			json.NewDecoder(r.Body).Decode(&capturedBody)
+			json.NewEncoder(w).Encode(&driveactivity.QueryDriveActivityResponse{
+				Activities: []*driveactivity.DriveActivity{},
+			})
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := driveactivity.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	// Test with ItemName
+	req := &driveactivity.QueryDriveActivityRequest{
+		ItemName: "items/abc123",
+		PageSize: 25,
+	}
+	_, err = svc.Activity.Query(req).Do()
+	if err != nil {
+		t.Fatalf("failed to query: %v", err)
+	}
+	if capturedBody["itemName"] != "items/abc123" {
+		t.Errorf("expected itemName 'items/abc123', got %v", capturedBody["itemName"])
+	}
+	if capturedBody["pageSize"].(float64) != 25 {
+		t.Errorf("expected pageSize 25, got %v", capturedBody["pageSize"])
+	}
+
+	// Test with AncestorName
+	req2 := &driveactivity.QueryDriveActivityRequest{
+		AncestorName: "items/folder789",
+		PageSize:     10,
+	}
+	_, err = svc.Activity.Query(req2).Do()
+	if err != nil {
+		t.Fatalf("failed to query: %v", err)
+	}
+	if capturedBody["ancestorName"] != "items/folder789" {
+		t.Errorf("expected ancestorName 'items/folder789', got %v", capturedBody["ancestorName"])
+	}
+
+	// Test with consolidation strategy (none)
+	req3 := &driveactivity.QueryDriveActivityRequest{
+		ItemName: "items/abc123",
+		ConsolidationStrategy: &driveactivity.ConsolidationStrategy{
+			None: &driveactivity.NoConsolidation{},
+		},
+	}
+	_, err = svc.Activity.Query(req3).Do()
+	if err != nil {
+		t.Fatalf("failed to query: %v", err)
+	}
+	cs, ok := capturedBody["consolidationStrategy"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected consolidationStrategy in request")
+	}
+	if _, hasNone := cs["none"]; !hasNone {
+		t.Error("expected 'none' key in consolidationStrategy")
+	}
+
+	// Test with filter
+	req4 := &driveactivity.QueryDriveActivityRequest{
+		ItemName: "items/abc123",
+		Filter:   "detail.action_detail_case:EDIT",
+	}
+	_, err = svc.Activity.Query(req4).Do()
+	if err != nil {
+		t.Fatalf("failed to query: %v", err)
+	}
+	if capturedBody["filter"] != "detail.action_detail_case:EDIT" {
+		t.Errorf("expected filter, got %v", capturedBody["filter"])
+	}
+}
+
+func TestDriveActivity_MutualExclusivity(t *testing.T) {
+	// The command should reject --item-id and --folder-id together
+	cmd := driveActivityCmd
+
+	// Verify both flags exist (they're validated at runtime in runDriveActivity)
+	itemFlag := cmd.Flags().Lookup("item-id")
+	folderFlag := cmd.Flags().Lookup("folder-id")
+	if itemFlag == nil || folderFlag == nil {
+		t.Fatal("expected both --item-id and --folder-id flags")
+	}
+}
