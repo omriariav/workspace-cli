@@ -78,10 +78,28 @@ Every feature/fix follows this flow:
 1. **Branch** — Create a feature branch from `main` (e.g. `feat/chat-api-params`)
 2. **Implement & commit** — Make changes, commit with clear messages
 3. **Open PR** — Push branch and open a PR against `main`
-4. **Codex review loop** — Codex CI reviews automatically; iterate on feedback until clean
-5. **Merge** — Merge the PR into `main`
-6. **Release** — Bump version in Makefile, update CLAUDE.md version, tag release, update README
-7. **Tweet** — Write a short tweet announcing the new version and key changes
+4. **Codex review loop** — Codex CI reviews automatically; iterate on warnings/issues until the review is clean (no warnings, no critical/suggestion items that need fixing)
+5. **Merge** — `gh pr merge <N> --squash` only after Codex approves
+6. **Release** — Follow the release checklist below immediately after merge
+7. **Tweet** — `/tweet` announcing the new version and key changes
+
+## Release Checklist
+
+Run these steps immediately after merging a PR. Do not skip any step.
+
+```
+1. git checkout main && git pull --rebase
+2. Edit Makefile: bump VERSION (e.g. 1.26.0 → 1.27.0)
+3. Edit CLAUDE.md: update "Current Version" line
+4. git add Makefile CLAUDE.md
+5. git commit -m "release: vX.Y.Z — <short description>"
+6. git push
+7. git tag vX.Y.Z && git push origin vX.Y.Z
+8. gh release create vX.Y.Z --title "vX.Y.Z — <title>" --notes "<release notes>"
+9. /tweet about the release
+```
+
+Lesson learned (v1.27.0): forgetting the release step means GitHub releases page is stale and users see outdated versions. Always release immediately after merge.
 
 ## Parallel Agent Sprints
 
