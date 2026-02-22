@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.26.0** - Google Groups and Google Keep services (5 new commands), Codex CI review.
+**v1.27.0** - Drive Activity API v2 command (query file/folder activity history).
 
 ## Roadmap
 
