@@ -12,6 +12,7 @@ import (
 	"golang.org/x/oauth2"
 	admin "google.golang.org/api/admin/directory/v1"
 	"google.golang.org/api/calendar/v3"
+	driveactivity "google.golang.org/api/driveactivity/v2"
 	"google.golang.org/api/chat/v1"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/drive/v3"
@@ -43,8 +44,9 @@ type Factory struct {
 	chat     *chat.Service
 	forms    *forms.Service
 	people   *people.Service
-	admin    *admin.Service
-	keep     *keep.Service
+	admin         *admin.Service
+	keep          *keep.Service
+	driveActivity *driveactivity.Service
 }
 
 // NewFactory creates a new client factory.
@@ -323,6 +325,26 @@ func (f *Factory) Keep() (*keep.Service, error) {
 	}
 
 	f.keep = svc
+	return svc, nil
+}
+
+// DriveActivity returns the Drive Activity API v2 service client.
+func (f *Factory) DriveActivity() (*driveactivity.Service, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.checkServiceScopes("driveactivity")
+
+	if f.driveActivity != nil {
+		return f.driveActivity, nil
+	}
+
+	svc, err := driveactivity.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Drive Activity client: %w", err)
+	}
+
+	f.driveActivity = svc
 	return svc, nil
 }
 
