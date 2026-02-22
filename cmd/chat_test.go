@@ -66,6 +66,12 @@ func TestChatCommands_Flags(t *testing.T) {
 	} else if pageSizeFlag.DefValue != "100" {
 		t.Errorf("expected --page-size default '100', got '%s'", pageSizeFlag.DefValue)
 	}
+	listMaxFlag := listCmd.Flags().Lookup("max")
+	if listMaxFlag == nil {
+		t.Error("expected --max flag on list")
+	} else if listMaxFlag.DefValue != "0" {
+		t.Errorf("expected --max default '0', got '%s'", listMaxFlag.DefValue)
+	}
 }
 
 func TestChatListCommand_Help(t *testing.T) {
@@ -965,6 +971,12 @@ func TestChatReactionsCommand_Flags(t *testing.T) {
 	if pageSizeFlag.DefValue != "25" {
 		t.Errorf("expected --page-size default '25', got '%s'", pageSizeFlag.DefValue)
 	}
+	reactionsMaxFlag := reactionsCmd.Flags().Lookup("max")
+	if reactionsMaxFlag == nil {
+		t.Error("expected --max flag on reactions")
+	} else if reactionsMaxFlag.DefValue != "0" {
+		t.Errorf("expected --max default '0', got '%s'", reactionsMaxFlag.DefValue)
+	}
 }
 
 func TestChatReactions_MockServer(t *testing.T) {
@@ -1226,6 +1238,12 @@ func TestChatSearchSpacesCommand_Flags(t *testing.T) {
 	} else if pageSizeFlag.DefValue != "100" {
 		t.Errorf("expected --page-size default '100', got '%s'", pageSizeFlag.DefValue)
 	}
+	searchMaxFlag := cmd.Flags().Lookup("max")
+	if searchMaxFlag == nil {
+		t.Error("expected --max flag on search-spaces")
+	} else if searchMaxFlag.DefValue != "0" {
+		t.Errorf("expected --max default '0', got '%s'", searchMaxFlag.DefValue)
+	}
 }
 
 func TestChatFindDmCommand_Flags(t *testing.T) {
@@ -1394,6 +1412,12 @@ func TestChatEventsCommand_Flags(t *testing.T) {
 		t.Error("expected --page-size flag")
 	} else if pageSizeFlag.DefValue != "100" {
 		t.Errorf("expected --page-size default '100', got '%s'", pageSizeFlag.DefValue)
+	}
+	eventsMaxFlag := cmd.Flags().Lookup("max")
+	if eventsMaxFlag == nil {
+		t.Error("expected --max flag on events")
+	} else if eventsMaxFlag.DefValue != "0" {
+		t.Errorf("expected --max default '0', got '%s'", eventsMaxFlag.DefValue)
 	}
 }
 
@@ -2297,5 +2321,215 @@ func TestChatEvent_MockServer(t *testing.T) {
 	}
 	if event.EventTime != "2026-02-18T10:00:00Z" {
 		t.Errorf("expected event time, got '%s'", event.EventTime)
+	}
+}
+
+// --- Issue #137 tests: --max pagination, lastActiveTime, message consistency ---
+
+func TestChatList_PaginationWithMax(t *testing.T) {
+	pagesFetched := 0
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces": func(w http.ResponseWriter, r *http.Request) {
+			pagesFetched++
+			pageToken := r.URL.Query().Get("pageToken")
+
+			if pageToken == "" {
+				resp := map[string]interface{}{
+					"spaces": []map[string]interface{}{
+						{"name": "spaces/AAAA", "displayName": "Space 1", "spaceType": "SPACE"},
+						{"name": "spaces/BBBB", "displayName": "Space 2", "spaceType": "SPACE"},
+					},
+					"nextPageToken": "page2",
+				}
+				json.NewEncoder(w).Encode(resp)
+				return
+			}
+
+			// Page 2 should NOT be fetched when max=2
+			resp := map[string]interface{}{
+				"spaces": []map[string]interface{}{
+					{"name": "spaces/CCCC", "displayName": "Space 3", "spaceType": "SPACE"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	// Simulate runChatList logic with max=2
+	maxResults := int64(2)
+	var results []map[string]interface{}
+	var pageToken string
+
+	for {
+		call := svc.Spaces.List().PageSize(100)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+		resp, err := call.Do()
+		if err != nil {
+			t.Fatalf("failed to list spaces: %v", err)
+		}
+		for _, space := range resp.Spaces {
+			results = append(results, mapSpaceToOutput(space))
+			if maxResults > 0 && int64(len(results)) >= maxResults {
+				break
+			}
+		}
+		if resp.NextPageToken == "" || (maxResults > 0 && int64(len(results)) >= maxResults) {
+			break
+		}
+		pageToken = resp.NextPageToken
+	}
+	if maxResults > 0 && int64(len(results)) > maxResults {
+		results = results[:maxResults]
+	}
+
+	if len(results) != 2 {
+		t.Errorf("expected 2 results (capped by max), got %d", len(results))
+	}
+	if pagesFetched != 1 {
+		t.Errorf("expected only 1 page fetched (early stop), got %d", pagesFetched)
+	}
+}
+
+func TestMapSpaceToOutput_LastActiveTime(t *testing.T) {
+	space := &chat.Space{
+		Name:                "spaces/AAAA",
+		DisplayName:         "Test Space",
+		SpaceType:           "SPACE",
+		CreateTime:          "2025-01-01T00:00:00Z",
+		LastActiveTime:      "2026-02-20T15:30:00Z",
+		SpaceThreadingState: "THREADED_MESSAGES",
+	}
+
+	result := mapSpaceToOutput(space)
+
+	if result["last_active_time"] != "2026-02-20T15:30:00Z" {
+		t.Errorf("expected last_active_time '2026-02-20T15:30:00Z', got %v", result["last_active_time"])
+	}
+	if result["threading_state"] != "THREADED_MESSAGES" {
+		t.Errorf("expected threading_state 'THREADED_MESSAGES', got %v", result["threading_state"])
+	}
+}
+
+func TestMapSpaceToOutput_NoLastActiveTime(t *testing.T) {
+	space := &chat.Space{
+		Name:        "spaces/BBBB",
+		DisplayName: "DM Space",
+		SpaceType:   "DIRECT_MESSAGE",
+	}
+
+	result := mapSpaceToOutput(space)
+
+	if _, exists := result["last_active_time"]; exists {
+		t.Error("last_active_time should be omitted when empty")
+	}
+	if _, exists := result["threading_state"]; exists {
+		t.Error("threading_state should be omitted when empty")
+	}
+}
+
+func TestMapMemberToOutput_DeleteTime(t *testing.T) {
+	m := &chat.Membership{
+		Name:       "spaces/AAAA/members/111",
+		Role:       "ROLE_MEMBER",
+		CreateTime: "2025-01-01T00:00:00Z",
+		DeleteTime: "2026-02-20T10:00:00Z",
+		Member: &chat.User{
+			DisplayName: "Alice",
+			Name:        "users/111",
+			Type:        "HUMAN",
+		},
+	}
+
+	result := mapMemberToOutput(m)
+
+	if result["delete_time"] != "2026-02-20T10:00:00Z" {
+		t.Errorf("expected delete_time '2026-02-20T10:00:00Z', got %v", result["delete_time"])
+	}
+}
+
+func TestMapMemberToOutput_NoDeleteTime(t *testing.T) {
+	m := &chat.Membership{
+		Name: "spaces/AAAA/members/222",
+		Role: "ROLE_MEMBER",
+	}
+
+	result := mapMemberToOutput(m)
+
+	if _, exists := result["delete_time"]; exists {
+		t.Error("delete_time should be omitted when empty")
+	}
+}
+
+func TestChatMessages_ThreadAndLastUpdateTime(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/messages": func(w http.ResponseWriter, r *http.Request) {
+			resp := map[string]interface{}{
+				"messages": []map[string]interface{}{
+					{
+						"name":           "spaces/AAAA/messages/msg1",
+						"text":           "Hello",
+						"createTime":     "2026-02-16T10:00:00Z",
+						"lastUpdateTime": "2026-02-16T10:05:00Z",
+						"thread":         map[string]interface{}{"name": "spaces/AAAA/threads/thread1"},
+						"sender":         map[string]interface{}{"displayName": "Alice", "type": "HUMAN", "name": "users/111"},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	resp, err := svc.Spaces.Messages.List("spaces/AAAA").PageSize(25).Do()
+	if err != nil {
+		t.Fatalf("failed to list messages: %v", err)
+	}
+
+	if len(resp.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(resp.Messages))
+	}
+	msg := resp.Messages[0]
+	if msg.LastUpdateTime != "2026-02-16T10:05:00Z" {
+		t.Errorf("expected lastUpdateTime, got '%s'", msg.LastUpdateTime)
+	}
+	if msg.Thread == nil || msg.Thread.Name != "spaces/AAAA/threads/thread1" {
+		t.Errorf("expected thread name, got %+v", msg.Thread)
+	}
+}
+
+func TestMapSpaceEventToOutput(t *testing.T) {
+	event := &chat.SpaceEvent{
+		Name:      "spaces/AAAA/spaceEvents/evt1",
+		EventType: "google.workspace.chat.message.v1.created",
+		EventTime: "2026-02-18T10:00:00Z",
+	}
+
+	result := mapSpaceEventToOutput(event)
+
+	if result["name"] != "spaces/AAAA/spaceEvents/evt1" {
+		t.Errorf("expected name, got %v", result["name"])
+	}
+	if result["event_type"] != "google.workspace.chat.message.v1.created" {
+		t.Errorf("expected event_type, got %v", result["event_type"])
+	}
+	if result["event_time"] != "2026-02-18T10:00:00Z" {
+		t.Errorf("expected event_time, got %v", result["event_time"])
 	}
 }

@@ -301,6 +301,7 @@ func init() {
 	// List flags
 	chatListCmd.Flags().String("filter", "", "Filter spaces (e.g. 'spaceType = \"SPACE\"')")
 	chatListCmd.Flags().Int64("page-size", 100, "Number of spaces per page")
+	chatListCmd.Flags().Int64("max", 0, "Maximum number of spaces to return (0 = all)")
 
 	// Members flags
 	chatMembersCmd.Flags().Int64("max", 100, "Maximum number of members to return")
@@ -330,6 +331,7 @@ func init() {
 	// Reactions flags
 	chatReactionsCmd.Flags().String("filter", "", "Filter reactions (e.g. 'emoji.unicode = \"😀\"')")
 	chatReactionsCmd.Flags().Int64("page-size", 25, "Number of reactions per page")
+	chatReactionsCmd.Flags().Int64("max", 0, "Maximum number of reactions to return (0 = all)")
 
 	// React flags
 	chatReactCmd.Flags().String("emoji", "", "Emoji unicode character (required, e.g. '😀')")
@@ -348,6 +350,7 @@ func init() {
 	// Search spaces flags
 	chatSearchSpacesCmd.Flags().String("query", "", "Search query (required)")
 	chatSearchSpacesCmd.Flags().Int64("page-size", 100, "Number of results per page")
+	chatSearchSpacesCmd.Flags().Int64("max", 0, "Maximum number of spaces to return (0 = all)")
 	chatSearchSpacesCmd.MarkFlagRequired("query")
 
 	// Find DM flags
@@ -383,6 +386,7 @@ func init() {
 	// Events flags
 	chatEventsCmd.Flags().String("filter", "", "Event type filter (required)")
 	chatEventsCmd.Flags().Int64("page-size", 100, "Number of events per page")
+	chatEventsCmd.Flags().Int64("max", 0, "Maximum number of events to return (0 = all)")
 	chatEventsCmd.MarkFlagRequired("filter")
 }
 
@@ -410,6 +414,7 @@ func runChatList(cmd *cobra.Command, args []string) error {
 
 	filter, _ := cmd.Flags().GetString("filter")
 	pageSize, _ := cmd.Flags().GetInt64("page-size")
+	maxResults, _ := cmd.Flags().GetInt64("max")
 
 	var results []map[string]interface{}
 	var pageToken string
@@ -430,12 +435,19 @@ func runChatList(cmd *cobra.Command, args []string) error {
 
 		for _, space := range resp.Spaces {
 			results = append(results, mapSpaceToOutput(space))
+			if maxResults > 0 && int64(len(results)) >= maxResults {
+				break
+			}
 		}
 
-		if resp.NextPageToken == "" {
+		if resp.NextPageToken == "" || (maxResults > 0 && int64(len(results)) >= maxResults) {
 			break
 		}
 		pageToken = resp.NextPageToken
+	}
+
+	if maxResults > 0 && int64(len(results)) > maxResults {
+		results = results[:maxResults]
 	}
 
 	return p.Print(map[string]interface{}{
@@ -516,6 +528,12 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 				}
 				msgInfo["sender"] = senderName
 				msgInfo["sender_type"] = msg.Sender.Type
+			}
+			if msg.Thread != nil {
+				msgInfo["thread"] = msg.Thread.Name
+			}
+			if msg.LastUpdateTime != "" {
+				msgInfo["last_update_time"] = msg.LastUpdateTime
 			}
 			if msg.DeleteTime != "" {
 				msgInfo["delete_time"] = msg.DeleteTime
@@ -658,6 +676,9 @@ func mapMemberToOutput(m *chat.Membership) map[string]interface{} {
 	if m.CreateTime != "" {
 		entry["joined"] = m.CreateTime
 	}
+	if m.DeleteTime != "" {
+		entry["delete_time"] = m.DeleteTime
+	}
 	return entry
 }
 
@@ -732,6 +753,12 @@ func runChatGet(cmd *cobra.Command, args []string) error {
 	}
 	if msg.Thread != nil {
 		result["thread"] = msg.Thread.Name
+	}
+	if msg.LastUpdateTime != "" {
+		result["last_update_time"] = msg.LastUpdateTime
+	}
+	if msg.DeleteTime != "" {
+		result["delete_time"] = msg.DeleteTime
 	}
 
 	return p.Print(result)
@@ -821,6 +848,7 @@ func runChatReactions(cmd *cobra.Command, args []string) error {
 	messageName := args[0]
 	filter, _ := cmd.Flags().GetString("filter")
 	pageSize, _ := cmd.Flags().GetInt64("page-size")
+	maxResults, _ := cmd.Flags().GetInt64("max")
 
 	var results []map[string]interface{}
 	var pageToken string
@@ -854,12 +882,19 @@ func runChatReactions(cmd *cobra.Command, args []string) error {
 				entry["user"] = userName
 			}
 			results = append(results, entry)
+			if maxResults > 0 && int64(len(results)) >= maxResults {
+				break
+			}
 		}
 
-		if resp.NextPageToken == "" {
+		if resp.NextPageToken == "" || (maxResults > 0 && int64(len(results)) >= maxResults) {
 			break
 		}
 		pageToken = resp.NextPageToken
+	}
+
+	if maxResults > 0 && int64(len(results)) > maxResults {
+		results = results[:maxResults]
 	}
 
 	return p.Print(map[string]interface{}{
@@ -955,6 +990,12 @@ func mapSpaceToOutput(space *chat.Space) map[string]interface{} {
 	}
 	if space.CreateTime != "" {
 		result["create_time"] = space.CreateTime
+	}
+	if space.LastActiveTime != "" {
+		result["last_active_time"] = space.LastActiveTime
+	}
+	if space.SpaceThreadingState != "" {
+		result["threading_state"] = space.SpaceThreadingState
 	}
 	return result
 }
@@ -1106,6 +1147,7 @@ func runChatSearchSpaces(cmd *cobra.Command, args []string) error {
 
 	query, _ := cmd.Flags().GetString("query")
 	pageSize, _ := cmd.Flags().GetInt64("page-size")
+	maxResults, _ := cmd.Flags().GetInt64("max")
 
 	var results []map[string]interface{}
 	var pageToken string
@@ -1123,12 +1165,19 @@ func runChatSearchSpaces(cmd *cobra.Command, args []string) error {
 
 		for _, space := range resp.Spaces {
 			results = append(results, mapSpaceToOutput(space))
+			if maxResults > 0 && int64(len(results)) >= maxResults {
+				break
+			}
 		}
 
-		if resp.NextPageToken == "" {
+		if resp.NextPageToken == "" || (maxResults > 0 && int64(len(results)) >= maxResults) {
 			break
 		}
 		pageToken = resp.NextPageToken
+	}
+
+	if maxResults > 0 && int64(len(results)) > maxResults {
+		results = results[:maxResults]
 	}
 
 	return p.Print(map[string]interface{}{
@@ -1558,6 +1607,7 @@ func runChatEvents(cmd *cobra.Command, args []string) error {
 	spaceName := ensureSpaceName(args[0])
 	filter, _ := cmd.Flags().GetString("filter")
 	pageSize, _ := cmd.Flags().GetInt64("page-size")
+	maxResults, _ := cmd.Flags().GetInt64("max")
 
 	var results []map[string]interface{}
 	var pageToken string
@@ -1574,17 +1624,20 @@ func runChatEvents(cmd *cobra.Command, args []string) error {
 		}
 
 		for _, event := range resp.SpaceEvents {
-			results = append(results, map[string]interface{}{
-				"name":       event.Name,
-				"event_type": event.EventType,
-				"event_time": event.EventTime,
-			})
+			results = append(results, mapSpaceEventToOutput(event))
+			if maxResults > 0 && int64(len(results)) >= maxResults {
+				break
+			}
 		}
 
-		if resp.NextPageToken == "" {
+		if resp.NextPageToken == "" || (maxResults > 0 && int64(len(results)) >= maxResults) {
 			break
 		}
 		pageToken = resp.NextPageToken
+	}
+
+	if maxResults > 0 && int64(len(results)) > maxResults {
+		results = results[:maxResults]
 	}
 
 	return p.Print(map[string]interface{}{
@@ -1614,9 +1667,14 @@ func runChatEvent(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to get event: %w", err))
 	}
 
-	return p.Print(map[string]interface{}{
+	return p.Print(mapSpaceEventToOutput(event))
+}
+
+// mapSpaceEventToOutput converts a Chat space event into a map for JSON output.
+func mapSpaceEventToOutput(event *chat.SpaceEvent) map[string]interface{} {
+	return map[string]interface{}{
 		"name":       event.Name,
 		"event_type": event.EventType,
 		"event_time": event.EventTime,
-	})
+	}
 }
