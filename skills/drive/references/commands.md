@@ -554,3 +554,33 @@ Usage: gws drive update-drive [flags]
 |------|------|---------|----------|-------------|
 | `--id` | string | | Yes | Shared drive ID |
 | `--name` | string | | No | New name for the shared drive |
+
+---
+
+## gws drive activity
+
+Queries the Google Drive Activity API v2 for file and folder activity history.
+
+```
+Usage: gws drive activity [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--item-id` | string | | Filter by file/folder ID |
+| `--folder-id` | string | | Filter by ancestor folder (all descendants) |
+| `--filter` | string | | API filter string (e.g. `"detail.action_detail_case:EDIT"`) |
+| `--days` | int | 0 | Last N days (auto-generates time filter) |
+| `--max` | int | 50 | Page size |
+| `--page-token` | string | | Pagination token |
+| `--no-consolidation` | bool | false | Disable activity grouping |
+
+### Filter Syntax
+
+- `time >= <epoch_ms>` or `time >= "<RFC 3339>"` — filter by time
+- `detail.action_detail_case:EDIT` — filter by action type
+- Combine with `AND`: `time >= 1700000000000 AND detail.action_detail_case:EDIT`
+
+### Action Types
+
+CREATE, EDIT, MOVE, RENAME, DELETE, RESTORE, COMMENT, PERMISSION_CHANGE, SETTINGS_CHANGE, DLP_CHANGE, REFERENCE, APPLIED_LABEL_CHANGE

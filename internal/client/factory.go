@@ -15,6 +15,7 @@ import (
 	"google.golang.org/api/chat/v1"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/drive/v3"
+	driveactivity "google.golang.org/api/driveactivity/v2"
 	"google.golang.org/api/forms/v1"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/keep/v1"
@@ -33,18 +34,19 @@ type Factory struct {
 	grantedServices []string        // services granted at login time
 	scopeWarned     map[string]bool // track warnings to avoid repeats
 
-	gmail    *gmail.Service
-	calendar *calendar.Service
-	drive    *drive.Service
-	docs     *docs.Service
-	sheets   *sheets.Service
-	slides   *slides.Service
-	tasks    *tasks.Service
-	chat     *chat.Service
-	forms    *forms.Service
-	people   *people.Service
-	admin    *admin.Service
-	keep     *keep.Service
+	gmail         *gmail.Service
+	calendar      *calendar.Service
+	drive         *drive.Service
+	docs          *docs.Service
+	sheets        *sheets.Service
+	slides        *slides.Service
+	tasks         *tasks.Service
+	chat          *chat.Service
+	forms         *forms.Service
+	people        *people.Service
+	admin         *admin.Service
+	keep          *keep.Service
+	driveActivity *driveactivity.Service
 }
 
 // NewFactory creates a new client factory.
@@ -323,6 +325,26 @@ func (f *Factory) Keep() (*keep.Service, error) {
 	}
 
 	f.keep = svc
+	return svc, nil
+}
+
+// DriveActivity returns the Drive Activity API v2 service client.
+func (f *Factory) DriveActivity() (*driveactivity.Service, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.checkServiceScopes("driveactivity")
+
+	if f.driveActivity != nil {
+		return f.driveActivity, nil
+	}
+
+	svc, err := driveactivity.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Drive Activity client: %w", err)
+	}
+
+	f.driveActivity = svc
 	return svc, nil
 }
 

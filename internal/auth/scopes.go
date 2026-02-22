@@ -6,19 +6,20 @@ const scopePrefix = "https://www.googleapis.com/auth/"
 
 // ServiceScopes maps each service to its required Google API scopes.
 var ServiceScopes = map[string][]string{
-	"gmail":    {"gmail.readonly", "gmail.send", "gmail.modify", "gmail.settings.basic", "gmail.settings.sharing"},
-	"calendar": {"calendar.readonly", "calendar.events", "calendar"},
-	"drive":    {"drive.readonly", "drive.file", "drive"},
-	"docs":     {"documents.readonly", "documents"},
-	"sheets":   {"spreadsheets"},
-	"slides":   {"presentations.readonly", "presentations"},
-	"tasks":    {"tasks.readonly", "tasks"},
-	"chat":     {"chat.spaces", "chat.messages", "chat.messages.create", "chat.memberships", "chat.messages.reactions", "chat.users.readstate"},
-	"forms":    {"forms.responses.readonly", "forms.body", "forms.body.readonly"},
-	"contacts": {"contacts.readonly", "contacts", "directory.readonly"},
-	"groups":   {"admin.directory.group.readonly", "admin.directory.group.member.readonly"},
-	"keep":     {"keep.readonly", "keep"},
-	"userinfo": {"userinfo.email"},
+	"gmail":         {"gmail.readonly", "gmail.send", "gmail.modify", "gmail.settings.basic", "gmail.settings.sharing"},
+	"calendar":      {"calendar.readonly", "calendar.events", "calendar"},
+	"drive":         {"drive.readonly", "drive.file", "drive"},
+	"docs":          {"documents.readonly", "documents"},
+	"sheets":        {"spreadsheets"},
+	"slides":        {"presentations.readonly", "presentations"},
+	"tasks":         {"tasks.readonly", "tasks"},
+	"chat":          {"chat.spaces", "chat.messages", "chat.messages.create", "chat.memberships", "chat.messages.reactions", "chat.users.readstate"},
+	"forms":         {"forms.responses.readonly", "forms.body", "forms.body.readonly"},
+	"contacts":      {"contacts.readonly", "contacts", "directory.readonly"},
+	"groups":        {"admin.directory.group.readonly", "admin.directory.group.member.readonly"},
+	"keep":          {"keep.readonly", "keep"},
+	"driveactivity": {"drive.activity.readonly"},
+	"userinfo":      {"userinfo.email"},
 }
 
 // AllScopes is the union of all service scopes. Computed at init time for backward compat.
@@ -28,7 +29,7 @@ func computeAllScopes() []string {
 	seen := make(map[string]bool)
 	var scopes []string
 	// Deterministic order: iterate known service names
-	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "groups", "keep", "userinfo"}
+	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "groups", "keep", "driveactivity", "userinfo"}
 	for _, svc := range order {
 		for _, s := range ServiceScopes[svc] {
 			full := scopePrefix + s
@@ -84,7 +85,7 @@ func ServiceForScope(scope string) string {
 
 // ValidServiceNames returns all known service names.
 func ValidServiceNames() []string {
-	return []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "groups", "keep"}
+	return []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "groups", "keep", "driveactivity"}
 }
 
 // ValidateServices checks that all service names are recognized.
