@@ -366,13 +366,13 @@ When you know the participants but not the space ID:
 
 ```bash
 # 1. List all spaces, filter to group chats, sort by recent activity
-gws chat list --format json | jq '[.[] | select(.type == "GROUP_CHAT")] | sort_by(.last_active_time) | reverse | .[:10]'
+gws chat list --format json | jq '.spaces | map(select(.type == "GROUP_CHAT")) | sort_by(.last_active_time // "") | reverse | .[:10]'
 
 # 2. Check members of candidate spaces
-gws chat members spaces/AAAApznBCFA --format text
+gws chat members spaces/AAAApznBCFA --format json
 
 # 3. Once found, get recent messages with a time filter
-gws chat messages spaces/AAAApznBCFA --filter 'createTime > "2026-02-20T00:00:00Z"' --max 25
+gws chat messages spaces/AAAApznBCFA --filter 'createTime > "2026-02-20T00:00:00Z"' --order-by "createTime DESC" --max 25
 ```
 
 **Key insight**: DMs and group chats often have empty `display_name` — you must check `members` to identify participants.
