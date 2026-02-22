@@ -96,10 +96,16 @@ Run these steps immediately after merging a PR. Do not skip any step.
 6. git push
 7. git tag vX.Y.Z && git push origin vX.Y.Z
 8. gh release create vX.Y.Z --title "vX.Y.Z — <title>" --notes "<release notes>"
-9. /tweet about the release
+9. Build and upload binaries:
+   GOOS=darwin GOARCH=arm64 go build -ldflags "..." -o bin/release/gws-darwin-arm64 ./cmd/gws
+   GOOS=darwin GOARCH=amd64 go build -ldflags "..." -o bin/release/gws-darwin-amd64 ./cmd/gws
+   GOOS=linux  GOARCH=amd64 go build -ldflags "..." -o bin/release/gws-linux-amd64 ./cmd/gws
+   GOOS=linux  GOARCH=arm64 go build -ldflags "..." -o bin/release/gws-linux-arm64 ./cmd/gws
+   gh release upload vX.Y.Z bin/release/gws-* --clobber
+10. /tweet about the release
 ```
 
-Lesson learned (v1.27.0): forgetting the release step means GitHub releases page is stale and users see outdated versions. Always release immediately after merge.
+Lesson learned (v1.27.0): forgetting the release step means GitHub releases page is stale and users see outdated versions. Always release immediately after merge. Always upload binaries — source-only releases are not downloadable.
 
 ## Parallel Agent Sprints
 
