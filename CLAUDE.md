@@ -89,23 +89,29 @@ Run these steps immediately after merging a PR. Do not skip any step.
 
 ```
 1. git checkout main && git pull --rebase
-2. Edit Makefile: bump VERSION (e.g. 1.26.0 → 1.27.0)
+2. Edit Makefile: bump VERSION (e.g. 1.27.0 → 1.28.0)
 3. Edit CLAUDE.md: update "Current Version" line
 4. git add Makefile CLAUDE.md
 5. git commit -m "release: vX.Y.Z — <short description>"
 6. git push
-7. git tag vX.Y.Z && git push origin vX.Y.Z
-8. gh release create vX.Y.Z --title "vX.Y.Z — <title>" --notes "<release notes>"
-9. Build and upload binaries:
-   GOOS=darwin GOARCH=arm64 go build -ldflags "..." -o bin/release/gws-darwin-arm64 ./cmd/gws
-   GOOS=darwin GOARCH=amd64 go build -ldflags "..." -o bin/release/gws-darwin-amd64 ./cmd/gws
-   GOOS=linux  GOARCH=amd64 go build -ldflags "..." -o bin/release/gws-linux-amd64 ./cmd/gws
-   GOOS=linux  GOARCH=arm64 go build -ldflags "..." -o bin/release/gws-linux-arm64 ./cmd/gws
-   gh release upload vX.Y.Z bin/release/gws-* --clobber
-10. /tweet about the release
+7. make release VERSION=X.Y.Z
+   — runs fmt/vet/test, checks clean tree, tags, cross-compiles, uploads binaries, verifies
+   — creates a DRAFT release — edit notes and publish:
+   gh release edit vX.Y.Z --draft=false --notes "<release notes>"
+8. make install
+   — installs to $GOPATH/bin with correct version embedded
+9. /tweet about the release (optional, comms step)
 ```
 
-Lesson learned (v1.27.0): forgetting the release step means GitHub releases page is stale and users see outdated versions. Always release immediately after merge. Always upload binaries — source-only releases are not downloadable.
+### Makefile targets
+
+| Target | What it does |
+|--------|-------------|
+| `make release-check` | Pre-release gate: fmt + vet + test + clean-tree check |
+| `make release VERSION=x.y.z` | Full release: check → tag → cross-compile → upload → verify |
+| `make install` | Install to `$GOPATH/bin` with proper `-ldflags` (never use `go install` directly) |
+
+**Never use `go install ./cmd/gws` directly** — it produces a pseudo-version like `v1.27.1-0.xxxxx` instead of the clean version. Always use `make install`.
 
 ## Parallel Agent Sprints
 
