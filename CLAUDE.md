@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.28.0** - Chat API cleanup: --max flag, missing fields, unified output.
+**v1.29.0** - Google Docs full API coverage + tab support.
 
 ## Roadmap
 
