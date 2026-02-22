@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"google.golang.org/api/drive/v3"
+	driveactivity "google.golang.org/api/driveactivity/v2"
 	"google.golang.org/api/option"
 )
 
@@ -1817,5 +1818,445 @@ func TestDriveChanges_MockServer(t *testing.T) {
 	}
 	if changes.NewStartPageToken != "new-token-456" {
 		t.Errorf("unexpected new start token: %s", changes.NewStartPageToken)
+	}
+}
+
+// --- Activity Tests ---
+
+func TestDriveActivityCommand_Flags(t *testing.T) {
+	cmd := driveActivityCmd
+
+	flags := []string{"item-id", "folder-id", "filter", "days", "max", "page-token", "no-consolidation"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+
+	// Check defaults
+	maxFlag := cmd.Flags().Lookup("max")
+	if maxFlag.DefValue != "50" {
+		t.Errorf("expected --max default to be 50, got %s", maxFlag.DefValue)
+	}
+
+	noConsolidation := cmd.Flags().Lookup("no-consolidation")
+	if noConsolidation.DefValue != "false" {
+		t.Errorf("expected --no-consolidation default to be false, got %s", noConsolidation.DefValue)
+	}
+}
+
+func TestDriveActivityCommand_Help(t *testing.T) {
+	cmd := driveActivityCmd
+
+	if cmd.Use != "activity" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+
+	if cmd.Long == "" {
+		t.Error("expected Long description to be set")
+	}
+}
+
+func TestDriveActivity_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/v2/activity:query" && r.Method == "POST" {
+			resp := &driveactivity.QueryDriveActivityResponse{
+				Activities: []*driveactivity.DriveActivity{
+					{
+						Timestamp: "2024-01-15T10:00:00Z",
+						PrimaryActionDetail: &driveactivity.ActionDetail{
+							Edit: &driveactivity.Edit{},
+						},
+						Actors: []*driveactivity.Actor{
+							{
+								User: &driveactivity.User{
+									KnownUser: &driveactivity.KnownUser{
+										PersonName:    "people/12345",
+										IsCurrentUser: true,
+									},
+								},
+							},
+						},
+						Targets: []*driveactivity.Target{
+							{
+								DriveItem: &driveactivity.DriveItem{
+									Name:     "items/abc123",
+									Title:    "Test Document",
+									MimeType: "application/vnd.google-apps.document",
+									DriveFile: &driveactivity.DriveFile{},
+								},
+							},
+						},
+					},
+					{
+						Timestamp: "2024-01-15T09:00:00Z",
+						PrimaryActionDetail: &driveactivity.ActionDetail{
+							Create: &driveactivity.Create{
+								New: &driveactivity.New1{},
+							},
+						},
+						Actors: []*driveactivity.Actor{
+							{
+								User: &driveactivity.User{
+									KnownUser: &driveactivity.KnownUser{
+										PersonName: "people/67890",
+									},
+								},
+							},
+						},
+						Targets: []*driveactivity.Target{
+							{
+								DriveItem: &driveactivity.DriveItem{
+									Name:        "items/def456",
+									Title:       "New Folder",
+									DriveFolder: &driveactivity.DriveFolder{Type: "STANDARD_FOLDER"},
+								},
+							},
+						},
+					},
+				},
+				NextPageToken: "next-page-123",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := driveactivity.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive activity service: %v", err)
+	}
+
+	req := &driveactivity.QueryDriveActivityRequest{
+		ItemName: "items/abc123",
+		PageSize: 10,
+	}
+
+	resp, err := svc.Activity.Query(req).Do()
+	if err != nil {
+		t.Fatalf("failed to query activity: %v", err)
+	}
+
+	if len(resp.Activities) != 2 {
+		t.Fatalf("expected 2 activities, got %d", len(resp.Activities))
+	}
+
+	if resp.Activities[0].Timestamp != "2024-01-15T10:00:00Z" {
+		t.Errorf("unexpected timestamp: %s", resp.Activities[0].Timestamp)
+	}
+
+	if resp.Activities[0].PrimaryActionDetail.Edit == nil {
+		t.Error("expected edit action detail")
+	}
+
+	if resp.Activities[1].PrimaryActionDetail.Create == nil {
+		t.Error("expected create action detail")
+	}
+
+	if resp.NextPageToken != "next-page-123" {
+		t.Errorf("unexpected next page token: %s", resp.NextPageToken)
+	}
+}
+
+func TestFormatActionDetail(t *testing.T) {
+	tests := []struct {
+		name     string
+		detail   *driveactivity.ActionDetail
+		wantType string
+	}{
+		{
+			name:     "create_new",
+			detail:   &driveactivity.ActionDetail{Create: &driveactivity.Create{New: &driveactivity.New1{}}},
+			wantType: "create",
+		},
+		{
+			name:     "create_upload",
+			detail:   &driveactivity.ActionDetail{Create: &driveactivity.Create{Upload: &driveactivity.Upload{}}},
+			wantType: "create",
+		},
+		{
+			name:     "create_copy",
+			detail:   &driveactivity.ActionDetail{Create: &driveactivity.Create{Copy: &driveactivity.Copy{}}},
+			wantType: "create",
+		},
+		{
+			name:     "edit",
+			detail:   &driveactivity.ActionDetail{Edit: &driveactivity.Edit{}},
+			wantType: "edit",
+		},
+		{
+			name: "move",
+			detail: &driveactivity.ActionDetail{Move: &driveactivity.Move{
+				AddedParents:   []*driveactivity.TargetReference{{DriveItem: &driveactivity.DriveItemReference{Title: "Dest"}}},
+				RemovedParents: []*driveactivity.TargetReference{{DriveItem: &driveactivity.DriveItemReference{Title: "Source"}}},
+			}},
+			wantType: "move",
+		},
+		{
+			name:     "rename",
+			detail:   &driveactivity.ActionDetail{Rename: &driveactivity.Rename{OldTitle: "old.txt", NewTitle: "new.txt"}},
+			wantType: "rename",
+		},
+		{
+			name:     "delete_trash",
+			detail:   &driveactivity.ActionDetail{Delete: &driveactivity.Delete{Type: "TRASH"}},
+			wantType: "delete",
+		},
+		{
+			name:     "restore",
+			detail:   &driveactivity.ActionDetail{Restore: &driveactivity.Restore{Type: "UNTRASH"}},
+			wantType: "restore",
+		},
+		{
+			name:     "comment_post",
+			detail:   &driveactivity.ActionDetail{Comment: &driveactivity.Comment{Post: &driveactivity.Post{Subtype: "ADDED"}}},
+			wantType: "comment",
+		},
+		{
+			name: "permission_change",
+			detail: &driveactivity.ActionDetail{PermissionChange: &driveactivity.PermissionChange{
+				AddedPermissions: []*driveactivity.Permission{{Role: "WRITER", Anyone: &driveactivity.Anyone{}}},
+			}},
+			wantType: "permission_change",
+		},
+		{
+			name:     "dlp_change",
+			detail:   &driveactivity.ActionDetail{DlpChange: &driveactivity.DataLeakPreventionChange{Type: "FLAGGED"}},
+			wantType: "dlp_change",
+		},
+		{
+			name:     "reference",
+			detail:   &driveactivity.ActionDetail{Reference: &driveactivity.ApplicationReference{Type: "LINK"}},
+			wantType: "reference",
+		},
+		{
+			name: "settings_change",
+			detail: &driveactivity.ActionDetail{SettingsChange: &driveactivity.SettingsChange{
+				RestrictionChanges: []*driveactivity.RestrictionChange{{Feature: "SHARING_OUTSIDE_DOMAIN", NewRestriction: "FULLY_RESTRICTED"}},
+			}},
+			wantType: "settings_change",
+		},
+		{
+			name: "label_change",
+			detail: &driveactivity.ActionDetail{AppliedLabelChange: &driveactivity.AppliedLabelChange{
+				Changes: []*driveactivity.AppliedLabelChangeDetail{{Label: "labels/123", Title: "Priority"}},
+			}},
+			wantType: "label_change",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatActionDetail(tt.detail)
+			gotType, ok := result["type"].(string)
+			if !ok {
+				t.Fatal("expected type field to be string")
+			}
+			if gotType != tt.wantType {
+				t.Errorf("expected type %q, got %q", tt.wantType, gotType)
+			}
+		})
+	}
+}
+
+func TestFormatActor(t *testing.T) {
+	tests := []struct {
+		name     string
+		actor    *driveactivity.Actor
+		wantType string
+	}{
+		{
+			name:     "known_user",
+			actor:    &driveactivity.Actor{User: &driveactivity.User{KnownUser: &driveactivity.KnownUser{PersonName: "people/123"}}},
+			wantType: "user",
+		},
+		{
+			name:     "administrator",
+			actor:    &driveactivity.Actor{Administrator: &driveactivity.Administrator{}},
+			wantType: "administrator",
+		},
+		{
+			name:     "anonymous",
+			actor:    &driveactivity.Actor{Anonymous: &driveactivity.AnonymousUser{}},
+			wantType: "anonymous",
+		},
+		{
+			name:     "system",
+			actor:    &driveactivity.Actor{System: &driveactivity.SystemEvent{Type: "USER_DELETION"}},
+			wantType: "system",
+		},
+		{
+			name: "impersonation",
+			actor: &driveactivity.Actor{Impersonation: &driveactivity.Impersonation{
+				ImpersonatedUser: &driveactivity.User{KnownUser: &driveactivity.KnownUser{PersonName: "people/456"}},
+			}},
+			wantType: "impersonation",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatActor(tt.actor)
+			gotType, ok := result["type"].(string)
+			if !ok {
+				t.Fatal("expected type field to be string")
+			}
+			if gotType != tt.wantType {
+				t.Errorf("expected type %q, got %q", tt.wantType, gotType)
+			}
+		})
+	}
+}
+
+func TestFormatTarget(t *testing.T) {
+	tests := []struct {
+		name     string
+		target   *driveactivity.Target
+		wantType string
+	}{
+		{
+			name: "drive_item_file",
+			target: &driveactivity.Target{DriveItem: &driveactivity.DriveItem{
+				Name:      "items/abc",
+				Title:     "test.pdf",
+				MimeType:  "application/pdf",
+				DriveFile: &driveactivity.DriveFile{},
+			}},
+			wantType: "drive_item",
+		},
+		{
+			name: "drive_item_folder",
+			target: &driveactivity.Target{DriveItem: &driveactivity.DriveItem{
+				Name:        "items/def",
+				Title:       "My Folder",
+				DriveFolder: &driveactivity.DriveFolder{Type: "STANDARD_FOLDER"},
+			}},
+			wantType: "drive_item",
+		},
+		{
+			name:     "shared_drive",
+			target:   &driveactivity.Target{Drive: &driveactivity.Drive{Name: "drives/123", Title: "Team Drive"}},
+			wantType: "shared_drive",
+		},
+		{
+			name: "file_comment",
+			target: &driveactivity.Target{FileComment: &driveactivity.FileComment{
+				LegacyCommentId: "comment-123",
+				Parent:          &driveactivity.DriveItem{Name: "items/abc", Title: "Doc"},
+			}},
+			wantType: "file_comment",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatTarget(tt.target)
+			gotType, ok := result["type"].(string)
+			if !ok {
+				t.Fatal("expected type field to be string")
+			}
+			if gotType != tt.wantType {
+				t.Errorf("expected type %q, got %q", tt.wantType, gotType)
+			}
+		})
+	}
+}
+
+func TestFormatDriveActivity(t *testing.T) {
+	activity := &driveactivity.DriveActivity{
+		Timestamp: "2024-01-15T10:00:00Z",
+		PrimaryActionDetail: &driveactivity.ActionDetail{
+			Rename: &driveactivity.Rename{OldTitle: "old.txt", NewTitle: "new.txt"},
+		},
+		Actors: []*driveactivity.Actor{
+			{User: &driveactivity.User{KnownUser: &driveactivity.KnownUser{PersonName: "people/123", IsCurrentUser: true}}},
+		},
+		Targets: []*driveactivity.Target{
+			{DriveItem: &driveactivity.DriveItem{Name: "items/abc", Title: "new.txt", MimeType: "text/plain", DriveFile: &driveactivity.DriveFile{}}},
+		},
+	}
+
+	result := formatDriveActivity(activity)
+
+	if result["timestamp"] != "2024-01-15T10:00:00Z" {
+		t.Errorf("unexpected timestamp: %v", result["timestamp"])
+	}
+
+	primaryAction, ok := result["primary_action"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected primary_action to be a map")
+	}
+	if primaryAction["type"] != "rename" {
+		t.Errorf("expected primary action type 'rename', got '%v'", primaryAction["type"])
+	}
+
+	actors, ok := result["actors"].([]map[string]interface{})
+	if !ok {
+		t.Fatal("expected actors to be a slice")
+	}
+	if len(actors) != 1 {
+		t.Fatalf("expected 1 actor, got %d", len(actors))
+	}
+	if actors[0]["type"] != "user" {
+		t.Errorf("expected actor type 'user', got '%v'", actors[0]["type"])
+	}
+
+	targets, ok := result["targets"].([]map[string]interface{})
+	if !ok {
+		t.Fatal("expected targets to be a slice")
+	}
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 target, got %d", len(targets))
+	}
+	if targets[0]["type"] != "drive_item" {
+		t.Errorf("expected target type 'drive_item', got '%v'", targets[0]["type"])
+	}
+
+	// Verify JSON serialization
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		t.Fatalf("failed to encode result: %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to decode result: %v", err)
+	}
+}
+
+func TestFormatDriveActivity_TimeRange(t *testing.T) {
+	activity := &driveactivity.DriveActivity{
+		TimeRange: &driveactivity.TimeRange{
+			StartTime: "2024-01-15T09:00:00Z",
+			EndTime:   "2024-01-15T10:00:00Z",
+		},
+		PrimaryActionDetail: &driveactivity.ActionDetail{
+			Edit: &driveactivity.Edit{},
+		},
+	}
+
+	result := formatDriveActivity(activity)
+
+	timeRange, ok := result["time_range"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected time_range to be a map")
+	}
+	if timeRange["start"] != "2024-01-15T09:00:00Z" {
+		t.Errorf("unexpected start time: %v", timeRange["start"])
+	}
+	if timeRange["end"] != "2024-01-15T10:00:00Z" {
+		t.Errorf("unexpected end time: %v", timeRange["end"])
 	}
 }

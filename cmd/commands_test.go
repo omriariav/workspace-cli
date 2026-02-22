@@ -339,6 +339,7 @@ func TestDriveCommands(t *testing.T) {
 		{"update-drive"},
 		{"about"},
 		{"changes"},
+		{"activity"},
 	}
 
 	for _, tt := range tests {

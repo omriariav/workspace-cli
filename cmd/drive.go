@@ -13,6 +13,7 @@ import (
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/drive/v3"
+	driveactivity "google.golang.org/api/driveactivity/v2"
 	"google.golang.org/api/googleapi"
 )
 
@@ -340,6 +341,22 @@ new changes (standard Drive changes polling pattern).`,
 	RunE: runDriveChanges,
 }
 
+var driveActivityCmd = &cobra.Command{
+	Use:   "activity",
+	Short: "Query Drive activity history",
+	Long: `Queries the Google Drive Activity API v2 for file and folder activity.
+
+Returns a detailed activity log including creates, edits, moves, renames, deletes,
+restores, comments, permission changes, settings changes, and more.
+
+Examples:
+  gws drive activity --item-id 1abc123xyz
+  gws drive activity --folder-id 0Bxyz789 --days 7
+  gws drive activity --item-id 1abc123xyz --filter "detail.action_detail_case:EDIT"
+  gws drive activity --item-id 1abc123xyz --no-consolidation --max 100`,
+	RunE: runDriveActivity,
+}
+
 func init() {
 	rootCmd.AddCommand(driveCmd)
 	driveCmd.AddCommand(driveListCmd)
@@ -541,6 +558,16 @@ func init() {
 	// Changes flags
 	driveChangesCmd.Flags().Int64("max", 100, "Maximum number of changes")
 	driveChangesCmd.Flags().String("page-token", "", "Page token (fetches start token if empty)")
+
+	// Activity command
+	driveCmd.AddCommand(driveActivityCmd)
+	driveActivityCmd.Flags().String("item-id", "", "Filter by file/folder ID")
+	driveActivityCmd.Flags().String("folder-id", "", "Filter by ancestor folder (all descendants)")
+	driveActivityCmd.Flags().String("filter", "", "API filter string (e.g. \"detail.action_detail_case:EDIT\")")
+	driveActivityCmd.Flags().Int("days", 0, "Last N days (auto-generates time filter)")
+	driveActivityCmd.Flags().Int64("max", 50, "Page size")
+	driveActivityCmd.Flags().String("page-token", "", "Pagination token")
+	driveActivityCmd.Flags().Bool("no-consolidation", false, "Disable activity grouping")
 }
 
 func runDriveList(cmd *cobra.Command, args []string) error {
@@ -2292,6 +2319,470 @@ func runDriveAbout(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(result)
+}
+
+func runDriveActivity(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.DriveActivity()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	itemID, _ := cmd.Flags().GetString("item-id")
+	folderID, _ := cmd.Flags().GetString("folder-id")
+	filter, _ := cmd.Flags().GetString("filter")
+	days, _ := cmd.Flags().GetInt("days")
+	maxResults, _ := cmd.Flags().GetInt64("max")
+	pageToken, _ := cmd.Flags().GetString("page-token")
+	noConsolidation, _ := cmd.Flags().GetBool("no-consolidation")
+
+	req := &driveactivity.QueryDriveActivityRequest{
+		PageSize: maxResults,
+	}
+
+	if itemID != "" {
+		req.ItemName = "items/" + itemID
+	}
+	if folderID != "" {
+		req.AncestorName = "items/" + folderID
+	}
+
+	// Build filter: combine --days with --filter
+	var filterParts []string
+	if days > 0 {
+		cutoff := time.Now().AddDate(0, 0, -days)
+		filterParts = append(filterParts, fmt.Sprintf("time >= %d", cutoff.UnixMilli()))
+	}
+	if filter != "" {
+		filterParts = append(filterParts, filter)
+	}
+	if len(filterParts) > 0 {
+		combined := filterParts[0]
+		for i := 1; i < len(filterParts); i++ {
+			combined += " AND " + filterParts[i]
+		}
+		req.Filter = combined
+	}
+
+	if pageToken != "" {
+		req.PageToken = pageToken
+	}
+
+	if noConsolidation {
+		req.ConsolidationStrategy = &driveactivity.ConsolidationStrategy{
+			None: &driveactivity.NoConsolidation{},
+		}
+	}
+
+	resp, err := svc.Activity.Query(req).Context(ctx).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to query drive activity: %w", err))
+	}
+
+	activities := make([]map[string]interface{}, 0, len(resp.Activities))
+	for _, a := range resp.Activities {
+		activity := formatDriveActivity(a)
+		activities = append(activities, activity)
+	}
+
+	result := map[string]interface{}{
+		"activities": activities,
+		"count":      len(activities),
+	}
+	if resp.NextPageToken != "" {
+		result["next_page_token"] = resp.NextPageToken
+	}
+
+	return p.Print(result)
+}
+
+func formatDriveActivity(a *driveactivity.DriveActivity) map[string]interface{} {
+	activity := map[string]interface{}{}
+
+	// Timestamp
+	if a.Timestamp != "" {
+		activity["timestamp"] = a.Timestamp
+	}
+	if a.TimeRange != nil {
+		tr := map[string]interface{}{}
+		if a.TimeRange.StartTime != "" {
+			tr["start"] = a.TimeRange.StartTime
+		}
+		if a.TimeRange.EndTime != "" {
+			tr["end"] = a.TimeRange.EndTime
+		}
+		activity["time_range"] = tr
+	}
+
+	// Primary action
+	if a.PrimaryActionDetail != nil {
+		activity["primary_action"] = formatActionDetail(a.PrimaryActionDetail)
+	}
+
+	// All actions (if consolidated)
+	if len(a.Actions) > 1 {
+		actions := make([]map[string]interface{}, 0, len(a.Actions))
+		for _, action := range a.Actions {
+			act := map[string]interface{}{}
+			if action.Detail != nil {
+				act["detail"] = formatActionDetail(action.Detail)
+			}
+			if action.Timestamp != "" {
+				act["timestamp"] = action.Timestamp
+			}
+			if action.TimeRange != nil {
+				tr := map[string]interface{}{}
+				if action.TimeRange.StartTime != "" {
+					tr["start"] = action.TimeRange.StartTime
+				}
+				if action.TimeRange.EndTime != "" {
+					tr["end"] = action.TimeRange.EndTime
+				}
+				act["time_range"] = tr
+			}
+			if action.Actor != nil {
+				act["actor"] = formatActor(action.Actor)
+			}
+			if action.Target != nil {
+				act["target"] = formatTarget(action.Target)
+			}
+			actions = append(actions, act)
+		}
+		activity["actions"] = actions
+	}
+
+	// Actors
+	if len(a.Actors) > 0 {
+		actors := make([]map[string]interface{}, 0, len(a.Actors))
+		for _, actor := range a.Actors {
+			actors = append(actors, formatActor(actor))
+		}
+		activity["actors"] = actors
+	}
+
+	// Targets
+	if len(a.Targets) > 0 {
+		targets := make([]map[string]interface{}, 0, len(a.Targets))
+		for _, target := range a.Targets {
+			targets = append(targets, formatTarget(target))
+		}
+		activity["targets"] = targets
+	}
+
+	return activity
+}
+
+func formatActionDetail(d *driveactivity.ActionDetail) map[string]interface{} {
+	result := map[string]interface{}{}
+
+	if d.Create != nil {
+		create := map[string]interface{}{}
+		if d.Create.Copy != nil {
+			create["method"] = "copy"
+		} else if d.Create.Upload != nil {
+			create["method"] = "upload"
+		} else if d.Create.New != nil {
+			create["method"] = "new"
+		}
+		result["type"] = "create"
+		result["create"] = create
+	} else if d.Edit != nil {
+		result["type"] = "edit"
+	} else if d.Move != nil {
+		move := map[string]interface{}{}
+		if len(d.Move.AddedParents) > 0 {
+			added := make([]string, 0, len(d.Move.AddedParents))
+			for _, p := range d.Move.AddedParents {
+				if p.DriveItem != nil {
+					added = append(added, p.DriveItem.Title)
+				} else if p.Drive != nil {
+					added = append(added, p.Drive.Title)
+				}
+			}
+			move["added_parents"] = added
+		}
+		if len(d.Move.RemovedParents) > 0 {
+			removed := make([]string, 0, len(d.Move.RemovedParents))
+			for _, p := range d.Move.RemovedParents {
+				if p.DriveItem != nil {
+					removed = append(removed, p.DriveItem.Title)
+				} else if p.Drive != nil {
+					removed = append(removed, p.Drive.Title)
+				}
+			}
+			move["removed_parents"] = removed
+		}
+		result["type"] = "move"
+		result["move"] = move
+	} else if d.Rename != nil {
+		result["type"] = "rename"
+		result["rename"] = map[string]interface{}{
+			"old_title": d.Rename.OldTitle,
+			"new_title": d.Rename.NewTitle,
+		}
+	} else if d.Delete != nil {
+		result["type"] = "delete"
+		result["delete"] = map[string]interface{}{
+			"delete_type": d.Delete.Type,
+		}
+	} else if d.Restore != nil {
+		result["type"] = "restore"
+		result["restore"] = map[string]interface{}{
+			"restore_type": d.Restore.Type,
+		}
+	} else if d.Comment != nil {
+		comment := map[string]interface{}{}
+		if d.Comment.Post != nil {
+			comment["subtype"] = "post"
+			if d.Comment.Post.Subtype != "" {
+				comment["post_subtype"] = d.Comment.Post.Subtype
+			}
+		} else if d.Comment.Assignment != nil {
+			comment["subtype"] = "assignment"
+			if d.Comment.Assignment.Subtype != "" {
+				comment["assignment_subtype"] = d.Comment.Assignment.Subtype
+			}
+			if d.Comment.Assignment.AssignedUser != nil {
+				comment["assigned_user"] = formatUser(d.Comment.Assignment.AssignedUser)
+			}
+		} else if d.Comment.Suggestion != nil {
+			comment["subtype"] = "suggestion"
+			if d.Comment.Suggestion.Subtype != "" {
+				comment["suggestion_subtype"] = d.Comment.Suggestion.Subtype
+			}
+		}
+		if len(d.Comment.MentionedUsers) > 0 {
+			mentioned := make([]map[string]interface{}, 0, len(d.Comment.MentionedUsers))
+			for _, u := range d.Comment.MentionedUsers {
+				mentioned = append(mentioned, formatUser(u))
+			}
+			comment["mentioned_users"] = mentioned
+		}
+		result["type"] = "comment"
+		result["comment"] = comment
+	} else if d.PermissionChange != nil {
+		pc := map[string]interface{}{}
+		if len(d.PermissionChange.AddedPermissions) > 0 {
+			added := make([]map[string]interface{}, 0, len(d.PermissionChange.AddedPermissions))
+			for _, p := range d.PermissionChange.AddedPermissions {
+				perm := map[string]interface{}{}
+				if p.Role != "" {
+					perm["role"] = p.Role
+				}
+				if p.User != nil {
+					perm["user"] = formatUser(p.User)
+				}
+				if p.Group != nil && p.Group.Email != "" {
+					perm["group"] = p.Group.Email
+				}
+				if p.Domain != nil && p.Domain.Name != "" {
+					perm["domain"] = p.Domain.Name
+				}
+				if p.Anyone != nil {
+					perm["anyone"] = true
+				}
+				added = append(added, perm)
+			}
+			pc["added"] = added
+		}
+		if len(d.PermissionChange.RemovedPermissions) > 0 {
+			removed := make([]map[string]interface{}, 0, len(d.PermissionChange.RemovedPermissions))
+			for _, p := range d.PermissionChange.RemovedPermissions {
+				perm := map[string]interface{}{}
+				if p.Role != "" {
+					perm["role"] = p.Role
+				}
+				if p.User != nil {
+					perm["user"] = formatUser(p.User)
+				}
+				if p.Group != nil && p.Group.Email != "" {
+					perm["group"] = p.Group.Email
+				}
+				if p.Domain != nil && p.Domain.Name != "" {
+					perm["domain"] = p.Domain.Name
+				}
+				if p.Anyone != nil {
+					perm["anyone"] = true
+				}
+				removed = append(removed, perm)
+			}
+			pc["removed"] = removed
+		}
+		result["type"] = "permission_change"
+		result["permission_change"] = pc
+	} else if d.SettingsChange != nil {
+		sc := map[string]interface{}{}
+		if len(d.SettingsChange.RestrictionChanges) > 0 {
+			changes := make([]map[string]interface{}, 0, len(d.SettingsChange.RestrictionChanges))
+			for _, rc := range d.SettingsChange.RestrictionChanges {
+				changes = append(changes, map[string]interface{}{
+					"feature":         rc.Feature,
+					"new_restriction": rc.NewRestriction,
+				})
+			}
+			sc["restriction_changes"] = changes
+		}
+		result["type"] = "settings_change"
+		result["settings_change"] = sc
+	} else if d.DlpChange != nil {
+		result["type"] = "dlp_change"
+		result["dlp_change"] = map[string]interface{}{
+			"dlp_type": d.DlpChange.Type,
+		}
+	} else if d.Reference != nil {
+		result["type"] = "reference"
+		result["reference"] = map[string]interface{}{
+			"reference_type": d.Reference.Type,
+		}
+	} else if d.AppliedLabelChange != nil {
+		lc := map[string]interface{}{}
+		if len(d.AppliedLabelChange.Changes) > 0 {
+			changes := make([]map[string]interface{}, 0, len(d.AppliedLabelChange.Changes))
+			for _, c := range d.AppliedLabelChange.Changes {
+				change := map[string]interface{}{}
+				if c.Label != "" {
+					change["label"] = c.Label
+				}
+				if c.Title != "" {
+					change["title"] = c.Title
+				}
+				if len(c.Types) > 0 {
+					change["types"] = c.Types
+				}
+				changes = append(changes, change)
+			}
+			lc["changes"] = changes
+		}
+		result["type"] = "label_change"
+		result["label_change"] = lc
+	}
+
+	return result
+}
+
+func formatActor(a *driveactivity.Actor) map[string]interface{} {
+	result := map[string]interface{}{}
+
+	if a.User != nil {
+		result["type"] = "user"
+		result["user"] = formatUser(a.User)
+	} else if a.Administrator != nil {
+		result["type"] = "administrator"
+	} else if a.Anonymous != nil {
+		result["type"] = "anonymous"
+	} else if a.System != nil {
+		result["type"] = "system"
+		if a.System.Type != "" {
+			result["system_type"] = a.System.Type
+		}
+	} else if a.Impersonation != nil {
+		result["type"] = "impersonation"
+		if a.Impersonation.ImpersonatedUser != nil {
+			result["impersonated_user"] = formatUser(a.Impersonation.ImpersonatedUser)
+		}
+	}
+
+	return result
+}
+
+func formatUser(u *driveactivity.User) map[string]interface{} {
+	result := map[string]interface{}{}
+	if u.KnownUser != nil {
+		result["type"] = "known_user"
+		if u.KnownUser.PersonName != "" {
+			result["person_name"] = u.KnownUser.PersonName
+		}
+		if u.KnownUser.IsCurrentUser {
+			result["is_current_user"] = true
+		}
+	} else if u.DeletedUser != nil {
+		result["type"] = "deleted_user"
+	} else if u.UnknownUser != nil {
+		result["type"] = "unknown_user"
+	}
+	return result
+}
+
+func formatTarget(t *driveactivity.Target) map[string]interface{} {
+	result := map[string]interface{}{}
+
+	if t.DriveItem != nil {
+		result["type"] = "drive_item"
+		item := map[string]interface{}{}
+		if t.DriveItem.Name != "" {
+			item["name"] = t.DriveItem.Name
+		}
+		if t.DriveItem.Title != "" {
+			item["title"] = t.DriveItem.Title
+		}
+		if t.DriveItem.MimeType != "" {
+			item["mime_type"] = t.DriveItem.MimeType
+		}
+		if t.DriveItem.Owner != nil {
+			owner := map[string]interface{}{}
+			if t.DriveItem.Owner.User != nil {
+				owner["user"] = formatUser(t.DriveItem.Owner.User)
+			}
+			if t.DriveItem.Owner.Drive != nil {
+				owner["drive"] = map[string]interface{}{
+					"name":  t.DriveItem.Owner.Drive.Name,
+					"title": t.DriveItem.Owner.Drive.Title,
+				}
+			}
+			if t.DriveItem.Owner.Domain != nil && t.DriveItem.Owner.Domain.Name != "" {
+				owner["domain"] = t.DriveItem.Owner.Domain.Name
+			}
+			item["owner"] = owner
+		}
+		if t.DriveItem.DriveFolder != nil {
+			item["item_type"] = "folder"
+			if t.DriveItem.DriveFolder.Type != "" {
+				item["folder_type"] = t.DriveItem.DriveFolder.Type
+			}
+		} else if t.DriveItem.DriveFile != nil {
+			item["item_type"] = "file"
+		}
+		result["drive_item"] = item
+	} else if t.Drive != nil {
+		result["type"] = "shared_drive"
+		sd := map[string]interface{}{}
+		if t.Drive.Name != "" {
+			sd["name"] = t.Drive.Name
+		}
+		if t.Drive.Title != "" {
+			sd["title"] = t.Drive.Title
+		}
+		result["shared_drive"] = sd
+	} else if t.FileComment != nil {
+		result["type"] = "file_comment"
+		fc := map[string]interface{}{}
+		if t.FileComment.LegacyCommentId != "" {
+			fc["comment_id"] = t.FileComment.LegacyCommentId
+		}
+		if t.FileComment.LinkToDiscussion != "" {
+			fc["link"] = t.FileComment.LinkToDiscussion
+		}
+		if t.FileComment.Parent != nil {
+			parent := map[string]interface{}{}
+			if t.FileComment.Parent.Name != "" {
+				parent["name"] = t.FileComment.Parent.Name
+			}
+			if t.FileComment.Parent.Title != "" {
+				parent["title"] = t.FileComment.Parent.Title
+			}
+			fc["parent"] = parent
+		}
+		result["file_comment"] = fc
+	}
+
+	return result
 }
 
 func runDriveChanges(cmd *cobra.Command, args []string) error {
