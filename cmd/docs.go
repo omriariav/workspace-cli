@@ -2021,17 +2021,37 @@ func runDocsAddImage(cmd *cobra.Command, args []string) error {
 }
 
 // tableCellLocation builds a TableCellLocation from common flags.
-func tableCellLocation(cmd *cobra.Command) *docs.TableCellLocation {
+// resolveTabQueryToID resolves --tab flag to a tab ID by fetching the document.
+// Returns empty string if --tab is not set. Used by commands that don't already
+// fetch the document for other reasons.
+func resolveTabQueryToID(cmd *cobra.Command, docID string) (string, error) {
+	tabQuery, _ := cmd.Flags().GetString("tab")
+	if tabQuery == "" {
+		return "", nil
+	}
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return "", err
+	}
+	svc, err := factory.Docs()
+	if err != nil {
+		return "", err
+	}
+	doc, err := svc.Documents.Get(docID).IncludeTabsContent(true).Do()
+	if err != nil {
+		return "", fmt.Errorf("failed to get document: %w", err)
+	}
+	return resolveTabID(doc.Tabs, tabQuery)
+}
+
+func tableCellLocation(cmd *cobra.Command, tabID string) *docs.TableCellLocation {
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
 	row, _ := cmd.Flags().GetInt64("row")
 	col, _ := cmd.Flags().GetInt64("col")
-	tabQuery, _ := cmd.Flags().GetString("tab")
 	loc := &docs.Location{Index: tableStart}
-	if tabQuery != "" {
-		// For table ops, we use the raw tab query as ID since we can't
-		// fetch the doc to resolve it without a service. The user should
-		// pass the tab ID directly (from `gws docs info`).
-		loc.TabId = tabQuery
+	if tabID != "" {
+		loc.TabId = tabID
 	}
 	return &docs.TableCellLocation{
 		TableStartLocation: loc,
@@ -2046,10 +2066,15 @@ func runDocsInsertTableRow(cmd *cobra.Command, args []string) error {
 	docID := args[0]
 	below, _ := cmd.Flags().GetBool("below")
 
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	requests := []*docs.Request{
 		{
 			InsertTableRow: &docs.InsertTableRowRequest{
-				TableCellLocation: tableCellLocation(cmd),
+				TableCellLocation: tableCellLocation(cmd, tabID),
 				InsertBelow:       below,
 			},
 		},
@@ -2071,10 +2096,15 @@ func runDocsDeleteTableRow(cmd *cobra.Command, args []string) error {
 
 	docID := args[0]
 
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	requests := []*docs.Request{
 		{
 			DeleteTableRow: &docs.DeleteTableRowRequest{
-				TableCellLocation: tableCellLocation(cmd),
+				TableCellLocation: tableCellLocation(cmd, tabID),
 			},
 		},
 	}
@@ -2096,10 +2126,15 @@ func runDocsInsertTableCol(cmd *cobra.Command, args []string) error {
 	docID := args[0]
 	right, _ := cmd.Flags().GetBool("right")
 
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	requests := []*docs.Request{
 		{
 			InsertTableColumn: &docs.InsertTableColumnRequest{
-				TableCellLocation: tableCellLocation(cmd),
+				TableCellLocation: tableCellLocation(cmd, tabID),
 				InsertRight:       right,
 			},
 		},
@@ -2121,10 +2156,15 @@ func runDocsDeleteTableCol(cmd *cobra.Command, args []string) error {
 
 	docID := args[0]
 
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	requests := []*docs.Request{
 		{
 			DeleteTableColumn: &docs.DeleteTableColumnRequest{
-				TableCellLocation: tableCellLocation(cmd),
+				TableCellLocation: tableCellLocation(cmd, tabID),
 			},
 		},
 	}
@@ -2149,11 +2189,15 @@ func runDocsMergeCells(cmd *cobra.Command, args []string) error {
 	col, _ := cmd.Flags().GetInt64("col")
 	rowSpan, _ := cmd.Flags().GetInt64("row-span")
 	colSpan, _ := cmd.Flags().GetInt64("col-span")
-	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	loc := &docs.Location{Index: tableStart}
-	if tabQuery != "" {
-		loc.TabId = tabQuery
+	if tabID != "" {
+		loc.TabId = tabID
 	}
 
 	requests := []*docs.Request{
@@ -2191,11 +2235,15 @@ func runDocsUnmergeCells(cmd *cobra.Command, args []string) error {
 	col, _ := cmd.Flags().GetInt64("col")
 	rowSpan, _ := cmd.Flags().GetInt64("row-span")
 	colSpan, _ := cmd.Flags().GetInt64("col-span")
-	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	loc := &docs.Location{Index: tableStart}
-	if tabQuery != "" {
-		loc.TabId = tabQuery
+	if tabID != "" {
+		loc.TabId = tabID
 	}
 
 	requests := []*docs.Request{
@@ -2230,15 +2278,19 @@ func runDocsPinRows(cmd *cobra.Command, args []string) error {
 	docID := args[0]
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
 	count, _ := cmd.Flags().GetInt64("count")
-	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	if count < 0 {
 		return p.PrintError(fmt.Errorf("--count must be >= 0"))
 	}
 
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	loc := &docs.Location{Index: tableStart}
-	if tabQuery != "" {
-		loc.TabId = tabQuery
+	if tabID != "" {
+		loc.TabId = tabID
 	}
 
 	requests := []*docs.Request{
@@ -2470,14 +2522,24 @@ func runDocsAddNamedRange(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
 	}
 
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	rng := &docs.Range{
+		StartIndex: from,
+		EndIndex:   to,
+	}
+	if tabID != "" {
+		rng.TabId = tabID
+	}
+
 	requests := []*docs.Request{
 		{
 			CreateNamedRange: &docs.CreateNamedRangeRequest{
-				Name: name,
-				Range: &docs.Range{
-					StartIndex: from,
-					EndIndex:   to,
-				},
+				Name:  name,
+				Range: rng,
 			},
 		},
 	}
@@ -2750,13 +2812,17 @@ func runDocsUpdateSectionStyle(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("no section style options specified"))
 	}
 
-	tabQuery, _ := cmd.Flags().GetString("tab")
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	rng := &docs.Range{
 		StartIndex: from,
 		EndIndex:   to,
 	}
-	if tabQuery != "" {
-		rng.TabId = tabQuery
+	if tabID != "" {
+		rng.TabId = tabID
 	}
 
 	requests := []*docs.Request{
@@ -2792,7 +2858,11 @@ func runDocsUpdateTableCellStyle(cmd *cobra.Command, args []string) error {
 	colSpan, _ := cmd.Flags().GetInt64("col-span")
 	bgColor, _ := cmd.Flags().GetString("bg-color")
 	padding, _ := cmd.Flags().GetFloat64("padding")
-	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	cellStyle := &docs.TableCellStyle{}
 	var fields []string
@@ -2820,8 +2890,8 @@ func runDocsUpdateTableCellStyle(cmd *cobra.Command, args []string) error {
 	}
 
 	loc := &docs.Location{Index: tableStart}
-	if tabQuery != "" {
-		loc.TabId = tabQuery
+	if tabID != "" {
+		loc.TabId = tabID
 	}
 
 	requests := []*docs.Request{
@@ -2859,11 +2929,15 @@ func runDocsUpdateTableColProperties(cmd *cobra.Command, args []string) error {
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
 	colIndex, _ := cmd.Flags().GetInt64("col-index")
 	width, _ := cmd.Flags().GetFloat64("width")
-	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	loc := &docs.Location{Index: tableStart}
-	if tabQuery != "" {
-		loc.TabId = tabQuery
+	if tabID != "" {
+		loc.TabId = tabID
 	}
 
 	requests := []*docs.Request{
@@ -2899,11 +2973,15 @@ func runDocsUpdateTableRowStyle(cmd *cobra.Command, args []string) error {
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
 	row, _ := cmd.Flags().GetInt64("row")
 	minHeight, _ := cmd.Flags().GetFloat64("min-height")
-	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	tabID, err := resolveTabQueryToID(cmd, docID)
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	loc := &docs.Location{Index: tableStart}
-	if tabQuery != "" {
-		loc.TabId = tabQuery
+	if tabID != "" {
+		loc.TabId = tabID
 	}
 
 	requests := []*docs.Request{
