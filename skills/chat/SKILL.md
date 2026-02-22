@@ -1,6 +1,6 @@
 ---
 name: gws-chat
-version: 2.0.0
+version: 2.1.0
 description: "Google Chat CLI operations via gws. Use when users need to list/create/manage chat spaces, read/send messages, manage members, track read state, handle attachments, or monitor space events. Triggers: google chat, gchat, chat spaces, chat messages."
 metadata:
   short-description: Google Chat CLI operations
@@ -353,6 +353,30 @@ gws chat list --format yaml    # YAML format
 gws chat list --format text    # Human-readable text
 ```
 
+## Common Mistakes
+
+| Mistake | Correct Usage |
+|---------|--------------|
+| `--limit N` on messages | Use `--max N` — `--limit` does not exist |
+| `find-dm --user email@example.com` | Use `users/email@example.com` format — the `--user` flag requires a resource name prefix |
+
+## Recipe: Find a Group Chat by Member Names
+
+When you know the participants but not the space ID:
+
+```bash
+# 1. List all spaces, filter to group chats, sort by recent activity
+gws chat list --format json | jq '.spaces | map(select(.type == "GROUP_CHAT")) | sort_by(.last_active_time // "") | reverse | .[:10]'
+
+# 2. Check members of candidate spaces
+gws chat members spaces/AAAApznBCFA --format json
+
+# 3. Once found, get recent messages with a time filter
+gws chat messages spaces/AAAApznBCFA --filter 'createTime > "2026-02-20T00:00:00Z"' --order-by "createTime DESC" --max 25
+```
+
+**Key insight**: DMs and group chats often have empty `display_name` — you must check `members` to identify participants.
+
 ## Tips for AI Agents
 
 - Always use `--format json` (the default) for programmatic parsing
@@ -361,6 +385,7 @@ gws chat list --format text    # Human-readable text
 - Message names are in the format `spaces/AAAA/messages/msg1`
 - `members` auto-resolves display names via People API — first call may be slower, subsequent calls use cache
 - Use `--order-by "createTime DESC"` with messages to get newest first
+- Use `--filter 'createTime > "YYYY-MM-DDT00:00:00Z"'` to scope messages to a date range — more reliable than relying on default ordering
 - `read-state` auto-expands bare space IDs (e.g. `AAAA` → `users/me/spaces/AAAA/spaceReadState`)
 - `events` requires a `--filter` with event types — see [API docs](https://developers.google.com/workspace/chat/api/reference/rest/v1/spaces.spaceEvents/list)
 - Chat API requires additional GCP setup beyond standard OAuth — see the `gws-auth` skill
