@@ -2025,8 +2025,16 @@ func tableCellLocation(cmd *cobra.Command) *docs.TableCellLocation {
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
 	row, _ := cmd.Flags().GetInt64("row")
 	col, _ := cmd.Flags().GetInt64("col")
+	tabQuery, _ := cmd.Flags().GetString("tab")
+	loc := &docs.Location{Index: tableStart}
+	if tabQuery != "" {
+		// For table ops, we use the raw tab query as ID since we can't
+		// fetch the doc to resolve it without a service. The user should
+		// pass the tab ID directly (from `gws docs info`).
+		loc.TabId = tabQuery
+	}
 	return &docs.TableCellLocation{
-		TableStartLocation: &docs.Location{Index: tableStart},
+		TableStartLocation: loc,
 		RowIndex:           row,
 		ColumnIndex:        col,
 	}
@@ -2141,13 +2149,19 @@ func runDocsMergeCells(cmd *cobra.Command, args []string) error {
 	col, _ := cmd.Flags().GetInt64("col")
 	rowSpan, _ := cmd.Flags().GetInt64("row-span")
 	colSpan, _ := cmd.Flags().GetInt64("col-span")
+	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	loc := &docs.Location{Index: tableStart}
+	if tabQuery != "" {
+		loc.TabId = tabQuery
+	}
 
 	requests := []*docs.Request{
 		{
 			MergeTableCells: &docs.MergeTableCellsRequest{
 				TableRange: &docs.TableRange{
 					TableCellLocation: &docs.TableCellLocation{
-						TableStartLocation: &docs.Location{Index: tableStart},
+						TableStartLocation: loc,
 						RowIndex:           row,
 						ColumnIndex:        col,
 					},
@@ -2177,13 +2191,19 @@ func runDocsUnmergeCells(cmd *cobra.Command, args []string) error {
 	col, _ := cmd.Flags().GetInt64("col")
 	rowSpan, _ := cmd.Flags().GetInt64("row-span")
 	colSpan, _ := cmd.Flags().GetInt64("col-span")
+	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	loc := &docs.Location{Index: tableStart}
+	if tabQuery != "" {
+		loc.TabId = tabQuery
+	}
 
 	requests := []*docs.Request{
 		{
 			UnmergeTableCells: &docs.UnmergeTableCellsRequest{
 				TableRange: &docs.TableRange{
 					TableCellLocation: &docs.TableCellLocation{
-						TableStartLocation: &docs.Location{Index: tableStart},
+						TableStartLocation: loc,
 						RowIndex:           row,
 						ColumnIndex:        col,
 					},
@@ -2210,11 +2230,21 @@ func runDocsPinRows(cmd *cobra.Command, args []string) error {
 	docID := args[0]
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
 	count, _ := cmd.Flags().GetInt64("count")
+	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	if count < 0 {
+		return p.PrintError(fmt.Errorf("--count must be >= 0"))
+	}
+
+	loc := &docs.Location{Index: tableStart}
+	if tabQuery != "" {
+		loc.TabId = tabQuery
+	}
 
 	requests := []*docs.Request{
 		{
 			PinTableHeaderRows: &docs.PinTableHeaderRowsRequest{
-				TableStartLocation:    &docs.Location{Index: tableStart},
+				TableStartLocation:    loc,
 				PinnedHeaderRowsCount: count,
 			},
 		},
@@ -2433,6 +2463,13 @@ func runDocsAddNamedRange(cmd *cobra.Command, args []string) error {
 	from, _ := cmd.Flags().GetInt64("from")
 	to, _ := cmd.Flags().GetInt64("to")
 
+	if from < 1 {
+		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+	}
+	if to <= from {
+		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+	}
+
 	requests := []*docs.Request{
 		{
 			CreateNamedRange: &docs.CreateNamedRangeRequest{
@@ -2497,6 +2534,10 @@ func runDocsAddFootnote(cmd *cobra.Command, args []string) error {
 	docID := args[0]
 	position, _ := cmd.Flags().GetInt64("at")
 	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	if position < 1 {
+		return p.PrintError(fmt.Errorf("--at must be >= 1"))
+	}
 
 	loc := &docs.Location{Index: position}
 	if tabQuery != "" {
@@ -2692,11 +2733,11 @@ func runDocsUpdateSectionStyle(cmd *cobra.Command, args []string) error {
 	var fields []string
 
 	if columnCount > 0 {
-		sectionStyle.ColumnProperties = []*docs.SectionColumnProperties{
-			{Width: &docs.Dimension{Magnitude: 0, Unit: "PT"}},
+		cols := make([]*docs.SectionColumnProperties, columnCount)
+		for i := range cols {
+			cols[i] = &docs.SectionColumnProperties{}
 		}
-		// Use columnSeparatorStyle as a workaround: the API uses columnProperties
-		// but the field mask uses the top-level fields
+		sectionStyle.ColumnProperties = cols
 		fields = append(fields, "columnProperties")
 	}
 
@@ -2709,15 +2750,21 @@ func runDocsUpdateSectionStyle(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("no section style options specified"))
 	}
 
+	tabQuery, _ := cmd.Flags().GetString("tab")
+	rng := &docs.Range{
+		StartIndex: from,
+		EndIndex:   to,
+	}
+	if tabQuery != "" {
+		rng.TabId = tabQuery
+	}
+
 	requests := []*docs.Request{
 		{
 			UpdateSectionStyle: &docs.UpdateSectionStyleRequest{
 				SectionStyle: sectionStyle,
-				Range: &docs.Range{
-					StartIndex: from,
-					EndIndex:   to,
-				},
-				Fields: strings.Join(fields, ","),
+				Range:        rng,
+				Fields:       strings.Join(fields, ","),
 			},
 		},
 	}
@@ -2745,6 +2792,7 @@ func runDocsUpdateTableCellStyle(cmd *cobra.Command, args []string) error {
 	colSpan, _ := cmd.Flags().GetInt64("col-span")
 	bgColor, _ := cmd.Flags().GetString("bg-color")
 	padding, _ := cmd.Flags().GetFloat64("padding")
+	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	cellStyle := &docs.TableCellStyle{}
 	var fields []string
@@ -2771,13 +2819,18 @@ func runDocsUpdateTableCellStyle(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("no cell style options specified; use --bg-color or --padding"))
 	}
 
+	loc := &docs.Location{Index: tableStart}
+	if tabQuery != "" {
+		loc.TabId = tabQuery
+	}
+
 	requests := []*docs.Request{
 		{
 			UpdateTableCellStyle: &docs.UpdateTableCellStyleRequest{
 				TableCellStyle: cellStyle,
 				TableRange: &docs.TableRange{
 					TableCellLocation: &docs.TableCellLocation{
-						TableStartLocation: &docs.Location{Index: tableStart},
+						TableStartLocation: loc,
 						RowIndex:           row,
 						ColumnIndex:        col,
 					},
@@ -2806,11 +2859,17 @@ func runDocsUpdateTableColProperties(cmd *cobra.Command, args []string) error {
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
 	colIndex, _ := cmd.Flags().GetInt64("col-index")
 	width, _ := cmd.Flags().GetFloat64("width")
+	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	loc := &docs.Location{Index: tableStart}
+	if tabQuery != "" {
+		loc.TabId = tabQuery
+	}
 
 	requests := []*docs.Request{
 		{
 			UpdateTableColumnProperties: &docs.UpdateTableColumnPropertiesRequest{
-				TableStartLocation: &docs.Location{Index: tableStart},
+				TableStartLocation: loc,
 				ColumnIndices:      []int64{colIndex},
 				TableColumnProperties: &docs.TableColumnProperties{
 					Width:     &docs.Dimension{Magnitude: width, Unit: "PT"},
@@ -2840,11 +2899,17 @@ func runDocsUpdateTableRowStyle(cmd *cobra.Command, args []string) error {
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
 	row, _ := cmd.Flags().GetInt64("row")
 	minHeight, _ := cmd.Flags().GetFloat64("min-height")
+	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	loc := &docs.Location{Index: tableStart}
+	if tabQuery != "" {
+		loc.TabId = tabQuery
+	}
 
 	requests := []*docs.Request{
 		{
 			UpdateTableRowStyle: &docs.UpdateTableRowStyleRequest{
-				TableStartLocation: &docs.Location{Index: tableStart},
+				TableStartLocation: loc,
 				RowIndices:         []int64{row},
 				TableRowStyle: &docs.TableRowStyle{
 					MinRowHeight: &docs.Dimension{Magnitude: minHeight, Unit: "PT"},
