@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.27.0** - Drive Activity API v2 command (query file/folder activity history).
+**v1.28.0** - Chat API cleanup: --max flag, missing fields, unified output.
 
 ## Roadmap
 
