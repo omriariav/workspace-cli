@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/omriariav/workspace-cli/internal/spacecache"
+	"github.com/spf13/cobra"
 	"google.golang.org/api/chat/v1"
 	"google.golang.org/api/option"
 )
@@ -2929,6 +2930,19 @@ func TestChatBuildCache_E2E(t *testing.T) {
 
 // TestChatFindGroup_CommandE2E exercises the find-group Cobra command end-to-end:
 // pre-populate cache at DefaultPath (via temp HOME) → execute cmd.RunE → verify JSON output.
+// newFindGroupCmd creates a fresh find-group command to avoid shared global state between tests.
+func newFindGroupCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "find-group",
+		Short: "Find group chats by members",
+		Long:  "Searches the local space-members cache for spaces containing all specified members.",
+		RunE:  runChatFindGroup,
+	}
+	cmd.Flags().String("members", "", "Comma-separated email addresses to search for (required)")
+	cmd.Flags().Bool("refresh", false, "Rebuild cache before searching")
+	return cmd
+}
+
 func TestChatFindGroup_CommandE2E(t *testing.T) {
 	// Use temp HOME so DefaultPath() resolves to our temp dir
 	tmpHome := t.TempDir()
@@ -2957,10 +2971,9 @@ func TestChatFindGroup_CommandE2E(t *testing.T) {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	// Execute the Cobra command's RunE directly
-	cmd := chatFindGroupCmd
+	// Fresh command instance to avoid flag leakage
+	cmd := newFindGroupCmd()
 	cmd.Flags().Set("members", "alice@example.com")
-	cmd.Flags().Set("refresh", "false")
 
 	// Capture stdout
 	oldStdout := os.Stdout
@@ -2988,9 +3001,21 @@ func TestChatFindGroup_CommandE2E(t *testing.T) {
 		t.Errorf("expected 2 matches for alice, got %d", count)
 	}
 
+	// Verify actual space IDs in results
 	matches := result["matches"].([]interface{})
 	if len(matches) != 2 {
-		t.Errorf("expected 2 match entries, got %d", len(matches))
+		t.Fatalf("expected 2 match entries, got %d", len(matches))
+	}
+	spaceIDs := make(map[string]bool)
+	for _, m := range matches {
+		entry := m.(map[string]interface{})
+		spaceIDs[entry["space"].(string)] = true
+	}
+	if !spaceIDs["spaces/GRP1"] {
+		t.Error("expected spaces/GRP1 in results")
+	}
+	if !spaceIDs["spaces/GRP2"] {
+		t.Error("expected spaces/GRP2 in results")
 	}
 }
 
@@ -3011,9 +3036,8 @@ func TestChatFindGroup_ErrorOnEmptyMembers(t *testing.T) {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	cmd := chatFindGroupCmd
+	cmd := newFindGroupCmd()
 	cmd.Flags().Set("members", "  ,  , ")
-	cmd.Flags().Set("refresh", "false")
 
 	// Capture stdout (PrintError writes error JSON to stdout)
 	oldStdout := os.Stdout
@@ -3043,9 +3067,8 @@ func TestChatFindGroup_NoCache(t *testing.T) {
 	os.Setenv("HOME", tmpHome)
 	defer os.Setenv("HOME", origHome)
 
-	cmd := chatFindGroupCmd
+	cmd := newFindGroupCmd()
 	cmd.Flags().Set("members", "alice@example.com")
-	cmd.Flags().Set("refresh", "false")
 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
