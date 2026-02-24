@@ -85,7 +85,7 @@ Every feature/fix follows this flow:
 
 ## Release Checklist
 
-Run these steps immediately after merging a PR. Do not skip any step.
+Run these steps only after all review feedback is resolved and the final code is on main. Do not start the version bump until the code is ready — post-bump fix commits create a messy history.
 
 ```
 1. git checkout main && git pull --rebase
