@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.29.0** - Google Docs full API coverage + tab support.
+**v1.30.0** - Chat DM/group creation, calendar timezone fix, message time filters, find-group with cache.
 
 ## Roadmap
 
