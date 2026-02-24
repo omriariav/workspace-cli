@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -611,11 +612,11 @@ func runCalendarCreate(cmd *cobra.Command, args []string) error {
 		Location:    location,
 		Start: &calendar.EventDateTime{
 			DateTime: startTime.Format(time.RFC3339),
-			TimeZone: startTime.Location().String(),
+			TimeZone: resolveIANA(startTime),
 		},
 		End: &calendar.EventDateTime{
 			DateTime: endTime.Format(time.RFC3339),
-			TimeZone: endTime.Location().String(),
+			TimeZone: resolveIANA(endTime),
 		},
 	}
 
@@ -694,7 +695,7 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 		}
 		patch.Start = &calendar.EventDateTime{
 			DateTime: startTime.Format(time.RFC3339),
-			TimeZone: startTime.Location().String(),
+			TimeZone: resolveIANA(startTime),
 		}
 	}
 	if cmd.Flags().Changed("end") {
@@ -705,7 +706,7 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 		}
 		patch.End = &calendar.EventDateTime{
 			DateTime: endTime.Format(time.RFC3339),
-			TimeZone: endTime.Location().String(),
+			TimeZone: resolveIANA(endTime),
 		}
 	}
 	if cmd.Flags().Changed("add-attendees") {
@@ -1897,4 +1898,26 @@ func parseTime(s string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("unrecognized time format: %s (use RFC3339 or 'YYYY-MM-DD HH:MM')", s)
+}
+
+// resolveIANA returns the IANA timezone name for a time.Time.
+// If the location is "Local", it attempts to resolve the real IANA name
+// from the TZ env var or /etc/localtime symlink. Returns "" as fallback,
+// which omits the TimeZone field and lets the RFC3339 offset suffice.
+func resolveIANA(t time.Time) string {
+	name := t.Location().String()
+	if name != "Local" {
+		return name
+	}
+	if tz := os.Getenv("TZ"); tz != "" {
+		return tz
+	}
+	if runtime.GOOS != "windows" {
+		if target, err := os.Readlink("/etc/localtime"); err == nil {
+			if idx := strings.Index(target, "zoneinfo/"); idx != -1 {
+				return target[idx+len("zoneinfo/"):]
+			}
+		}
+	}
+	return ""
 }

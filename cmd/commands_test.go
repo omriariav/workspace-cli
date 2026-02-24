@@ -540,6 +540,8 @@ func TestChatCommands(t *testing.T) {
 		{"download"},
 		{"events"},
 		{"event"},
+		{"build-cache"},
+		{"find-group"},
 	}
 
 	for _, tt := range tests {

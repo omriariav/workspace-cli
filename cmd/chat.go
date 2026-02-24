@@ -12,6 +12,7 @@ import (
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
+	"github.com/omriariav/workspace-cli/internal/spacecache"
 	"github.com/omriariav/workspace-cli/internal/usercache"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/chat/v1"
@@ -266,6 +267,22 @@ var chatEventCmd = &cobra.Command{
 	RunE:  runChatEvent,
 }
 
+// --- Space member cache ---
+
+var chatBuildCacheCmd = &cobra.Command{
+	Use:   "build-cache",
+	Short: "Build space-members cache",
+	Long:  "Iterates spaces, fetches members, resolves emails, and builds a local cache for fast lookup.",
+	RunE:  runChatBuildCache,
+}
+
+var chatFindGroupCmd = &cobra.Command{
+	Use:   "find-group",
+	Short: "Find group chats by members",
+	Long:  "Searches the local space-members cache for spaces containing all specified members.",
+	RunE:  runChatFindGroup,
+}
+
 func init() {
 	rootCmd.AddCommand(chatCmd)
 	chatCmd.AddCommand(chatListCmd)
@@ -297,6 +314,8 @@ func init() {
 	chatCmd.AddCommand(chatDownloadCmd)
 	chatCmd.AddCommand(chatEventsCmd)
 	chatCmd.AddCommand(chatEventCmd)
+	chatCmd.AddCommand(chatBuildCacheCmd)
+	chatCmd.AddCommand(chatFindGroupCmd)
 
 	// List flags
 	chatListCmd.Flags().String("filter", "", "Filter spaces (e.g. 'spaceType = \"SPACE\"')")
@@ -314,6 +333,8 @@ func init() {
 	chatMessagesCmd.Flags().String("filter", "", "Filter messages (e.g. 'createTime > \"2024-01-01T00:00:00Z\"')")
 	chatMessagesCmd.Flags().String("order-by", "", "Order messages (e.g. 'createTime DESC')")
 	chatMessagesCmd.Flags().Bool("show-deleted", false, "Include deleted messages in results")
+	chatMessagesCmd.Flags().String("after", "", "Show messages after this time (RFC3339, e.g. 2026-02-17T00:00:00Z)")
+	chatMessagesCmd.Flags().String("before", "", "Show messages before this time (RFC3339, e.g. 2026-02-20T00:00:00Z)")
 
 	// Send flags
 	chatSendCmd.Flags().String("space", "", "Space ID or name (required)")
@@ -358,10 +379,9 @@ func init() {
 	chatFindDmCmd.MarkFlagRequired("user")
 
 	// Setup space flags
-	chatSetupSpaceCmd.Flags().String("display-name", "", "Space display name (required)")
-	chatSetupSpaceCmd.Flags().String("type", "SPACE", "Space type: SPACE or GROUP_CHAT")
+	chatSetupSpaceCmd.Flags().String("display-name", "", "Space display name (required for SPACE type)")
+	chatSetupSpaceCmd.Flags().String("type", "SPACE", "Space type: SPACE, GROUP_CHAT, or DIRECT_MESSAGE")
 	chatSetupSpaceCmd.Flags().String("members", "", "Comma-separated user resource names")
-	chatSetupSpaceCmd.MarkFlagRequired("display-name")
 
 	// Add member flags
 	chatAddMemberCmd.Flags().String("user", "", "User resource name (required, e.g. users/123)")
@@ -388,6 +408,14 @@ func init() {
 	chatEventsCmd.Flags().Int64("page-size", 100, "Number of events per page")
 	chatEventsCmd.Flags().Int64("max", 0, "Maximum number of events to return (0 = all)")
 	chatEventsCmd.MarkFlagRequired("filter")
+
+	// Build cache flags
+	chatBuildCacheCmd.Flags().String("type", "GROUP_CHAT", "Space type to cache: GROUP_CHAT, SPACE, DIRECT_MESSAGE, or all")
+
+	// Find group flags
+	chatFindGroupCmd.Flags().String("members", "", "Comma-separated email addresses to search for (required)")
+	chatFindGroupCmd.Flags().Bool("refresh", false, "Rebuild cache before searching")
+	chatFindGroupCmd.MarkFlagRequired("members")
 }
 
 // ensureSpaceName normalizes a space identifier to its full resource name.
@@ -475,6 +503,23 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 	filter, _ := cmd.Flags().GetString("filter")
 	orderBy, _ := cmd.Flags().GetString("order-by")
 	showDeleted, _ := cmd.Flags().GetBool("show-deleted")
+	after, _ := cmd.Flags().GetString("after")
+	before, _ := cmd.Flags().GetString("before")
+
+	// Build filter from --after/--before flags, combining with --filter
+	var filterParts []string
+	if after != "" {
+		filterParts = append(filterParts, fmt.Sprintf(`createTime > "%s"`, after))
+	}
+	if before != "" {
+		filterParts = append(filterParts, fmt.Sprintf(`createTime < "%s"`, before))
+	}
+	if filter != "" {
+		filterParts = append(filterParts, filter)
+	}
+	if len(filterParts) > 0 {
+		filter = strings.Join(filterParts, " AND ")
+	}
 
 	if maxResults <= 0 {
 		return p.Print(map[string]interface{}{
@@ -1228,11 +1273,26 @@ func runChatSetupSpace(cmd *cobra.Command, args []string) error {
 	spaceType, _ := cmd.Flags().GetString("type")
 	membersStr, _ := cmd.Flags().GetString("members")
 
-	req := &chat.SetUpSpaceRequest{
-		Space: &chat.Space{
-			DisplayName: displayName,
-			SpaceType:   spaceType,
-		},
+	// Validate flags based on space type
+	switch spaceType {
+	case "DIRECT_MESSAGE", "GROUP_CHAT":
+		if membersStr == "" {
+			return p.PrintError(fmt.Errorf("--members is required for %s type", spaceType))
+		}
+	default: // SPACE
+		if displayName == "" {
+			return p.PrintError(fmt.Errorf("--display-name is required for %s type", spaceType))
+		}
+	}
+
+	req := &chat.SetUpSpaceRequest{}
+
+	// API rejects displayName for DM and GROUP_CHAT types
+	switch spaceType {
+	case "DIRECT_MESSAGE", "GROUP_CHAT":
+		req.Space = &chat.Space{SpaceType: spaceType}
+	default:
+		req.Space = &chat.Space{DisplayName: displayName, SpaceType: spaceType}
 	}
 
 	if membersStr != "" {
@@ -1677,4 +1737,118 @@ func mapSpaceEventToOutput(event *chat.SpaceEvent) map[string]interface{} {
 		"event_type": event.EventType,
 		"event_time": event.EventTime,
 	}
+}
+
+func runChatBuildCache(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	chatSvc, err := factory.Chat()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	peopleSvc, err := factory.People()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spaceType, _ := cmd.Flags().GetString("type")
+
+	start := time.Now()
+	cache, err := spacecache.Build(ctx, chatSvc, peopleSvc, spaceType, func(current, total int) {
+		fmt.Fprintf(os.Stderr, "\rScanning spaces... %d/%d", current, total)
+	})
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to build cache: %w", err))
+	}
+	fmt.Fprintln(os.Stderr) // newline after progress
+
+	cachePath := spacecache.DefaultPath()
+	if err := spacecache.Save(cachePath, cache); err != nil {
+		return p.PrintError(fmt.Errorf("failed to save cache: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"spaces_cached": len(cache.Spaces),
+		"cache_path":    cachePath,
+		"duration":      time.Since(start).Round(time.Second).String(),
+	})
+}
+
+func runChatFindGroup(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	membersStr, _ := cmd.Flags().GetString("members")
+	refresh, _ := cmd.Flags().GetBool("refresh")
+
+	cachePath := spacecache.DefaultPath()
+
+	if refresh {
+		factory, err := client.NewFactory(ctx)
+		if err != nil {
+			return p.PrintError(err)
+		}
+
+		chatSvc, err := factory.Chat()
+		if err != nil {
+			return p.PrintError(err)
+		}
+
+		peopleSvc, err := factory.People()
+		if err != nil {
+			return p.PrintError(err)
+		}
+
+		cache, err := spacecache.Build(ctx, chatSvc, peopleSvc, "GROUP_CHAT", func(current, total int) {
+			fmt.Fprintf(os.Stderr, "\rScanning spaces... %d/%d", current, total)
+		})
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to build cache: %w", err))
+		}
+		fmt.Fprintln(os.Stderr)
+
+		if err := spacecache.Save(cachePath, cache); err != nil {
+			return p.PrintError(fmt.Errorf("failed to save cache: %w", err))
+		}
+	}
+
+	cache, err := spacecache.Load(cachePath)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to load cache: %w", err))
+	}
+
+	if len(cache.Spaces) == 0 {
+		return p.PrintError(fmt.Errorf("no cache found — run 'gws chat build-cache' first"))
+	}
+
+	emails := strings.Split(membersStr, ",")
+	for i := range emails {
+		emails[i] = strings.TrimSpace(emails[i])
+	}
+
+	matches := spacecache.FindByMembers(cache, emails)
+
+	var results []map[string]interface{}
+	for name, entry := range matches {
+		results = append(results, map[string]interface{}{
+			"space":        name,
+			"type":         entry.Type,
+			"display_name": entry.DisplayName,
+			"members":      entry.Members,
+			"member_count": entry.MemberCount,
+		})
+	}
+
+	return p.Print(map[string]interface{}{
+		"matches": results,
+		"count":   len(results),
+		"query":   emails,
+	})
 }

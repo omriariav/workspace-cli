@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
+	"time"
 
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
@@ -1861,4 +1863,68 @@ func TestCalendarSettings_MockServer(t *testing.T) {
 	if len(resp.Items) != 3 {
 		t.Errorf("expected 3 settings, got %d", len(resp.Items))
 	}
+}
+
+func TestParseTime(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"RFC3339", "2026-02-24T09:45:00Z", false},
+		{"RFC3339 with offset", "2026-02-24T09:45:00+02:00", false},
+		{"datetime format", "2026-02-24 09:45", false},
+		{"date only", "2026-02-24", false},
+		{"invalid", "not-a-time", true},
+		{"partial", "2026-02", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseTime(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error for input %q", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error for input %q: %v", tt.input, err)
+				return
+			}
+			if result.IsZero() {
+				t.Errorf("expected non-zero time for input %q", tt.input)
+			}
+		})
+	}
+}
+
+func TestResolveIANA(t *testing.T) {
+	// Explicit timezone should pass through
+	loc, _ := time.LoadLocation("America/New_York")
+	nyTime := time.Date(2026, 2, 24, 9, 0, 0, 0, loc)
+	if got := resolveIANA(nyTime); got != "America/New_York" {
+		t.Errorf("expected 'America/New_York', got %q", got)
+	}
+
+	// UTC should pass through
+	utcTime := time.Date(2026, 2, 24, 9, 0, 0, 0, time.UTC)
+	if got := resolveIANA(utcTime); got != "UTC" {
+		t.Errorf("expected 'UTC', got %q", got)
+	}
+
+	// Local time with TZ env set should use TZ
+	t.Run("TZ env override", func(t *testing.T) {
+		orig := os.Getenv("TZ")
+		defer os.Setenv("TZ", orig)
+		os.Setenv("TZ", "Europe/London")
+
+		localTime := time.Date(2026, 2, 24, 9, 0, 0, 0, time.Local)
+		got := resolveIANA(localTime)
+		// On systems where Local resolves to a real name, it won't be "Local"
+		// and the TZ branch won't execute. Either way should not be "Local".
+		if got == "Local" {
+			t.Error("resolveIANA should not return 'Local'")
+		}
+	})
 }
