@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/omriariav/workspace-cli/internal/spacecache"
 	"google.golang.org/api/chat/v1"
 	"google.golang.org/api/option"
 )
@@ -2860,5 +2862,136 @@ func TestChatFindGroup_MockServerFlow(t *testing.T) {
 	// Verify GC2 has only 1 member
 	if len(spaces[1].members) != 1 {
 		t.Errorf("expected 1 member in GC2, got %d", len(spaces[1].members))
+	}
+}
+
+// TestChatBuildCache_E2E exercises the spacecache.Build pipeline from the cmd layer:
+// mock Chat API → Build → Save → Load → verify cache contents
+func TestChatBuildCache_E2E(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/spaces", func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]interface{}{
+			"spaces": []map[string]interface{}{
+				{"name": "spaces/GRP1", "displayName": "Dev Team", "spaceType": "GROUP_CHAT"},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	mux.HandleFunc("/v1/spaces/GRP1/members", func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]interface{}{
+			"memberships": []map[string]interface{}{
+				{"name": "spaces/GRP1/members/1", "member": map[string]interface{}{"name": "users/100", "type": "HUMAN"}},
+				{"name": "spaces/GRP1/members/2", "member": map[string]interface{}{"name": "users/200", "type": "HUMAN"}},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	chatSvc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	// Build cache via spacecache package (same code path as runChatBuildCache)
+	cache, err := spacecache.Build(context.Background(), chatSvc, nil, "GROUP_CHAT", nil)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	if len(cache.Spaces) != 1 {
+		t.Fatalf("expected 1 space, got %d", len(cache.Spaces))
+	}
+
+	entry, ok := cache.Spaces["spaces/GRP1"]
+	if !ok {
+		t.Fatal("expected spaces/GRP1 in cache")
+	}
+	if entry.DisplayName != "Dev Team" {
+		t.Errorf("expected display name 'Dev Team', got %q", entry.DisplayName)
+	}
+	if entry.MemberCount != 2 {
+		t.Errorf("expected 2 members, got %d", entry.MemberCount)
+	}
+
+	// Save and reload (same code path as runChatBuildCache save)
+	tmpPath := filepath.Join(t.TempDir(), "test-cache.json")
+	if err := spacecache.Save(tmpPath, cache); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := spacecache.Load(tmpPath)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if len(loaded.Spaces) != 1 {
+		t.Fatalf("expected 1 space after reload, got %d", len(loaded.Spaces))
+	}
+}
+
+// TestChatFindGroup_E2E exercises the find-group flow from the cmd layer:
+// pre-populate cache → FindByMembers → verify results
+func TestChatFindGroup_E2E(t *testing.T) {
+	// Pre-populate a cache (same structure as runChatBuildCache output)
+	cache := &spacecache.CacheData{
+		Spaces: map[string]spacecache.SpaceEntry{
+			"spaces/GRP1": {
+				Type:        "GROUP_CHAT",
+				DisplayName: "Project Alpha",
+				Members:     []string{"alice@example.com", "bob@example.com"},
+				MemberCount: 2,
+			},
+			"spaces/GRP2": {
+				Type:        "GROUP_CHAT",
+				DisplayName: "",
+				Members:     []string{"alice@example.com", "charlie@example.com"},
+				MemberCount: 2,
+			},
+			"spaces/GRP3": {
+				Type:        "GROUP_CHAT",
+				Members:     []string{"dave@example.com"},
+				MemberCount: 1,
+			},
+		},
+	}
+
+	tmpPath := filepath.Join(t.TempDir(), "test-cache.json")
+	if err := spacecache.Save(tmpPath, cache); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// Load and search (same code path as runChatFindGroup)
+	loaded, err := spacecache.Load(tmpPath)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// Search for alice — matches GRP1 and GRP2
+	matches := spacecache.FindByMembers(loaded, []string{"alice@example.com"})
+	if len(matches) != 2 {
+		t.Errorf("expected 2 matches for alice, got %d", len(matches))
+	}
+
+	// Search for alice + bob — only GRP1
+	matches = spacecache.FindByMembers(loaded, []string{"alice@example.com", "bob@example.com"})
+	if len(matches) != 1 {
+		t.Errorf("expected 1 match for alice+bob, got %d", len(matches))
+	}
+	if _, ok := matches["spaces/GRP1"]; !ok {
+		t.Error("expected spaces/GRP1")
+	}
+
+	// Search for dave — only GRP3
+	matches = spacecache.FindByMembers(loaded, []string{"dave@example.com"})
+	if len(matches) != 1 {
+		t.Errorf("expected 1 match for dave, got %d", len(matches))
+	}
+
+	// Search for unknown — no matches
+	matches = spacecache.FindByMembers(loaded, []string{"nobody@example.com"})
+	if len(matches) != 0 {
+		t.Errorf("expected 0 matches, got %d", len(matches))
 	}
 }

@@ -147,8 +147,8 @@ func Build(ctx context.Context, chatSvc *chat.Service, peopleSvc *people.Service
 			memberPageToken = mResp.NextPageToken
 		}
 
-		// Skip spaces where we couldn't fetch any members to avoid false negatives
-		if memberFetchFailed && len(members) == 0 {
+		// Skip spaces where member fetch failed to avoid partial/incorrect caches
+		if memberFetchFailed {
 			continue
 		}
 
