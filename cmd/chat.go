@@ -1273,6 +1273,13 @@ func runChatSetupSpace(cmd *cobra.Command, args []string) error {
 	spaceType, _ := cmd.Flags().GetString("type")
 	membersStr, _ := cmd.Flags().GetString("members")
 
+	// Validate type
+	switch spaceType {
+	case "SPACE", "DIRECT_MESSAGE", "GROUP_CHAT":
+	default:
+		return p.PrintError(fmt.Errorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType))
+	}
+
 	// Validate flags based on space type
 	switch spaceType {
 	case "DIRECT_MESSAGE", "GROUP_CHAT":
@@ -1759,6 +1766,12 @@ func runChatBuildCache(cmd *cobra.Command, args []string) error {
 	}
 
 	spaceType, _ := cmd.Flags().GetString("type")
+
+	switch spaceType {
+	case "GROUP_CHAT", "SPACE", "DIRECT_MESSAGE", "all":
+	default:
+		return p.PrintError(fmt.Errorf("invalid --type %q: must be GROUP_CHAT, SPACE, DIRECT_MESSAGE, or all", spaceType))
+	}
 
 	start := time.Now()
 	cache, err := spacecache.Build(ctx, chatSvc, peopleSvc, spaceType, func(current, total int) {

@@ -606,18 +606,21 @@ func runCalendarCreate(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("invalid end time: %w", err))
 	}
 
+	startDT := &calendar.EventDateTime{DateTime: startTime.Format(time.RFC3339)}
+	if tz := resolveIANA(startTime); tz != "" {
+		startDT.TimeZone = tz
+	}
+	endDT := &calendar.EventDateTime{DateTime: endTime.Format(time.RFC3339)}
+	if tz := resolveIANA(endTime); tz != "" {
+		endDT.TimeZone = tz
+	}
+
 	event := &calendar.Event{
 		Summary:     title,
 		Description: description,
 		Location:    location,
-		Start: &calendar.EventDateTime{
-			DateTime: startTime.Format(time.RFC3339),
-			TimeZone: resolveIANA(startTime),
-		},
-		End: &calendar.EventDateTime{
-			DateTime: endTime.Format(time.RFC3339),
-			TimeZone: resolveIANA(endTime),
-		},
+		Start:       startDT,
+		End:         endDT,
 	}
 
 	// Add attendees
@@ -693,10 +696,11 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return p.PrintError(fmt.Errorf("invalid start time: %w", err))
 		}
-		patch.Start = &calendar.EventDateTime{
-			DateTime: startTime.Format(time.RFC3339),
-			TimeZone: resolveIANA(startTime),
+		patchStart := &calendar.EventDateTime{DateTime: startTime.Format(time.RFC3339)}
+		if tz := resolveIANA(startTime); tz != "" {
+			patchStart.TimeZone = tz
 		}
+		patch.Start = patchStart
 	}
 	if cmd.Flags().Changed("end") {
 		endStr, _ := cmd.Flags().GetString("end")
@@ -704,10 +708,11 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return p.PrintError(fmt.Errorf("invalid end time: %w", err))
 		}
-		patch.End = &calendar.EventDateTime{
-			DateTime: endTime.Format(time.RFC3339),
-			TimeZone: resolveIANA(endTime),
+		patchEnd := &calendar.EventDateTime{DateTime: endTime.Format(time.RFC3339)}
+		if tz := resolveIANA(endTime); tz != "" {
+			patchEnd.TimeZone = tz
 		}
+		patch.End = patchEnd
 	}
 	if cmd.Flags().Changed("add-attendees") {
 		// For attendees we need the existing list, so fetch the event
