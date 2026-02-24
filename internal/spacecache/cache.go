@@ -128,6 +128,7 @@ func Build(ctx context.Context, chatSvc *chat.Service, peopleSvc *people.Service
 		// Fetch members for this space
 		var members []*chat.Membership
 		var memberPageToken string
+		memberFetchFailed := false
 		for {
 			mCall := chatSvc.Spaces.Members.List(space.Name).PageSize(100).Context(ctx)
 			if memberPageToken != "" {
@@ -136,13 +137,19 @@ func Build(ctx context.Context, chatSvc *chat.Service, peopleSvc *people.Service
 
 			mResp, err := mCall.Do()
 			if err != nil {
-				break // best-effort: skip space on error
+				memberFetchFailed = true
+				break
 			}
 			members = append(members, mResp.Memberships...)
 			if mResp.NextPageToken == "" {
 				break
 			}
 			memberPageToken = mResp.NextPageToken
+		}
+
+		// Skip spaces where we couldn't fetch any members to avoid false negatives
+		if memberFetchFailed && len(members) == 0 {
+			continue
 		}
 
 		// Resolve user IDs to emails

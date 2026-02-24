@@ -1841,9 +1841,15 @@ func runChatFindGroup(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("no cache found — run 'gws chat build-cache' first"))
 	}
 
-	emails := strings.Split(membersStr, ",")
-	for i := range emails {
-		emails[i] = strings.TrimSpace(emails[i])
+	var emails []string
+	for _, e := range strings.Split(membersStr, ",") {
+		e = strings.TrimSpace(e)
+		if e != "" {
+			emails = append(emails, e)
+		}
+	}
+	if len(emails) == 0 {
+		return p.PrintError(fmt.Errorf("--members must contain at least one email address"))
 	}
 
 	matches := spacecache.FindByMembers(cache, emails)
