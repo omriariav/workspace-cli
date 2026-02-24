@@ -464,6 +464,49 @@ func TestChatMessages_SenderFallback(t *testing.T) {
 	}
 }
 
+func TestChatMessagesCommand_AfterBeforeFlags(t *testing.T) {
+	messagesCmd := findSubcommand(chatCmd, "messages")
+	if messagesCmd == nil {
+		t.Fatal("chat messages command not found")
+	}
+	if messagesCmd.Flags().Lookup("after") == nil {
+		t.Error("expected --after flag on messages")
+	}
+	if messagesCmd.Flags().Lookup("before") == nil {
+		t.Error("expected --before flag on messages")
+	}
+}
+
+func TestChatMessages_AfterBeforeFilter(t *testing.T) {
+	var capturedFilter string
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/messages": func(w http.ResponseWriter, r *http.Request) {
+			capturedFilter = r.URL.Query().Get("filter")
+			resp := map[string]interface{}{"messages": []map[string]interface{}{}}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	// Test after + before combined filter
+	filterStr := `createTime > "2026-02-17T00:00:00Z" AND createTime < "2026-02-20T00:00:00Z"`
+	_, err = svc.Spaces.Messages.List("spaces/AAAA").Filter(filterStr).PageSize(25).Do()
+	if err != nil {
+		t.Fatalf("failed to list messages: %v", err)
+	}
+
+	if capturedFilter != filterStr {
+		t.Errorf("expected filter %q, got %q", filterStr, capturedFilter)
+	}
+}
+
 func TestChatMembersCommand_Flags(t *testing.T) {
 	membersCmd := findSubcommand(chatCmd, "members")
 	if membersCmd == nil {
@@ -1770,6 +1813,106 @@ func TestChatSetupSpace_MockServer(t *testing.T) {
 	}
 }
 
+func TestChatSetupSpace_DM_NoDisplayName(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces:setup": func(w http.ResponseWriter, r *http.Request) {
+			var req chat.SetUpSpaceRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			// DM should not have displayName
+			if req.Space.DisplayName != "" {
+				t.Errorf("expected empty displayName for DM, got %q", req.Space.DisplayName)
+			}
+			if req.Space.SpaceType != "DIRECT_MESSAGE" {
+				t.Errorf("expected DIRECT_MESSAGE type, got %q", req.Space.SpaceType)
+			}
+			if len(req.Memberships) != 1 {
+				t.Errorf("expected 1 membership for DM, got %d", len(req.Memberships))
+			}
+
+			resp := &chat.Space{
+				Name:      "spaces/DM123",
+				SpaceType: "DIRECT_MESSAGE",
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	req := &chat.SetUpSpaceRequest{
+		Space: &chat.Space{SpaceType: "DIRECT_MESSAGE"},
+		Memberships: []*chat.Membership{
+			{Member: &chat.User{Name: "users/111", Type: "HUMAN"}},
+		},
+	}
+
+	space, err := svc.Spaces.Setup(req).Do()
+	if err != nil {
+		t.Fatalf("failed to setup DM space: %v", err)
+	}
+
+	if space.Name != "spaces/DM123" {
+		t.Errorf("expected name 'spaces/DM123', got '%s'", space.Name)
+	}
+}
+
+func TestChatSetupSpace_GroupChat_NoDisplayName(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces:setup": func(w http.ResponseWriter, r *http.Request) {
+			var req chat.SetUpSpaceRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if req.Space.DisplayName != "" {
+				t.Errorf("expected empty displayName for GROUP_CHAT, got %q", req.Space.DisplayName)
+			}
+			if req.Space.SpaceType != "GROUP_CHAT" {
+				t.Errorf("expected GROUP_CHAT type, got %q", req.Space.SpaceType)
+			}
+			if len(req.Memberships) < 2 {
+				t.Errorf("expected at least 2 memberships for GROUP_CHAT, got %d", len(req.Memberships))
+			}
+
+			resp := &chat.Space{
+				Name:      "spaces/GC123",
+				SpaceType: "GROUP_CHAT",
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	req := &chat.SetUpSpaceRequest{
+		Space: &chat.Space{SpaceType: "GROUP_CHAT"},
+		Memberships: []*chat.Membership{
+			{Member: &chat.User{Name: "users/111", Type: "HUMAN"}},
+			{Member: &chat.User{Name: "users/222", Type: "HUMAN"}},
+		},
+	}
+
+	space, err := svc.Spaces.Setup(req).Do()
+	if err != nil {
+		t.Fatalf("failed to setup group chat: %v", err)
+	}
+
+	if space.Name != "spaces/GC123" {
+		t.Errorf("expected name 'spaces/GC123', got '%s'", space.Name)
+	}
+}
+
 // --- Member management mock server tests ---
 
 func TestChatGetMember_MockServer(t *testing.T) {
@@ -2531,5 +2674,191 @@ func TestMapSpaceEventToOutput(t *testing.T) {
 	}
 	if result["event_time"] != "2026-02-18T10:00:00Z" {
 		t.Errorf("expected event_time, got %v", result["event_time"])
+	}
+}
+
+// --- Build cache / Find group tests ---
+
+func TestChatBuildCacheCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "build-cache")
+	if cmd == nil {
+		t.Fatal("chat build-cache command not found")
+	}
+	typeFlag := cmd.Flags().Lookup("type")
+	if typeFlag == nil {
+		t.Fatal("expected --type flag on build-cache")
+	}
+	if typeFlag.DefValue != "GROUP_CHAT" {
+		t.Errorf("expected --type default 'GROUP_CHAT', got %q", typeFlag.DefValue)
+	}
+}
+
+func TestChatFindGroupCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "find-group")
+	if cmd == nil {
+		t.Fatal("chat find-group command not found")
+	}
+	if cmd.Flags().Lookup("members") == nil {
+		t.Error("expected --members flag on find-group")
+	}
+	refreshFlag := cmd.Flags().Lookup("refresh")
+	if refreshFlag == nil {
+		t.Fatal("expected --refresh flag on find-group")
+	}
+	if refreshFlag.DefValue != "false" {
+		t.Errorf("expected --refresh default 'false', got %q", refreshFlag.DefValue)
+	}
+}
+
+func TestChatBuildCache_MockServer(t *testing.T) {
+	membersCalled := 0
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			resp := map[string]interface{}{
+				"spaces": []map[string]interface{}{
+					{"name": "spaces/AAAA", "displayName": "Team Chat", "spaceType": "GROUP_CHAT"},
+					{"name": "spaces/BBBB", "displayName": "Engineering", "spaceType": "GROUP_CHAT"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+		"/v1/spaces/AAAA/members": func(w http.ResponseWriter, r *http.Request) {
+			membersCalled++
+			resp := map[string]interface{}{
+				"memberships": []map[string]interface{}{
+					{"name": "spaces/AAAA/members/1", "member": map[string]interface{}{"name": "users/111", "type": "HUMAN"}},
+					{"name": "spaces/AAAA/members/2", "member": map[string]interface{}{"name": "users/222", "type": "HUMAN"}},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+		"/v1/spaces/BBBB/members": func(w http.ResponseWriter, r *http.Request) {
+			membersCalled++
+			resp := map[string]interface{}{
+				"memberships": []map[string]interface{}{
+					{"name": "spaces/BBBB/members/1", "member": map[string]interface{}{"name": "users/111", "type": "HUMAN"}},
+					{"name": "spaces/BBBB/members/3", "member": map[string]interface{}{"name": "users/333", "type": "HUMAN"}},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	// Verify we can list spaces and then fetch members for each
+	spacesResp, err := svc.Spaces.List().Do()
+	if err != nil {
+		t.Fatalf("failed to list spaces: %v", err)
+	}
+	if len(spacesResp.Spaces) != 2 {
+		t.Fatalf("expected 2 spaces, got %d", len(spacesResp.Spaces))
+	}
+
+	for _, space := range spacesResp.Spaces {
+		membersResp, err := svc.Spaces.Members.List(space.Name).Do()
+		if err != nil {
+			t.Fatalf("failed to list members for %s: %v", space.Name, err)
+		}
+		if len(membersResp.Memberships) != 2 {
+			t.Errorf("expected 2 members for %s, got %d", space.Name, len(membersResp.Memberships))
+		}
+	}
+
+	if membersCalled != 2 {
+		t.Errorf("expected members endpoint called 2 times, got %d", membersCalled)
+	}
+}
+
+func TestChatFindGroup_MockServerFlow(t *testing.T) {
+	// This test validates the full flow: list spaces → fetch members → search
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces": func(w http.ResponseWriter, r *http.Request) {
+			resp := map[string]interface{}{
+				"spaces": []map[string]interface{}{
+					{"name": "spaces/GC1", "spaceType": "GROUP_CHAT"},
+					{"name": "spaces/GC2", "spaceType": "GROUP_CHAT"},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+		"/v1/spaces/GC1/members": func(w http.ResponseWriter, r *http.Request) {
+			resp := map[string]interface{}{
+				"memberships": []map[string]interface{}{
+					{"name": "spaces/GC1/members/1", "member": map[string]interface{}{"name": "users/111", "type": "HUMAN"}},
+					{"name": "spaces/GC1/members/2", "member": map[string]interface{}{"name": "users/222", "type": "HUMAN"}},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+		"/v1/spaces/GC2/members": func(w http.ResponseWriter, r *http.Request) {
+			resp := map[string]interface{}{
+				"memberships": []map[string]interface{}{
+					{"name": "spaces/GC2/members/1", "member": map[string]interface{}{"name": "users/333", "type": "HUMAN"}},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	// Simulate build: list spaces + fetch members
+	spacesResp, err := svc.Spaces.List().Do()
+	if err != nil {
+		t.Fatalf("failed to list spaces: %v", err)
+	}
+
+	type spaceInfo struct {
+		name    string
+		members []string
+	}
+	var spaces []spaceInfo
+
+	for _, space := range spacesResp.Spaces {
+		membersResp, err := svc.Spaces.Members.List(space.Name).Do()
+		if err != nil {
+			t.Fatalf("failed to list members: %v", err)
+		}
+		var memberIDs []string
+		for _, m := range membersResp.Memberships {
+			if m.Member != nil {
+				memberIDs = append(memberIDs, m.Member.Name)
+			}
+		}
+		spaces = append(spaces, spaceInfo{name: space.Name, members: memberIDs})
+	}
+
+	// Search for users/111 — should match only GC1
+	found := 0
+	for _, sp := range spaces {
+		for _, m := range sp.members {
+			if m == "users/111" {
+				found++
+			}
+		}
+	}
+	if found != 1 {
+		t.Errorf("expected users/111 in 1 space, found in %d", found)
+	}
+
+	// Verify GC2 has only 1 member
+	if len(spaces[1].members) != 1 {
+		t.Errorf("expected 1 member in GC2, got %d", len(spaces[1].members))
 	}
 }

@@ -1,6 +1,6 @@
 ---
 name: gws-chat
-version: 2.1.0
+version: 2.2.0
 description: "Google Chat CLI operations via gws. Use when users need to list/create/manage chat spaces, read/send messages, manage members, track read state, handle attachments, or monitor space events. Triggers: google chat, gchat, chat spaces, chat messages."
 metadata:
   short-description: Google Chat CLI operations
@@ -47,9 +47,15 @@ For initial setup, see the `gws-auth` skill.
 | Search spaces (admin only) | `gws chat search-spaces --query "Engineering"` |
 | Find DM with user | `gws chat find-dm --user users/123` |
 | Create space + members | `gws chat setup-space --display-name "Team" --members "users/1,users/2"` |
+| Create DM | `gws chat setup-space --type DIRECT_MESSAGE --members "users/123"` |
+| Create group chat | `gws chat setup-space --type GROUP_CHAT --members "users/1,users/2"` |
+| Build member cache | `gws chat build-cache` |
+| Find group by members | `gws chat find-group --members "user1@example.com,user2@example.com"` |
 | **Messages** | |
 | Read messages | `gws chat messages <space-id>` |
 | Read recent messages | `gws chat messages <space-id> --order-by "createTime DESC" --max 10` |
+| Messages after a date | `gws chat messages <space-id> --after "2026-02-17T00:00:00Z"` |
+| Messages in a range | `gws chat messages <space-id> --after "2026-02-17T00:00:00Z" --before "2026-02-20T00:00:00Z"` |
 | Send a message | `gws chat send --space <space-id> --text "Hello"` |
 | Get a single message | `gws chat get <message-name>` |
 | Update a message | `gws chat update <message-name> --text "New text"` |
@@ -98,9 +104,13 @@ gws chat messages <space-id> [flags]
 
 **Flags:**
 - `--max int` — Maximum number of messages to return (default 25)
+- `--after string` — Show messages after this time (RFC3339, e.g. `2026-02-17T00:00:00Z`)
+- `--before string` — Show messages before this time (RFC3339, e.g. `2026-02-20T00:00:00Z`)
 - `--filter string` — Filter messages (e.g. `createTime > "2024-01-01T00:00:00Z"`)
 - `--order-by string` — Order messages (e.g. `createTime DESC`)
 - `--show-deleted` — Include deleted messages in results
+
+`--after` and `--before` are convenience shortcuts for `--filter`. They combine with `--filter` using AND.
 
 ### members — List space members
 
@@ -240,12 +250,20 @@ gws chat find-dm --user users/123
 ### setup-space — Create space with members
 
 ```bash
+# Named space with members
 gws chat setup-space --display-name "Project Team" --members "users/111,users/222"
+
+# Direct message (no display-name needed)
+gws chat setup-space --type DIRECT_MESSAGE --members "users/111"
+
+# Group chat (no display-name needed)
+gws chat setup-space --type GROUP_CHAT --members "users/111,users/222"
 ```
 
 **Flags:**
-- `--display-name string` — Space display name (required)
-- `--members string` — Comma-separated user resource names
+- `--display-name string` — Space display name (required for SPACE type, forbidden for DM/GROUP_CHAT)
+- `--type string` — Space type: SPACE, GROUP_CHAT, or DIRECT_MESSAGE (default SPACE)
+- `--members string` — Comma-separated user resource names (required for DM/GROUP_CHAT)
 
 ### get-member — Get member details
 
@@ -345,6 +363,32 @@ gws chat events <space> --filter 'event_types:"google.workspace.chat.message.v1.
 gws chat event <event-name>
 ```
 
+### build-cache — Build space-members cache
+
+```bash
+gws chat build-cache                    # Cache GROUP_CHAT spaces (default)
+gws chat build-cache --type all         # Cache all space types
+gws chat build-cache --type SPACE       # Cache only SPACE type
+```
+
+Iterates spaces, fetches members, resolves emails via People API, and stores a local cache at `~/.config/gws/space-members-cache.json`. Progress is shown on stderr.
+
+**Flags:**
+- `--type string` — Space type to cache: GROUP_CHAT (default), SPACE, DIRECT_MESSAGE, or all
+
+### find-group — Find group chats by members
+
+```bash
+gws chat find-group --members "alice@example.com,bob@example.com"
+gws chat find-group --members "alice@example.com" --refresh
+```
+
+Searches the local space-members cache for spaces where ALL specified emails are members. Requires `build-cache` to be run first (or use `--refresh`).
+
+**Flags:**
+- `--members string` — Comma-separated email addresses to search for (required)
+- `--refresh` — Rebuild cache before searching
+
 ## Output Modes
 
 ```bash
@@ -359,23 +403,51 @@ gws chat list --format text    # Human-readable text
 |---------|--------------|
 | `--limit N` on messages | Use `--max N` — `--limit` does not exist |
 | `find-dm --user email@example.com` | Use `users/email@example.com` format — the `--user` flag requires a resource name prefix |
+| `setup-space --display-name "X" --type DIRECT_MESSAGE` | Omit `--display-name` for DM/GROUP_CHAT — API rejects it |
+| `find-group` without cache | Run `gws chat build-cache` first, or use `--refresh` |
 
 ## Recipe: Find a Group Chat by Member Names
 
-When you know the participants but not the space ID:
+**Preferred method** — use the member cache:
 
 ```bash
-# 1. List all spaces, filter to group chats, sort by recent activity
-gws chat list --format json | jq '.spaces | map(select(.type == "GROUP_CHAT")) | sort_by(.last_active_time // "") | reverse | .[:10]'
+# 1. Build the cache (one-time, or periodically)
+gws chat build-cache
+
+# 2. Search by email
+gws chat find-group --members "alice@example.com,bob@example.com"
+
+# 3. Get recent messages from the matched space
+gws chat messages spaces/AAAApznBCFA --after "2026-02-20T00:00:00Z" --order-by "createTime DESC" --max 25
+```
+
+**Alternative** — manual search (no cache needed):
+
+```bash
+# 1. List all spaces, filter to group chats
+gws chat list --format json | jq '.spaces | map(select(.type == "GROUP_CHAT")) | .[:10]'
 
 # 2. Check members of candidate spaces
 gws chat members spaces/AAAApznBCFA --format json
-
-# 3. Once found, get recent messages with a time filter
-gws chat messages spaces/AAAApznBCFA --filter 'createTime > "2026-02-20T00:00:00Z"' --order-by "createTime DESC" --max 25
 ```
 
 **Key insight**: DMs and group chats often have empty `display_name` — you must check `members` to identify participants.
+
+## Recipe: Create a DM via Contacts
+
+```bash
+# 1. Resolve email to user resource name
+gws contacts resolve --email "user@example.com"
+
+# 2. Check if DM already exists
+gws chat find-dm --user users/123456
+
+# 3. If not found, create the DM
+gws chat setup-space --type DIRECT_MESSAGE --members "users/123456"
+
+# 4. Send a message
+gws chat send --space spaces/DMXYZ --text "Hello!"
+```
 
 ## Tips for AI Agents
 

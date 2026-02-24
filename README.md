@@ -343,7 +343,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | Command | Description |
 |---------|-------------|
 | `gws chat list` | List spaces (`--filter`, `--page-size`) |
-| `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`) |
+| `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`, `--after`, `--before`) |
 | `gws chat members <space>` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`) |
 | `gws chat send` | Send message (`--space`, `--text`) |
 | `gws chat get <message>` | Get a single message |
@@ -358,7 +358,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat update-space <space>` | Update a space (`--display-name`, `--description`) |
 | `gws chat search-spaces` | Search spaces — admin only (`--query`, `--page-size`) |
 | `gws chat find-dm` | Find DM space with a user (`--user`) |
-| `gws chat setup-space` | Create space with initial members (`--display-name`, `--members`) |
+| `gws chat setup-space` | Create space with initial members (`--display-name`, `--type`, `--members`) |
 | `gws chat get-member <member>` | Get member details |
 | `gws chat add-member <space>` | Add a member (`--user`, `--role`) |
 | `gws chat remove-member <member>` | Remove a member |
@@ -371,6 +371,8 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat download <resource>` | Download media (`--output`) |
 | `gws chat events <space>` | List space events (`--filter`, `--page-size`) |
 | `gws chat event <event>` | Get event details |
+| `gws chat build-cache` | Build space-members cache (`--type`) |
+| `gws chat find-group` | Find group chats by member emails (`--members`, `--refresh`) |
 
 ### Forms
 

@@ -55,9 +55,13 @@ Usage: gws chat messages <space-id> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--max` | int | 25 | Maximum number of messages to return |
+| `--after` | string | | Show messages after this time (RFC3339) |
+| `--before` | string | | Show messages before this time (RFC3339) |
 | `--filter` | string | | Filter messages (e.g. `createTime > "2024-01-01T00:00:00Z"`) |
 | `--order-by` | string | | Order messages (e.g. `createTime DESC`) |
 | `--show-deleted` | bool | false | Include deleted messages in results |
+
+`--after` and `--before` are convenience flags that translate to filter expressions. They combine with `--filter` using AND.
 
 The space ID format is `spaces/AAAA1234` (get from `gws chat list`).
 
@@ -264,7 +268,7 @@ Usage: gws chat find-dm [flags]
 
 ## gws chat setup-space
 
-Creates a space and adds initial members in one call.
+Creates a space and adds initial members in one call. Supports SPACE, GROUP_CHAT, and DIRECT_MESSAGE types.
 
 ```
 Usage: gws chat setup-space [flags]
@@ -272,8 +276,9 @@ Usage: gws chat setup-space [flags]
 
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
-| `--display-name` | string | | Yes | Space display name |
-| `--members` | string | | No | Comma-separated user resource names |
+| `--display-name` | string | | For SPACE | Space display name (required for SPACE, forbidden for DM/GROUP_CHAT) |
+| `--type` | string | SPACE | No | Space type: SPACE, GROUP_CHAT, or DIRECT_MESSAGE |
+| `--members` | string | | For DM/GROUP_CHAT | Comma-separated user resource names |
 
 ---
 
@@ -446,3 +451,48 @@ Usage: gws chat event <event-name>
 - `name` — Event resource name
 - `event_type` — Event type string
 - `event_time` — When the event occurred (RFC-3339)
+
+---
+
+## gws chat build-cache
+
+Iterates spaces, fetches members, resolves emails, and builds a local cache for fast lookup.
+
+```
+Usage: gws chat build-cache [flags]
+```
+
+### Flags
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--type` | string | GROUP_CHAT | No | Space type to cache: GROUP_CHAT, SPACE, DIRECT_MESSAGE, or all |
+
+### Output Fields (JSON)
+
+- `spaces_cached` — Number of spaces cached
+- `cache_path` — Path to cache file
+- `duration` — Time taken to build cache
+
+---
+
+## gws chat find-group
+
+Searches the local space-members cache for spaces containing all specified members.
+
+```
+Usage: gws chat find-group [flags]
+```
+
+### Flags
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--members` | string | | Yes | Comma-separated email addresses to search for |
+| `--refresh` | bool | false | No | Rebuild cache before searching |
+
+### Output Fields (JSON)
+
+- `matches` — Array of matching spaces with `space`, `type`, `display_name`, `members`, `member_count`
+- `count` — Number of matching spaces
+- `query` — The email addresses searched for
