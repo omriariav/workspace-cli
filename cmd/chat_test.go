@@ -2865,8 +2865,8 @@ func TestChatFindGroup_MockServerFlow(t *testing.T) {
 	}
 }
 
-// TestChatBuildCache_E2E exercises the spacecache.Build pipeline from the cmd layer:
-// mock Chat API → Build → Save → Load → verify cache contents
+// TestChatBuildCache_E2E exercises the full build-cache pipeline with mock server,
+// then verifies the saved cache file contents.
 func TestChatBuildCache_E2E(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/spaces", func(w http.ResponseWriter, r *http.Request) {
@@ -2895,46 +2895,48 @@ func TestChatBuildCache_E2E(t *testing.T) {
 		t.Fatalf("failed to create chat service: %v", err)
 	}
 
-	// Build cache via spacecache package (same code path as runChatBuildCache)
+	// Build → Save → Load (mirrors runChatBuildCache internals)
 	cache, err := spacecache.Build(context.Background(), chatSvc, nil, "GROUP_CHAT", nil)
 	if err != nil {
 		t.Fatalf("Build failed: %v", err)
 	}
 
-	if len(cache.Spaces) != 1 {
-		t.Fatalf("expected 1 space, got %d", len(cache.Spaces))
+	tmpPath := filepath.Join(t.TempDir(), "test-cache.json")
+	if err := spacecache.Save(tmpPath, cache); err != nil {
+		t.Fatalf("Save failed: %v", err)
 	}
 
-	entry, ok := cache.Spaces["spaces/GRP1"]
-	if !ok {
-		t.Fatal("expected spaces/GRP1 in cache")
+	// Reload and verify (mirrors what find-group would read)
+	loaded, err := spacecache.Load(tmpPath)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
 	}
+
+	if len(loaded.Spaces) != 1 {
+		t.Fatalf("expected 1 space, got %d", len(loaded.Spaces))
+	}
+	entry := loaded.Spaces["spaces/GRP1"]
 	if entry.DisplayName != "Dev Team" {
 		t.Errorf("expected display name 'Dev Team', got %q", entry.DisplayName)
 	}
 	if entry.MemberCount != 2 {
 		t.Errorf("expected 2 members, got %d", entry.MemberCount)
 	}
-
-	// Save and reload (same code path as runChatBuildCache save)
-	tmpPath := filepath.Join(t.TempDir(), "test-cache.json")
-	if err := spacecache.Save(tmpPath, cache); err != nil {
-		t.Fatalf("Save failed: %v", err)
-	}
-
-	loaded, err := spacecache.Load(tmpPath)
-	if err != nil {
-		t.Fatalf("Load failed: %v", err)
-	}
-	if len(loaded.Spaces) != 1 {
-		t.Fatalf("expected 1 space after reload, got %d", len(loaded.Spaces))
+	if entry.Type != "GROUP_CHAT" {
+		t.Errorf("expected type GROUP_CHAT, got %q", entry.Type)
 	}
 }
 
-// TestChatFindGroup_E2E exercises the find-group flow from the cmd layer:
-// pre-populate cache → FindByMembers → verify results
-func TestChatFindGroup_E2E(t *testing.T) {
-	// Pre-populate a cache (same structure as runChatBuildCache output)
+// TestChatFindGroup_CommandE2E exercises the find-group Cobra command end-to-end:
+// pre-populate cache at DefaultPath (via temp HOME) → execute cmd.RunE → verify JSON output.
+func TestChatFindGroup_CommandE2E(t *testing.T) {
+	// Use temp HOME so DefaultPath() resolves to our temp dir
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	// Pre-populate cache at the default path
 	cache := &spacecache.CacheData{
 		Spaces: map[string]spacecache.SpaceEntry{
 			"spaces/GRP1": {
@@ -2949,49 +2951,118 @@ func TestChatFindGroup_E2E(t *testing.T) {
 				Members:     []string{"alice@example.com", "charlie@example.com"},
 				MemberCount: 2,
 			},
-			"spaces/GRP3": {
-				Type:        "GROUP_CHAT",
-				Members:     []string{"dave@example.com"},
-				MemberCount: 1,
-			},
 		},
 	}
-
-	tmpPath := filepath.Join(t.TempDir(), "test-cache.json")
-	if err := spacecache.Save(tmpPath, cache); err != nil {
+	if err := spacecache.Save(spacecache.DefaultPath(), cache); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	// Load and search (same code path as runChatFindGroup)
-	loaded, err := spacecache.Load(tmpPath)
+	// Execute the Cobra command's RunE directly
+	cmd := chatFindGroupCmd
+	cmd.Flags().Set("members", "alice@example.com")
+	cmd.Flags().Set("refresh", "false")
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := cmd.RunE(cmd, []string{})
+
+	w.Close()
+	os.Stdout = oldStdout
+
 	if err != nil {
-		t.Fatalf("Load failed: %v", err)
+		t.Fatalf("find-group command failed: %v", err)
 	}
 
-	// Search for alice — matches GRP1 and GRP2
-	matches := spacecache.FindByMembers(loaded, []string{"alice@example.com"})
+	output, _ := io.ReadAll(r)
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse output JSON: %v\noutput: %s", err, output)
+	}
+
+	count := int(result["count"].(float64))
+	if count != 2 {
+		t.Errorf("expected 2 matches for alice, got %d", count)
+	}
+
+	matches := result["matches"].([]interface{})
 	if len(matches) != 2 {
-		t.Errorf("expected 2 matches for alice, got %d", len(matches))
+		t.Errorf("expected 2 match entries, got %d", len(matches))
+	}
+}
+
+// TestChatFindGroup_ErrorOnEmptyMembers verifies --members with only blanks/commas outputs error JSON.
+func TestChatFindGroup_ErrorOnEmptyMembers(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	// Create a non-empty cache so we get past the "no cache" check
+	cache := &spacecache.CacheData{
+		Spaces: map[string]spacecache.SpaceEntry{
+			"spaces/X": {Type: "GROUP_CHAT", Members: []string{"a@b.com"}, MemberCount: 1},
+		},
+	}
+	if err := spacecache.Save(spacecache.DefaultPath(), cache); err != nil {
+		t.Fatalf("Save failed: %v", err)
 	}
 
-	// Search for alice + bob — only GRP1
-	matches = spacecache.FindByMembers(loaded, []string{"alice@example.com", "bob@example.com"})
-	if len(matches) != 1 {
-		t.Errorf("expected 1 match for alice+bob, got %d", len(matches))
-	}
-	if _, ok := matches["spaces/GRP1"]; !ok {
-		t.Error("expected spaces/GRP1")
-	}
+	cmd := chatFindGroupCmd
+	cmd.Flags().Set("members", "  ,  , ")
+	cmd.Flags().Set("refresh", "false")
 
-	// Search for dave — only GRP3
-	matches = spacecache.FindByMembers(loaded, []string{"dave@example.com"})
-	if len(matches) != 1 {
-		t.Errorf("expected 1 match for dave, got %d", len(matches))
-	}
+	// Capture stdout (PrintError writes error JSON to stdout)
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
 
-	// Search for unknown — no matches
-	matches = spacecache.FindByMembers(loaded, []string{"nobody@example.com"})
-	if len(matches) != 0 {
-		t.Errorf("expected 0 matches, got %d", len(matches))
+	cmd.RunE(cmd, []string{})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	output, _ := io.ReadAll(r)
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse output: %v\nraw: %s", err, output)
+	}
+	errMsg, ok := result["error"].(string)
+	if !ok || errMsg == "" {
+		t.Errorf("expected error message in output, got %v", result)
+	}
+}
+
+// TestChatFindGroup_NoCache verifies error output when no cache file exists.
+func TestChatFindGroup_NoCache(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	cmd := chatFindGroupCmd
+	cmd.Flags().Set("members", "alice@example.com")
+	cmd.Flags().Set("refresh", "false")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	cmd.RunE(cmd, []string{})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	output, _ := io.ReadAll(r)
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse output: %v\nraw: %s", err, output)
+	}
+	errMsg, ok := result["error"].(string)
+	if !ok || errMsg == "" {
+		t.Errorf("expected error message in output, got %v", result)
 	}
 }

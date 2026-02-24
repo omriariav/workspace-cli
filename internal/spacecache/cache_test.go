@@ -292,3 +292,53 @@ func TestBuild_SkipsSpaceOnMemberFetchFailure(t *testing.T) {
 		t.Error("expected spaces/OK to be in cache")
 	}
 }
+
+func TestBuild_SkipsSpaceOnPartialPageFailure(t *testing.T) {
+	// Page 1 succeeds with members + nextPageToken, page 2 fails.
+	// Space should still be skipped to avoid partial cache.
+	pageCount := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/spaces", func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]interface{}{
+			"spaces": []map[string]interface{}{
+				{"name": "spaces/PARTIAL", "spaceType": "GROUP_CHAT"},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	mux.HandleFunc("/v1/spaces/PARTIAL/members", func(w http.ResponseWriter, r *http.Request) {
+		pageCount++
+		if pageCount == 1 {
+			// Page 1: succeeds with members + nextPageToken
+			resp := map[string]interface{}{
+				"memberships": []map[string]interface{}{
+					{"name": "spaces/PARTIAL/members/1", "member": map[string]interface{}{"name": "users/111", "type": "HUMAN"}},
+				},
+				"nextPageToken": "page2",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		// Page 2: fails
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "internal"})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	chatSvc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	cache, err := Build(context.Background(), chatSvc, nil, "GROUP_CHAT", nil)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	// Space should be skipped entirely — partial member list is unreliable
+	if _, ok := cache.Spaces["spaces/PARTIAL"]; ok {
+		t.Error("expected spaces/PARTIAL to be skipped due to partial page failure")
+	}
+}
