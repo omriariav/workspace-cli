@@ -24,8 +24,8 @@ type SpaceEntry struct {
 
 // CacheData is the on-disk format for the space-members cache.
 type CacheData struct {
-	LastUpdated time.Time              `json:"last_updated"`
-	Spaces      map[string]SpaceEntry  `json:"spaces"`
+	LastUpdated time.Time             `json:"last_updated"`
+	Spaces      map[string]SpaceEntry `json:"spaces"`
 }
 
 // DefaultPath returns the default cache file location.
