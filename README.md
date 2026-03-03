@@ -178,7 +178,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | Command | Description |
 |---------|-------------|
 | `gws drive list` | List files (`--folder`, `--max`, `--order`) |
-| `gws drive search <query>` | Full-text search |
+| `gws drive search <query>` | Full-text search (or valid V3 query syntax with `--raw`) |
 | `gws drive info <id>` | File metadata, owners, permissions |
 | `gws drive download <id>` | Download file (`--output`); auto-exports Google formats |
 | `gws drive upload <file>` | Upload file (`--folder`, `--name`, `--mime-type`); supports Shared Drives |

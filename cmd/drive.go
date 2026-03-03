@@ -377,6 +377,7 @@ func init() {
 
 	// Search flags
 	driveSearchCmd.Flags().Int64("max", 50, "Maximum number of results")
+	driveSearchCmd.Flags().Bool("raw", false, "Treat <query> as a raw Drive query string")
 
 	// Download flags
 	driveDownloadCmd.Flags().String("output", "", "Output file path (default: original filename)")
@@ -643,9 +644,9 @@ func runDriveSearch(cmd *cobra.Command, args []string) error {
 
 	searchQuery := args[0]
 	maxResults, _ := cmd.Flags().GetInt64("max")
+	rawQuery, _ := cmd.Flags().GetBool("raw")
 
-	// Build query - search in name and full text
-	query := fmt.Sprintf("(name contains '%s' or fullText contains '%s') and trashed = false", searchQuery, searchQuery)
+	query := buildDriveSearchQuery(searchQuery, rawQuery)
 
 	resp, err := svc.Files.List().
 		Q(query).
@@ -680,8 +681,17 @@ func runDriveSearch(cmd *cobra.Command, args []string) error {
 	return p.Print(map[string]interface{}{
 		"files": results,
 		"count": len(results),
-		"query": searchQuery,
+		"query": query,
 	})
+}
+
+func buildDriveSearchQuery(searchQuery string, raw bool) string {
+	if raw {
+		return searchQuery
+	}
+
+	// Default behavior: search in name and full text.
+	return fmt.Sprintf("(name contains '%s' or fullText contains '%s') and trashed = false", searchQuery, searchQuery)
 }
 
 func runDriveDownload(cmd *cobra.Command, args []string) error {

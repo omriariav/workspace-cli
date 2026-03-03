@@ -115,11 +115,13 @@ gws drive search <query> [flags]
 
 **Flags:**
 - `--max int` — Maximum number of results (default 50)
+- `--raw` — Treat query as raw V3 query syntax 
 
 **Examples:**
 ```bash
 gws drive search "quarterly report"
 gws drive search "budget 2024" --max 10
+gws drive search "mimeType='application/pdf' and trashed=false" --raw
 ```
 
 ### info — Get file info
