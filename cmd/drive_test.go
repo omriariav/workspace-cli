@@ -59,6 +59,37 @@ func TestDriveCommentsCommand_Help(t *testing.T) {
 	}
 }
 
+func TestBuildDriveSearchQuery(t *testing.T) {
+	tests := []struct {
+		name        string
+		searchQuery string
+		raw         bool
+		want        string
+	}{
+		{
+			name:        "raw query passthrough",
+			searchQuery: "mimeType='application/pdf' and trashed=false",
+			raw:         true,
+			want:        "mimeType='application/pdf' and trashed=false",
+		},
+		{
+			name:        "default query wrapping",
+			searchQuery: "report",
+			raw:         false,
+			want:        "(name contains 'report' or fullText contains 'report') and trashed = false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildDriveSearchQuery(tt.searchQuery, tt.raw)
+			if got != tt.want {
+				t.Fatalf("buildDriveSearchQuery(%q, %v) = %q, want %q", tt.searchQuery, tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
 // mockDriveServer creates a test server that mocks Drive API responses
 func mockDriveServer(t *testing.T, fileResp *drive.File, commentsResp *drive.CommentList) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
