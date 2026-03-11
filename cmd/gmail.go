@@ -614,6 +614,22 @@ func runGmailRead(cmd *cobra.Command, args []string) error {
 	return p.Print(result)
 }
 
+// encodeRFC2047 encodes a header value using RFC 2047 Base64 encoding
+// if it contains non-ASCII characters. ASCII-only values are returned as-is.
+func encodeRFC2047(s string) string {
+	needsEncoding := false
+	for _, r := range s {
+		if r > 127 {
+			needsEncoding = true
+			break
+		}
+	}
+	if !needsEncoding {
+		return s
+	}
+	return "=?UTF-8?B?" + base64.StdEncoding.EncodeToString([]byte(s)) + "?="
+}
+
 // buildMIMEMessage constructs an RFC 2822 message. When attachmentPaths is empty,
 // it returns a simple text/plain message (preserving existing behavior). When
 // attachments are provided, it builds a multipart/mixed MIME message.
@@ -621,11 +637,17 @@ func buildMIMEMessage(headers map[string]string, body string, attachmentPaths []
 	// Order matters for headers; use a slice for deterministic output.
 	headerOrder := []string{"To", "Cc", "Bcc", "Subject", "In-Reply-To", "References"}
 
+	// Headers that may contain non-ASCII and need RFC 2047 encoding.
+	encodeHeaders := map[string]bool{"Subject": true}
+
 	if len(attachmentPaths) == 0 {
 		// Simple text/plain message — identical to previous behavior.
 		var buf bytes.Buffer
 		for _, key := range headerOrder {
 			if val, ok := headers[key]; ok && val != "" {
+				if encodeHeaders[key] {
+					val = encodeRFC2047(val)
+				}
 				buf.WriteString(fmt.Sprintf("%s: %s\r\n", key, val))
 			}
 		}
@@ -647,6 +669,9 @@ func buildMIMEMessage(headers map[string]string, body string, attachmentPaths []
 	// Write top-level headers.
 	for _, key := range headerOrder {
 		if val, ok := headers[key]; ok && val != "" {
+			if encodeHeaders[key] {
+				val = encodeRFC2047(val)
+			}
 			buf.WriteString(fmt.Sprintf("%s: %s\r\n", key, val))
 		}
 	}
