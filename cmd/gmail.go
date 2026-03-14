@@ -1,11 +1,16 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"mime"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -40,8 +45,13 @@ var gmailReadCmd = &cobra.Command{
 var gmailSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send an email",
-	Long:  "Sends a new email message.",
-	RunE:  runGmailSend,
+	Long: `Sends a new email message. Supports file attachments via the --attachment flag.
+
+Examples:
+  gws gmail send --to user@example.com --subject "Hello" --body "Hi there"
+  gws gmail send --to user@example.com --subject "Report" --body "See attached" --attachment "/tmp/report.pdf"
+  gws gmail send --to user@example.com --subject "Files" --body "Multiple files" --attachment /tmp/a.pdf --attachment /tmp/b.png`,
+	RunE: runGmailSend,
 }
 
 var gmailLabelsCmd = &cobra.Command{
@@ -248,8 +258,12 @@ var gmailDraftCmd = &cobra.Command{
 var gmailCreateDraftCmd = &cobra.Command{
 	Use:   "create-draft",
 	Short: "Create a draft",
-	Long:  "Creates a new Gmail draft message.",
-	RunE:  runGmailCreateDraft,
+	Long: `Creates a new Gmail draft message. Supports file attachments via the --attachment flag.
+
+Examples:
+  gws gmail create-draft --to user@example.com --subject "Draft" --body "Content"
+  gws gmail create-draft --to user@example.com --subject "Draft" --body "See attached" --attachment "/tmp/file.pdf"`,
+	RunE: runGmailCreateDraft,
 }
 
 var gmailUpdateDraftCmd = &cobra.Command{
@@ -308,6 +322,7 @@ func init() {
 	gmailSendCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
 	gmailSendCmd.Flags().String("thread-id", "", "Thread ID to reply in")
 	gmailSendCmd.Flags().String("reply-to-message-id", "", "Message ID to reply to (sets In-Reply-To/References headers)")
+	gmailSendCmd.Flags().StringArray("attachment", nil, "File path to attach (repeatable: --attachment a.pdf --attachment b.pdf)")
 	gmailSendCmd.MarkFlagRequired("to")
 	gmailSendCmd.MarkFlagRequired("subject")
 	gmailSendCmd.MarkFlagRequired("body")
@@ -389,6 +404,7 @@ func init() {
 	gmailCreateDraftCmd.Flags().String("cc", "", "CC recipients (comma-separated)")
 	gmailCreateDraftCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
 	gmailCreateDraftCmd.Flags().String("thread-id", "", "Thread ID for reply draft")
+	gmailCreateDraftCmd.Flags().StringArray("attachment", nil, "File path to attach (repeatable: --attachment a.pdf --attachment b.pdf)")
 	gmailCreateDraftCmd.MarkFlagRequired("to")
 
 	// Update draft flags
@@ -598,6 +614,142 @@ func runGmailRead(cmd *cobra.Command, args []string) error {
 	return p.Print(result)
 }
 
+// encodeRFC2047 encodes a header value using RFC 2047 Base64 encoding
+// if it contains non-ASCII characters. ASCII-only values are returned as-is.
+func encodeRFC2047(s string) string {
+	needsEncoding := false
+	for _, r := range s {
+		if r > 127 {
+			needsEncoding = true
+			break
+		}
+	}
+	if !needsEncoding {
+		return s
+	}
+	return "=?UTF-8?B?" + base64.StdEncoding.EncodeToString([]byte(s)) + "?="
+}
+
+// buildMIMEMessage constructs an RFC 2822 message. When attachmentPaths is empty,
+// it returns a simple text/plain message (preserving existing behavior). When
+// attachments are provided, it builds a multipart/mixed MIME message.
+func buildMIMEMessage(headers map[string]string, body string, attachmentPaths []string) ([]byte, error) {
+	// Order matters for headers; use a slice for deterministic output.
+	headerOrder := []string{"To", "Cc", "Bcc", "Subject", "In-Reply-To", "References"}
+
+	// Headers that may contain non-ASCII and need RFC 2047 encoding.
+	encodeHeaders := map[string]bool{"Subject": true}
+
+	if len(attachmentPaths) == 0 {
+		// Simple text/plain message — identical to previous behavior.
+		var buf bytes.Buffer
+		for _, key := range headerOrder {
+			if val, ok := headers[key]; ok && val != "" {
+				if encodeHeaders[key] {
+					val = encodeRFC2047(val)
+				}
+				buf.WriteString(fmt.Sprintf("%s: %s\r\n", key, val))
+			}
+		}
+		buf.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+		buf.WriteString("\r\n")
+		buf.WriteString(body)
+		return buf.Bytes(), nil
+	}
+
+	// Generate a unique boundary using crypto/rand.
+	randBytes := make([]byte, 16)
+	if _, err := rand.Read(randBytes); err != nil {
+		return nil, fmt.Errorf("failed to generate MIME boundary: %w", err)
+	}
+	boundary := hex.EncodeToString(randBytes)
+
+	var buf bytes.Buffer
+
+	// Write top-level headers.
+	for _, key := range headerOrder {
+		if val, ok := headers[key]; ok && val != "" {
+			if encodeHeaders[key] {
+				val = encodeRFC2047(val)
+			}
+			buf.WriteString(fmt.Sprintf("%s: %s\r\n", key, val))
+		}
+	}
+	buf.WriteString("MIME-Version: 1.0\r\n")
+	buf.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"%s\"\r\n", boundary))
+	buf.WriteString("\r\n")
+
+	// Text body part.
+	buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	buf.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	buf.WriteString("\r\n")
+	buf.WriteString(body)
+	buf.WriteString("\r\n")
+
+	// Attachment parts.
+	for _, filePath := range attachmentPaths {
+		filePath = strings.TrimSpace(filePath)
+		if filePath == "" {
+			continue
+		}
+
+		// Check file size before reading (Gmail API limit is 25MB for the whole message).
+		info, err := os.Stat(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to stat attachment %q: %w", filePath, err)
+		}
+		const maxAttachmentSize = 25 * 1024 * 1024 // 25 MB
+		if info.Size() > maxAttachmentSize {
+			return nil, fmt.Errorf("attachment %q is %d bytes, exceeds 25 MB limit", filePath, info.Size())
+		}
+
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read attachment %q: %w", filePath, err)
+		}
+
+		filename := filepath.Base(filePath)
+		ext := filepath.Ext(filename)
+		contentType := mime.TypeByExtension(ext)
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+
+		// Sanitize filename for use in MIME headers to prevent header injection.
+		safeFilename := strings.Map(func(r rune) rune {
+			if r == '"' || r == '\\' || r == '\r' || r == '\n' {
+				return '_'
+			}
+			return r
+		}, filename)
+
+		// Encode non-ASCII filenames per RFC 2047.
+		encodedFilename := mime.BEncoding.Encode("UTF-8", safeFilename)
+
+		buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+		buf.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", contentType, encodedFilename))
+		buf.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=\"%s\"\r\n", encodedFilename))
+		buf.WriteString("Content-Transfer-Encoding: base64\r\n")
+		buf.WriteString("\r\n")
+
+		// Write base64-encoded data in 76-char lines per RFC 2045.
+		encoded := base64.StdEncoding.EncodeToString(data)
+		for i := 0; i < len(encoded); i += 76 {
+			end := i + 76
+			if end > len(encoded) {
+				end = len(encoded)
+			}
+			buf.WriteString(encoded[i:end])
+			buf.WriteString("\r\n")
+		}
+	}
+
+	// Closing boundary.
+	buf.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
+
+	return buf.Bytes(), nil
+}
+
 func runGmailSend(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
 	ctx := context.Background()
@@ -641,30 +793,36 @@ func runGmailSend(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Parse attachment paths
+	attachmentPaths, _ := cmd.Flags().GetStringArray("attachment")
+
 	// Build RFC 2822 message
-	var msgBuilder strings.Builder
-	msgBuilder.WriteString(fmt.Sprintf("To: %s\r\n", to))
+	msgHeaders := map[string]string{
+		"To":      to,
+		"Subject": subject,
+	}
 	if cc != "" {
-		msgBuilder.WriteString(fmt.Sprintf("Cc: %s\r\n", cc))
+		msgHeaders["Cc"] = cc
 	}
 	if bcc != "" {
-		msgBuilder.WriteString(fmt.Sprintf("Bcc: %s\r\n", bcc))
+		msgHeaders["Bcc"] = bcc
 	}
-	msgBuilder.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
 	if inReplyTo != "" {
-		msgBuilder.WriteString(fmt.Sprintf("In-Reply-To: %s\r\n", inReplyTo))
+		msgHeaders["In-Reply-To"] = inReplyTo
 		references := inReplyTo
 		if origReferences != "" {
 			references = origReferences + " " + inReplyTo
 		}
-		msgBuilder.WriteString(fmt.Sprintf("References: %s\r\n", references))
+		msgHeaders["References"] = references
 	}
-	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
-	msgBuilder.WriteString("\r\n")
-	msgBuilder.WriteString(body)
+
+	rawBytes, err := buildMIMEMessage(msgHeaders, body, attachmentPaths)
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	// Encode as base64url
-	raw := base64.URLEncoding.EncodeToString([]byte(msgBuilder.String()))
+	raw := base64.URLEncoding.EncodeToString(rawBytes)
 
 	msg := &gmail.Message{
 		Raw: raw,
@@ -1752,25 +1910,29 @@ func runGmailCreateDraft(cmd *cobra.Command, args []string) error {
 	bcc, _ := cmd.Flags().GetString("bcc")
 	threadID, _ := cmd.Flags().GetString("thread-id")
 
+	// Parse attachment paths
+	attachmentPaths, _ := cmd.Flags().GetStringArray("attachment")
+
 	// Build RFC 2822 message
-	var msgBuilder strings.Builder
-	msgBuilder.WriteString(fmt.Sprintf("To: %s\r\n", to))
+	msgHeaders := map[string]string{
+		"To": to,
+	}
 	if cc != "" {
-		msgBuilder.WriteString(fmt.Sprintf("Cc: %s\r\n", cc))
+		msgHeaders["Cc"] = cc
 	}
 	if bcc != "" {
-		msgBuilder.WriteString(fmt.Sprintf("Bcc: %s\r\n", bcc))
+		msgHeaders["Bcc"] = bcc
 	}
 	if subject != "" {
-		msgBuilder.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
-	}
-	msgBuilder.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
-	msgBuilder.WriteString("\r\n")
-	if body != "" {
-		msgBuilder.WriteString(body)
+		msgHeaders["Subject"] = subject
 	}
 
-	raw := base64.URLEncoding.EncodeToString([]byte(msgBuilder.String()))
+	rawBytes, err := buildMIMEMessage(msgHeaders, body, attachmentPaths)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	raw := base64.URLEncoding.EncodeToString(rawBytes)
 
 	msg := &gmail.Message{Raw: raw}
 	if threadID != "" {
