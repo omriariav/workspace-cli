@@ -705,9 +705,17 @@ func buildMIMEMessage(headers map[string]string, body string, attachmentPaths []
 			contentType = "application/octet-stream"
 		}
 
+		// Sanitize filename for use in MIME headers to prevent header injection.
+		safeFilename := strings.Map(func(r rune) rune {
+			if r == '"' || r == '\\' || r == '\r' || r == '\n' {
+				return '_'
+			}
+			return r
+		}, filename)
+
 		buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
-		buf.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", contentType, filename))
-		buf.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=\"%s\"\r\n", filename))
+		buf.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", contentType, safeFilename))
+		buf.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=\"%s\"\r\n", safeFilename))
 		buf.WriteString("Content-Transfer-Encoding: base64\r\n")
 		buf.WriteString("\r\n")
 

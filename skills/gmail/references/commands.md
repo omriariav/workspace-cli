@@ -122,6 +122,7 @@ Usage: gws gmail send [flags]
 | `--bcc` | string | | No | BCC recipients (comma-separated) |
 | `--thread-id` | string | | No | Thread ID to reply in |
 | `--reply-to-message-id` | string | | No | Message ID to reply to (sets In-Reply-To/References headers) |
+| `--attachment` | string | | No | File paths to attach (comma-separated) |
 
 ---
 
@@ -486,6 +487,7 @@ Usage: gws gmail create-draft [flags]
 | `--cc` | string | | No | CC recipients (comma-separated) |
 | `--bcc` | string | | No | BCC recipients (comma-separated) |
 | `--thread-id` | string | | No | Thread ID for reply draft |
+| `--attachment` | string | | No | File paths to attach (comma-separated) |
 
 ---
 
