@@ -50,7 +50,7 @@ var gmailSendCmd = &cobra.Command{
 Examples:
   gws gmail send --to user@example.com --subject "Hello" --body "Hi there"
   gws gmail send --to user@example.com --subject "Report" --body "See attached" --attachment "/tmp/report.pdf"
-  gws gmail send --to user@example.com --subject "Files" --body "Multiple files" --attachment "/tmp/a.pdf,/tmp/b.png"`,
+  gws gmail send --to user@example.com --subject "Files" --body "Multiple files" --attachment /tmp/a.pdf --attachment /tmp/b.png`,
 	RunE: runGmailSend,
 }
 
@@ -322,7 +322,7 @@ func init() {
 	gmailSendCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
 	gmailSendCmd.Flags().String("thread-id", "", "Thread ID to reply in")
 	gmailSendCmd.Flags().String("reply-to-message-id", "", "Message ID to reply to (sets In-Reply-To/References headers)")
-	gmailSendCmd.Flags().String("attachment", "", "File paths to attach (comma-separated)")
+	gmailSendCmd.Flags().StringArray("attachment", nil, "File path to attach (repeatable: --attachment a.pdf --attachment b.pdf)")
 	gmailSendCmd.MarkFlagRequired("to")
 	gmailSendCmd.MarkFlagRequired("subject")
 	gmailSendCmd.MarkFlagRequired("body")
@@ -404,7 +404,7 @@ func init() {
 	gmailCreateDraftCmd.Flags().String("cc", "", "CC recipients (comma-separated)")
 	gmailCreateDraftCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
 	gmailCreateDraftCmd.Flags().String("thread-id", "", "Thread ID for reply draft")
-	gmailCreateDraftCmd.Flags().String("attachment", "", "File paths to attach (comma-separated)")
+	gmailCreateDraftCmd.Flags().StringArray("attachment", nil, "File path to attach (repeatable: --attachment a.pdf --attachment b.pdf)")
 	gmailCreateDraftCmd.MarkFlagRequired("to")
 
 	// Update draft flags
@@ -693,6 +693,16 @@ func buildMIMEMessage(headers map[string]string, body string, attachmentPaths []
 			continue
 		}
 
+		// Check file size before reading (Gmail API limit is 25MB for the whole message).
+		info, err := os.Stat(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to stat attachment %q: %w", filePath, err)
+		}
+		const maxAttachmentSize = 25 * 1024 * 1024 // 25 MB
+		if info.Size() > maxAttachmentSize {
+			return nil, fmt.Errorf("attachment %q is %d bytes, exceeds 25 MB limit", filePath, info.Size())
+		}
+
 		data, err := os.ReadFile(filePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read attachment %q: %w", filePath, err)
@@ -713,9 +723,12 @@ func buildMIMEMessage(headers map[string]string, body string, attachmentPaths []
 			return r
 		}, filename)
 
+		// Encode non-ASCII filenames per RFC 2047.
+		encodedFilename := mime.BEncoding.Encode("UTF-8", safeFilename)
+
 		buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
-		buf.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", contentType, safeFilename))
-		buf.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=\"%s\"\r\n", safeFilename))
+		buf.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", contentType, encodedFilename))
+		buf.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=\"%s\"\r\n", encodedFilename))
 		buf.WriteString("Content-Transfer-Encoding: base64\r\n")
 		buf.WriteString("\r\n")
 
@@ -781,11 +794,7 @@ func runGmailSend(cmd *cobra.Command, args []string) error {
 	}
 
 	// Parse attachment paths
-	attachmentStr, _ := cmd.Flags().GetString("attachment")
-	var attachmentPaths []string
-	if attachmentStr != "" {
-		attachmentPaths = strings.Split(attachmentStr, ",")
-	}
+	attachmentPaths, _ := cmd.Flags().GetStringArray("attachment")
 
 	// Build RFC 2822 message
 	msgHeaders := map[string]string{
@@ -1902,11 +1911,7 @@ func runGmailCreateDraft(cmd *cobra.Command, args []string) error {
 	threadID, _ := cmd.Flags().GetString("thread-id")
 
 	// Parse attachment paths
-	attachmentStr, _ := cmd.Flags().GetString("attachment")
-	var attachmentPaths []string
-	if attachmentStr != "" {
-		attachmentPaths = strings.Split(attachmentStr, ",")
-	}
+	attachmentPaths, _ := cmd.Flags().GetStringArray("attachment")
 
 	// Build RFC 2822 message
 	msgHeaders := map[string]string{

@@ -125,13 +125,14 @@ gws gmail send --to <email> --subject <subject> --body <body> [flags]
 - `--body string` — Email body (required)
 - `--cc string` — CC recipients (comma-separated)
 - `--bcc string` — BCC recipients (comma-separated)
-- `--attachment string` — File paths to attach (comma-separated)
+- `--attachment string` — File path to attach (repeatable)
 
 **Examples:**
 ```bash
 gws gmail send --to user@example.com --subject "Meeting" --body "Let's meet at 3pm"
 gws gmail send --to user@example.com --cc team@example.com --subject "Update" --body "Status update"
-gws gmail send --to user@example.com --subject "Report" --body "See attached" --attachment "/tmp/report.pdf"
+gws gmail send --to user@example.com --subject "Report" --body "See attached" --attachment /tmp/report.pdf
+gws gmail send --to user@example.com --subject "Files" --body "Multiple" --attachment /tmp/a.pdf --attachment /tmp/b.png
 ```
 
 ### labels — List all labels
@@ -380,13 +381,13 @@ gws gmail create-draft --to <email> [flags]
 - `--cc string` — CC recipients (comma-separated)
 - `--bcc string` — BCC recipients (comma-separated)
 - `--thread-id string` — Thread ID for reply draft
-- `--attachment string` — File paths to attach (comma-separated)
+- `--attachment string` — File path to attach (repeatable)
 
 **Examples:**
 ```bash
 gws gmail create-draft --to user@example.com --subject "Draft" --body "Work in progress"
 gws gmail create-draft --to user@example.com --subject "Re: Topic" --thread-id thread123
-gws gmail create-draft --to user@example.com --subject "Draft" --body "See attached" --attachment "/tmp/file.pdf"
+gws gmail create-draft --to user@example.com --subject "Draft" --body "See attached" --attachment /tmp/file.pdf
 ```
 
 ### update-draft — Update a draft

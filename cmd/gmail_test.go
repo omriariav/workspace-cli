@@ -2517,7 +2517,7 @@ func TestBuildMIMEMessage(t *testing.T) {
 		if err == nil {
 			t.Error("expected error for missing file")
 		}
-		if !strings.Contains(err.Error(), "failed to read attachment") {
+		if !strings.Contains(err.Error(), "failed to stat attachment") {
 			t.Errorf("unexpected error message: %v", err)
 		}
 	})
