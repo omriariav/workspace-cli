@@ -97,7 +97,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws gmail list` | List threads with `thread_id` and `message_id` (`--max`, `--query`, `--all`, `--include-labels`) |
 | `gws gmail read <id>` | Read message body and headers |
 | `gws gmail thread <id>` | Read full thread conversation |
-| `gws gmail send` | Send email (`--to`, `--subject`, `--body`, `--cc`, `--bcc`, `--thread-id`, `--reply-to-message-id`) |
+| `gws gmail send` | Send email (`--to`, `--subject`, `--body`, `--cc`, `--bcc`, `--thread-id`, `--reply-to-message-id`, `--attachment`) |
 | `gws gmail reply <id>` | Reply to message (`--body`, `--cc`, `--bcc`, `--all`) |
 | `gws gmail event-id <id>` | Extract calendar event ID from invite email |
 | `gws gmail labels` | List all labels |
@@ -118,7 +118,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws gmail delete-label <id>` | Delete a label |
 | `gws gmail drafts` | List drafts (`--max`, `--query`) |
 | `gws gmail draft <id>` | Get draft by ID |
-| `gws gmail create-draft` | Create draft (`--to`, `--subject`, `--body`, `--cc`, `--bcc`) |
+| `gws gmail create-draft` | Create draft (`--to`, `--subject`, `--body`, `--cc`, `--bcc`, `--attachment`) |
 | `gws gmail update-draft` | Update draft (`--id`, `--to`, `--subject`, `--body`) |
 | `gws gmail send-draft <id>` | Send an existing draft |
 | `gws gmail delete-draft <id>` | Delete a draft |

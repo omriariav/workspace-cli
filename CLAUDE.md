@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.30.0** - Chat DM/group creation, calendar timezone fix, message time filters, find-group with cache.
+**v1.31.0** - Gmail attachment support, Drive raw query flag. First community contributions!
 
 ## Roadmap
 
