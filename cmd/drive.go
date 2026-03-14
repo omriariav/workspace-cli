@@ -7,6 +7,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
@@ -690,8 +691,10 @@ func buildDriveSearchQuery(searchQuery string, raw bool) string {
 		return searchQuery
 	}
 
+	// Escape single quotes to prevent malformed Drive API queries (e.g. "O'Brien").
+	escaped := strings.ReplaceAll(searchQuery, "'", "\\'")
 	// Default behavior: search in name and full text.
-	return fmt.Sprintf("(name contains '%s' or fullText contains '%s') and trashed = false", searchQuery, searchQuery)
+	return fmt.Sprintf("(name contains '%s' or fullText contains '%s') and trashed = false", escaped, escaped)
 }
 
 func runDriveDownload(cmd *cobra.Command, args []string) error {

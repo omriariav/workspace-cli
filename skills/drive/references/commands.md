@@ -48,7 +48,7 @@ Usage: gws drive search <query> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--max` | int | 50 | Maximum number of results |
-| `--raw` | bool | False | Treat query as raw query string |
+| `--raw` | bool | false | Treat query as raw query string |
 
 ---
 

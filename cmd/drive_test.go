@@ -78,6 +78,12 @@ func TestBuildDriveSearchQuery(t *testing.T) {
 			raw:         false,
 			want:        "(name contains 'report' or fullText contains 'report') and trashed = false",
 		},
+		{
+			name:        "single quotes escaped in default mode",
+			searchQuery: "O'Brien's notes",
+			raw:         false,
+			want:        "(name contains 'O\\'Brien\\'s notes' or fullText contains 'O\\'Brien\\'s notes') and trashed = false",
+		},
 	}
 
 	for _, tt := range tests {
