@@ -231,6 +231,7 @@ Usage: gws docs set-paragraph-style <document-id> [flags]
 | `--to` | int | | Yes | End position (1-based index) |
 | `--alignment` | string | | No | Paragraph alignment: `START`, `CENTER`, `END`, `JUSTIFIED` |
 | `--line-spacing` | float | 0 | No | Line spacing multiplier (e.g., 1.15, 1.5, 2.0) |
+| `--style` | string | | No | Named style: `NORMAL_TEXT`, `TITLE`, `SUBTITLE`, `HEADING_1`..`HEADING_6` |
 
 ### Alignment Values
 
@@ -255,11 +256,17 @@ gws docs set-paragraph-style 1abc123xyz --from 200 --to 300 --alignment END --li
 
 # Justify entire document
 gws docs set-paragraph-style 1abc123xyz --from 1 --to 999999 --alignment JUSTIFIED
+
+# Set paragraph to Heading 1
+gws docs set-paragraph-style 1abc123xyz --from 1 --to 50 --style HEADING_1
+
+# Reset heading back to normal text
+gws docs set-paragraph-style 1abc123xyz --from 1 --to 50 --style NORMAL_TEXT
 ```
 
 ### Notes
 
-- At least one style flag (`--alignment` or `--line-spacing`) is required
+- At least one style flag (`--alignment`, `--line-spacing`, or `--style`) is required
 - Alignment values are case-insensitive
 - Line spacing is a multiplier: 1.0 = single, 1.15 = default, 1.5 = 1.5x, 2.0 = double
 - Use `gws docs read <id> --include-formatting` to identify paragraph positions

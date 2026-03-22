@@ -47,6 +47,7 @@ For initial setup, see the `gws-auth` skill.
 | Add a table | `gws docs add-table <doc-id> --rows 3 --cols 4` |
 | Format text | `gws docs format <doc-id> --from 1 --to 10 --bold` |
 | Set paragraph style | `gws docs set-paragraph-style <doc-id> --from 1 --to 100 --alignment CENTER` |
+| Set heading style | `gws docs set-paragraph-style <doc-id> --from 1 --to 100 --style HEADING_1` |
 | Add a list | `gws docs add-list <doc-id> --at 1 --type bullet --items "A;B;C"` |
 | Remove list | `gws docs remove-list <doc-id> --from 1 --to 50` |
 | Trash document | `gws docs trash <doc-id>` |
@@ -217,6 +218,7 @@ gws docs set-paragraph-style <document-id> [flags]
 - `--to int` — End position (1-based index, required)
 - `--alignment string` — Paragraph alignment: START, CENTER, END, JUSTIFIED
 - `--line-spacing float` — Line spacing multiplier (e.g., 1.15, 1.5, 2.0)
+- `--style string` — Named style: NORMAL_TEXT, TITLE, SUBTITLE, HEADING_1..HEADING_6
 
 ### add-list — Add a bullet or numbered list
 

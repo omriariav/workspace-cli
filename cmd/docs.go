@@ -1329,6 +1329,10 @@ func runDocsReplaceContent(cmd *cobra.Command, args []string) error {
 		text = string(data)
 	}
 
+	if text == "" {
+		return p.PrintError(fmt.Errorf("replacement text cannot be empty"))
+	}
+
 	// Get document to find content end index
 	doc, err := svc.Documents.Get(docID).IncludeTabsContent(true).Do()
 	if err != nil {
