@@ -2395,3 +2395,132 @@ func TestDriveActivity_MutualExclusivity(t *testing.T) {
 		t.Fatal("expected both --item-id and --folder-id flags")
 	}
 }
+
+// --- Issue #148: resolve-comment / unresolve-comment tests ---
+
+func TestDriveResolveCommentCommand_Flags(t *testing.T) {
+	cmd := driveResolveCommentCmd
+	flags := []string{"file-id", "comment-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveUnresolveCommentCommand_Flags(t *testing.T) {
+	cmd := driveUnresolveCommentCmd
+	flags := []string{"file-id", "comment-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveResolveComment_MockServer(t *testing.T) {
+	resolveCalled := false
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/files/test-file-id/comments/comment-1" && r.Method == "PATCH" {
+			resolveCalled = true
+
+			var comment drive.Comment
+			json.NewDecoder(r.Body).Decode(&comment)
+
+			if !comment.Resolved {
+				t.Error("expected Resolved to be true")
+			}
+
+			resp := &drive.Comment{
+				Id:           "comment-1",
+				Content:      "Test comment",
+				Resolved:     true,
+				ModifiedTime: "2024-01-15T12:00:00Z",
+				Author: &drive.User{
+					DisplayName:  "Test User",
+					EmailAddress: "test@example.com",
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	comment := &drive.Comment{
+		Resolved:        true,
+		ForceSendFields: []string{"Resolved"},
+	}
+	updated, err := svc.Comments.Update("test-file-id", "comment-1", comment).
+		Fields("id,content,resolved,modifiedTime,author(displayName,emailAddress)").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to resolve comment: %v", err)
+	}
+
+	if !updated.Resolved {
+		t.Error("expected comment to be resolved")
+	}
+	if !resolveCalled {
+		t.Error("resolve endpoint was not called")
+	}
+}
+
+func TestDriveUnresolveComment_MockServer(t *testing.T) {
+	unresolveCalled := false
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/files/test-file-id/comments/comment-1" && r.Method == "PATCH" {
+			unresolveCalled = true
+
+			resp := &drive.Comment{
+				Id:           "comment-1",
+				Content:      "Test comment",
+				Resolved:     false,
+				ModifiedTime: "2024-01-15T13:00:00Z",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	comment := &drive.Comment{
+		Resolved:        false,
+		ForceSendFields: []string{"Resolved"},
+	}
+	updated, err := svc.Comments.Update("test-file-id", "comment-1", comment).
+		Fields("id,content,resolved,modifiedTime").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to unresolve comment: %v", err)
+	}
+
+	if updated.Resolved {
+		t.Error("expected comment to be unresolved")
+	}
+	if !unresolveCalled {
+		t.Error("unresolve endpoint was not called")
+	}
+}

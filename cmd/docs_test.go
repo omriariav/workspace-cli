@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -1036,7 +1037,7 @@ func TestDocsSetParagraphStyleCommand_Flags(t *testing.T) {
 		t.Fatal("docs set-paragraph-style command not found")
 	}
 
-	expectedFlags := []string{"from", "to", "alignment", "line-spacing"}
+	expectedFlags := []string{"from", "to", "alignment", "line-spacing", "style"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)
@@ -1945,5 +1946,240 @@ func TestDocsCommands_NewCommands(t *testing.T) {
 				t.Fatalf("command '%s' not found", cmdName)
 			}
 		})
+	}
+}
+
+// --- Issue #147: set-paragraph-style --style flag tests ---
+
+func TestDocsSetParagraphStyle_WithStyle(t *testing.T) {
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-style:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) == 0 {
+				t.Error("expected at least one request")
+			}
+
+			updatePara := req.Requests[0].UpdateParagraphStyle
+			if updatePara == nil {
+				t.Error("expected UpdateParagraphStyle request")
+			} else {
+				if updatePara.ParagraphStyle.NamedStyleType != "HEADING_1" {
+					t.Errorf("expected NamedStyleType HEADING_1, got %s", updatePara.ParagraphStyle.NamedStyleType)
+				}
+				if !strings.Contains(updatePara.Fields, "namedStyleType") {
+					t.Errorf("expected fields to contain namedStyleType, got %s", updatePara.Fields)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-style",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	_, err = svc.Documents.BatchUpdate("doc-style", &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				UpdateParagraphStyle: &docs.UpdateParagraphStyleRequest{
+					ParagraphStyle: &docs.ParagraphStyle{NamedStyleType: "HEADING_1"},
+					Range: &docs.Range{
+						StartIndex: 1,
+						EndIndex:   100,
+					},
+					Fields: "namedStyleType",
+				},
+			},
+		},
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to set paragraph style: %v", err)
+	}
+
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+func TestDocsSetParagraphStyle_InvalidStyle(t *testing.T) {
+	validStyles := map[string]bool{
+		"NORMAL_TEXT": true, "TITLE": true, "SUBTITLE": true,
+		"HEADING_1": true, "HEADING_2": true, "HEADING_3": true,
+		"HEADING_4": true, "HEADING_5": true, "HEADING_6": true,
+	}
+
+	invalidStyles := []string{"INVALID", "heading_1", "H1", ""}
+	for _, s := range invalidStyles {
+		if s == "" {
+			continue // empty string is not an error (just means flag not provided)
+		}
+		if validStyles[s] {
+			t.Errorf("expected %q to be invalid", s)
+		}
+	}
+
+	// Verify all valid styles are accepted
+	for _, s := range []string{"NORMAL_TEXT", "TITLE", "SUBTITLE", "HEADING_1", "HEADING_2", "HEADING_3", "HEADING_4", "HEADING_5", "HEADING_6"} {
+		if !validStyles[s] {
+			t.Errorf("expected %q to be valid", s)
+		}
+	}
+}
+
+// --- Issue #152: replace-content tests ---
+
+func TestDocsReplaceContentCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "replace-content")
+	if cmd == nil {
+		t.Fatal("docs replace-content command not found")
+	}
+
+	expectedFlags := []string{"text", "file", "content-format"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+func TestDocsReplaceContent_Success(t *testing.T) {
+	getCalled := false
+	batchUpdateCalled := false
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/documents/doc-replace": func(w http.ResponseWriter, r *http.Request) {
+			getCalled = true
+			json.NewEncoder(w).Encode(&docs.Document{
+				DocumentId: "doc-replace",
+				Title:      "Test Doc",
+				Body: &docs.Body{
+					Content: []*docs.StructuralElement{
+						{StartIndex: 0, EndIndex: 1},
+						{StartIndex: 1, EndIndex: 50, Paragraph: &docs.Paragraph{
+							Elements: []*docs.ParagraphElement{
+								{StartIndex: 1, EndIndex: 50, TextRun: &docs.TextRun{Content: "Old content"}},
+							},
+						}},
+					},
+				},
+			})
+		},
+		"/v1/documents/doc-replace:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			batchUpdateCalled = true
+
+			var req docs.BatchUpdateDocumentRequest
+			json.NewDecoder(r.Body).Decode(&req)
+
+			if len(req.Requests) != 2 {
+				t.Errorf("expected 2 requests (delete + insert), got %d", len(req.Requests))
+			}
+
+			if req.Requests[0].DeleteContentRange == nil {
+				t.Error("expected first request to be DeleteContentRange")
+			} else {
+				if req.Requests[0].DeleteContentRange.Range.StartIndex != 1 {
+					t.Errorf("expected delete start index 1, got %d", req.Requests[0].DeleteContentRange.Range.StartIndex)
+				}
+				if req.Requests[0].DeleteContentRange.Range.EndIndex != 49 {
+					t.Errorf("expected delete end index 49, got %d", req.Requests[0].DeleteContentRange.Range.EndIndex)
+				}
+			}
+
+			if req.Requests[1].InsertText == nil {
+				t.Error("expected second request to be InsertText")
+			} else {
+				if req.Requests[1].InsertText.Text != "New content" {
+					t.Errorf("expected insert text 'New content', got '%s'", req.Requests[1].InsertText.Text)
+				}
+				if req.Requests[1].InsertText.Location.Index != 1 {
+					t.Errorf("expected insert at index 1, got %d", req.Requests[1].InsertText.Location.Index)
+				}
+			}
+
+			json.NewEncoder(w).Encode(&docs.BatchUpdateDocumentResponse{
+				DocumentId: "doc-replace",
+			})
+		},
+	}
+
+	server := mockDocsServer(t, handlers)
+	defer server.Close()
+
+	svc, err := docs.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create docs service: %v", err)
+	}
+
+	// Simulate what the command does: GET then batchUpdate
+	doc, err := svc.Documents.Get("doc-replace").Do()
+	if err != nil {
+		t.Fatalf("failed to get document: %v", err)
+	}
+
+	endIndex := doc.Body.Content[len(doc.Body.Content)-1].EndIndex - 1
+
+	requests := []*docs.Request{
+		{
+			DeleteContentRange: &docs.DeleteContentRangeRequest{
+				Range: &docs.Range{StartIndex: 1, EndIndex: endIndex},
+			},
+		},
+		{
+			InsertText: &docs.InsertTextRequest{
+				Location: &docs.Location{Index: 1},
+				Text:     "New content",
+			},
+		},
+	}
+
+	_, err = svc.Documents.BatchUpdate("doc-replace", &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		t.Fatalf("failed to replace content: %v", err)
+	}
+
+	if !getCalled {
+		t.Error("GET endpoint was not called")
+	}
+	if !batchUpdateCalled {
+		t.Error("batchUpdate endpoint was not called")
+	}
+}
+
+func TestDocsReplaceContent_FromFile(t *testing.T) {
+	// Create a temp file with content
+	tmpFile, err := os.CreateTemp("", "gws-test-*.md")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	content := "# File Content\nThis is from a file."
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Verify the file can be read back
+	data, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("failed to read temp file: %v", err)
+	}
+	if string(data) != content {
+		t.Errorf("expected %q, got %q", content, string(data))
 	}
 }

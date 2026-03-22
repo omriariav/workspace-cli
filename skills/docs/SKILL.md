@@ -41,6 +41,8 @@ For initial setup, see the `gws-auth` skill.
 | Append text | `gws docs append <doc-id> --text "New paragraph"` |
 | Insert text at position | `gws docs insert <doc-id> --text "Hello" --at 1` |
 | Find and replace | `gws docs replace <doc-id> --find "old" --replace "new"` |
+| Replace all content | `gws docs replace-content <doc-id> --text "# New content"` |
+| Replace from file | `gws docs replace-content <doc-id> --file ./content.md` |
 | Delete content | `gws docs delete <doc-id> --from 5 --to 10` |
 | Add a table | `gws docs add-table <doc-id> --rows 3 --cols 4` |
 | Format text | `gws docs format <doc-id> --from 1 --to 10 --bold` |
@@ -152,6 +154,20 @@ gws docs replace <document-id> --find <text> --replace <text> [flags]
 - `--find string` — Text to find (required)
 - `--replace string` — Replacement text (required)
 - `--match-case` — Case-sensitive matching (default: true)
+
+### replace-content — Replace all document content
+
+```bash
+gws docs replace-content <document-id> --text "# New content"
+gws docs replace-content <document-id> --file ./content.md
+```
+
+**Flags:**
+- `--text string` — Replacement text
+- `--file string` — Read content from file (alternative to --text)
+- `--content-format string` — Content format: markdown (default), plaintext, or richformat
+
+Replaces the entire document body while preserving the doc ID, permissions, comments, and revision history. Provide exactly one of `--text` or `--file`.
 
 ### delete — Delete content
 

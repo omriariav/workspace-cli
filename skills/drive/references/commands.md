@@ -379,6 +379,36 @@ Usage: gws drive delete-comment [flags]
 
 ---
 
+## gws drive resolve-comment
+
+Marks a comment as resolved.
+
+```
+Usage: gws drive resolve-comment [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--comment-id` | string | | Yes | Comment ID |
+
+---
+
+## gws drive unresolve-comment
+
+Marks a comment as unresolved.
+
+```
+Usage: gws drive unresolve-comment [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--comment-id` | string | | Yes | Comment ID |
+
+---
+
 ## gws drive replies
 
 Lists all replies to a comment.

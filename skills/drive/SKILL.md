@@ -66,6 +66,8 @@ For initial setup, see the `gws-auth` skill.
 | Get comment | `gws drive comment --file-id <id> --comment-id <cid>` |
 | Add comment | `gws drive add-comment --file-id <id> --content "Great work!"` |
 | Delete comment | `gws drive delete-comment --file-id <id> --comment-id <cid>` |
+| Resolve comment | `gws drive resolve-comment --file-id <id> --comment-id <cid>` |
+| Unresolve comment | `gws drive unresolve-comment --file-id <id> --comment-id <cid>` |
 | List replies | `gws drive replies --file-id <id> --comment-id <cid>` |
 | Reply to comment | `gws drive reply --file-id <id> --comment-id <cid> --content "Thanks!"` |
 | Get reply | `gws drive get-reply --file-id <id> --comment-id <cid> --reply-id <rid>` |
@@ -313,6 +315,18 @@ gws drive add-comment --file-id <id> --content "comment text"
 
 ```bash
 gws drive delete-comment --file-id <id> --comment-id <cid>
+```
+
+### resolve-comment — Resolve a comment
+
+```bash
+gws drive resolve-comment --file-id <id> --comment-id <cid>
+```
+
+### unresolve-comment — Unresolve a comment
+
+```bash
+gws drive unresolve-comment --file-id <id> --comment-id <cid>
 ```
 
 ### replies — List replies
