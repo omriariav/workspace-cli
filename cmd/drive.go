@@ -252,6 +252,20 @@ var driveDeleteCommentCmd = &cobra.Command{
 	RunE:  runDriveDeleteComment,
 }
 
+var driveResolveCommentCmd = &cobra.Command{
+	Use:   "resolve-comment",
+	Short: "Resolve a comment",
+	Long:  "Marks a comment on a Google Drive file as resolved.",
+	RunE:  runDriveResolveComment,
+}
+
+var driveUnresolveCommentCmd = &cobra.Command{
+	Use:   "unresolve-comment",
+	Short: "Unresolve a comment",
+	Long:  "Marks a comment on a Google Drive file as unresolved.",
+	RunE:  runDriveUnresolveComment,
+}
+
 // --- Files ---
 
 var driveExportCmd = &cobra.Command{
@@ -425,6 +439,8 @@ func init() {
 	driveCmd.AddCommand(driveCommentCmd)
 	driveCmd.AddCommand(driveAddCommentCmd)
 	driveCmd.AddCommand(driveDeleteCommentCmd)
+	driveCmd.AddCommand(driveResolveCommentCmd)
+	driveCmd.AddCommand(driveUnresolveCommentCmd)
 	driveCmd.AddCommand(driveExportCmd)
 	driveCmd.AddCommand(driveEmptyTrashCmd)
 	driveCmd.AddCommand(driveUpdateCmd)
@@ -523,6 +539,17 @@ func init() {
 	driveDeleteCommentCmd.Flags().String("comment-id", "", "Comment ID (required)")
 	driveDeleteCommentCmd.MarkFlagRequired("file-id")
 	driveDeleteCommentCmd.MarkFlagRequired("comment-id")
+
+	// Resolve/Unresolve comment flags
+	driveResolveCommentCmd.Flags().String("file-id", "", "File ID (required)")
+	driveResolveCommentCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveResolveCommentCmd.MarkFlagRequired("file-id")
+	driveResolveCommentCmd.MarkFlagRequired("comment-id")
+
+	driveUnresolveCommentCmd.Flags().String("file-id", "", "File ID (required)")
+	driveUnresolveCommentCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveUnresolveCommentCmd.MarkFlagRequired("file-id")
+	driveUnresolveCommentCmd.MarkFlagRequired("comment-id")
 
 	// Export flags
 	driveExportCmd.Flags().String("file-id", "", "File ID (required)")
@@ -1963,6 +1990,73 @@ func runDriveDeleteComment(cmd *cobra.Command, args []string) error {
 		"file_id":    fileID,
 		"comment_id": commentID,
 	})
+}
+
+func runDriveResolveComment(cmd *cobra.Command, args []string) error {
+	return runDriveSetCommentResolved(cmd, true)
+}
+
+func runDriveUnresolveComment(cmd *cobra.Command, args []string) error {
+	return runDriveSetCommentResolved(cmd, false)
+}
+
+func runDriveSetCommentResolved(cmd *cobra.Command, resolved bool) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	commentID, _ := cmd.Flags().GetString("comment-id")
+
+	comment := &drive.Comment{
+		Resolved:        resolved,
+		ForceSendFields: []string{"Resolved"},
+	}
+
+	updated, err := svc.Comments.Update(fileID, commentID, comment).
+		Fields("id,content,resolved,modifiedTime,author(displayName,emailAddress)").
+		Do()
+	if err != nil {
+		action := "resolve"
+		if !resolved {
+			action = "unresolve"
+		}
+		return p.PrintError(fmt.Errorf("failed to %s comment: %w", action, err))
+	}
+
+	status := "resolved"
+	if !resolved {
+		status = "unresolved"
+	}
+
+	result := map[string]interface{}{
+		"status":   status,
+		"id":       updated.Id,
+		"resolved": updated.Resolved,
+	}
+	if updated.Content != "" {
+		result["content"] = updated.Content
+	}
+	if updated.ModifiedTime != "" {
+		result["modified"] = updated.ModifiedTime
+	}
+	if updated.Author != nil {
+		result["author"] = map[string]interface{}{
+			"name":  updated.Author.DisplayName,
+			"email": updated.Author.EmailAddress,
+		}
+	}
+
+	return p.Print(result)
 }
 
 // --- Files ---

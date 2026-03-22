@@ -201,6 +201,8 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws drive comment` | Get a single comment (`--file-id`, `--comment-id`) |
 | `gws drive add-comment` | Add comment to file (`--file-id`, `--content`) |
 | `gws drive delete-comment` | Delete comment (`--file-id`, `--comment-id`) |
+| `gws drive resolve-comment` | Resolve a comment (`--file-id`, `--comment-id`) |
+| `gws drive unresolve-comment` | Unresolve a comment (`--file-id`, `--comment-id`) |
 | `gws drive export` | Export Google Workspace file (`--file-id`, `--mime-type`, `--output`) |
 | `gws drive empty-trash` | Empty trash permanently |
 | `gws drive update` | Update file metadata (`--file-id`, `--name`, `--description`, `--starred`, `--trashed`) |
@@ -223,6 +225,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws docs append <id>` | Append text to document (`--text`, `--newline`) |
 | `gws docs insert <id>` | Insert text at position (`--text`, `--at`) |
 | `gws docs replace <id>` | Find and replace text (`--find`, `--replace`, `--match-case`) |
+| `gws docs replace-content <id>` | Replace entire document body (`--text` or `--file`, `--content-format`) |
 | `gws docs delete <id>` | Delete content range (`--from`, `--to`) |
 | `gws docs add-table <id>` | Insert table (`--rows`, `--cols`, `--at`) |
 | `gws docs format <id>` | Format text (`--from`, `--to`, `--bold`, `--italic`, `--font-size`, `--color`) |

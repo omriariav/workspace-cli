@@ -122,6 +122,24 @@ Replaces **all** occurrences, not just the first.
 
 ---
 
+## gws docs replace-content
+
+Replaces the entire document body with new text, preserving doc ID, permissions, comments, and revision history.
+
+```
+Usage: gws docs replace-content <document-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--text` | string | | No | Replacement text |
+| `--file` | string | | No | Read content from file (alternative to --text) |
+| `--content-format` | string | markdown | No | Content format: markdown, plaintext, or richformat |
+
+Exactly one of `--text` or `--file` must be provided.
+
+---
+
 ## gws docs delete
 
 Deletes content from a range of positions in the document.

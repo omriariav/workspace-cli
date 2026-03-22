@@ -176,6 +176,17 @@ var docsReplaceCmd = &cobra.Command{
 	RunE:  runDocsReplace,
 }
 
+var docsReplaceContentCmd = &cobra.Command{
+	Use:   "replace-content <document-id>",
+	Short: "Replace all document content",
+	Long: `Replaces the entire document body with new text, preserving the doc ID,
+permissions, comments, and revision history.
+
+Use --text for inline content or --file to read from a file.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDocsReplaceContent,
+}
+
 var docsDeleteCmd = &cobra.Command{
 	Use:   "delete <document-id>",
 	Short: "Delete content from a document",
@@ -471,6 +482,7 @@ func init() {
 	docsCmd.AddCommand(docsAppendCmd)
 	docsCmd.AddCommand(docsInsertCmd)
 	docsCmd.AddCommand(docsReplaceCmd)
+	docsCmd.AddCommand(docsReplaceContentCmd)
 	docsCmd.AddCommand(docsDeleteCmd)
 	docsCmd.AddCommand(docsAddTableCmd)
 	docsCmd.AddCommand(docsFormatCmd)
@@ -539,6 +551,7 @@ func init() {
 	docsSetParagraphStyleCmd.Flags().Int64("to", 0, "End position (1-based index, required)")
 	docsSetParagraphStyleCmd.Flags().String("alignment", "", "Paragraph alignment: START, CENTER, END, JUSTIFIED")
 	docsSetParagraphStyleCmd.Flags().Float64("line-spacing", 0, "Line spacing multiplier (e.g., 1.15, 1.5, 2.0)")
+	docsSetParagraphStyleCmd.Flags().String("style", "", "Named style: NORMAL_TEXT, TITLE, SUBTITLE, HEADING_1..HEADING_6")
 	docsSetParagraphStyleCmd.MarkFlagRequired("from")
 	docsSetParagraphStyleCmd.MarkFlagRequired("to")
 
@@ -581,6 +594,11 @@ func init() {
 	docsReplaceCmd.Flags().Bool("match-case", true, "Case-sensitive matching")
 	docsReplaceCmd.MarkFlagRequired("find")
 	docsReplaceCmd.MarkFlagRequired("replace")
+
+	// Replace-content flags
+	docsReplaceContentCmd.Flags().String("text", "", "Replacement text")
+	docsReplaceContentCmd.Flags().String("file", "", "Read content from file (alternative to --text)")
+	docsReplaceContentCmd.Flags().String("content-format", "markdown", "Content format: markdown, plaintext, or richformat")
 
 	// Delete flags
 	docsDeleteCmd.Flags().Int64("from", 0, "Start position (1-based index, required)")
@@ -1275,6 +1293,104 @@ func runDocsDelete(cmd *cobra.Command, args []string) error {
 	})
 }
 
+func runDocsReplaceContent(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Docs()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	docID := args[0]
+	text, _ := cmd.Flags().GetString("text")
+	filePath, _ := cmd.Flags().GetString("file")
+	contentFormat, _ := cmd.Flags().GetString("content-format")
+
+	// Validate: exactly one of --text or --file must be provided
+	if text == "" && filePath == "" {
+		return p.PrintError(fmt.Errorf("either --text or --file is required"))
+	}
+	if text != "" && filePath != "" {
+		return p.PrintError(fmt.Errorf("--text and --file are mutually exclusive"))
+	}
+
+	// Read content from file if --file provided
+	if filePath != "" {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to read file: %w", err))
+		}
+		text = string(data)
+	}
+
+	// Get document to find content end index
+	doc, err := svc.Documents.Get(docID).IncludeTabsContent(true).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get document: %w", err))
+	}
+
+	// Resolve tab
+	tabID, err := resolveTabFromFlags(cmd, doc)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	body, err := getTabBody(doc, tabID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	if body == nil || len(body.Content) == 0 {
+		return p.PrintError(fmt.Errorf("document has no content"))
+	}
+
+	endIndex := body.Content[len(body.Content)-1].EndIndex - 1
+
+	// Build requests: delete existing content (if any), then insert new content
+	var requests []*docs.Request
+
+	if endIndex > 1 {
+		rng := &docs.Range{
+			StartIndex: 1,
+			EndIndex:   endIndex,
+		}
+		if tabID != "" {
+			rng.TabId = tabID
+		}
+		requests = append(requests, &docs.Request{
+			DeleteContentRange: &docs.DeleteContentRangeRequest{
+				Range: rng,
+			},
+		})
+	}
+
+	insertRequests, err := buildTextRequests(text, contentFormat, 1, tabID)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to build text requests: %w", err))
+	}
+	requests = append(requests, insertRequests...)
+
+	_, err = svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to replace content: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "replaced",
+		"document_id": docID,
+		"title":       doc.Title,
+		"text_length": len(text),
+	})
+}
+
 func runDocsAddTable(cmd *cobra.Command, args []string) error {
 	p := printer.New(os.Stdout, GetFormat())
 	ctx := context.Background()
@@ -1508,6 +1624,7 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 	to, _ := cmd.Flags().GetInt64("to")
 	alignment, _ := cmd.Flags().GetString("alignment")
 	lineSpacing, _ := cmd.Flags().GetFloat64("line-spacing")
+	style, _ := cmd.Flags().GetString("style")
 	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	if from < 1 {
@@ -1543,8 +1660,21 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 		fields = append(fields, "lineSpacing")
 	}
 
+	if style != "" {
+		validStyles := map[string]bool{
+			"NORMAL_TEXT": true, "TITLE": true, "SUBTITLE": true,
+			"HEADING_1": true, "HEADING_2": true, "HEADING_3": true,
+			"HEADING_4": true, "HEADING_5": true, "HEADING_6": true,
+		}
+		if !validStyles[style] {
+			return p.PrintError(fmt.Errorf("invalid style %q; use NORMAL_TEXT, TITLE, SUBTITLE, or HEADING_1..HEADING_6", style))
+		}
+		paraStyle.NamedStyleType = style
+		fields = append(fields, "namedStyleType")
+	}
+
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no style options specified; use --alignment or --line-spacing"))
+		return p.PrintError(fmt.Errorf("no style options specified; use --alignment, --line-spacing, or --style"))
 	}
 
 	rng := &docs.Range{
