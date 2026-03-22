@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.31.0** - Gmail attachment support, Drive raw query flag. First community contributions!
+**v1.32.0** - Docs replace-content, Drive resolve/unresolve comment, set-paragraph-style --style flag.
 
 ## Roadmap
 
