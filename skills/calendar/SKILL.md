@@ -37,7 +37,10 @@ For initial setup, see the `gws-auth` skill.
 | List calendars | `gws calendar list` |
 | View upcoming events | `gws calendar events` |
 | View next 14 days | `gws calendar events --days 14` |
+| 3-day window (yesterday–tomorrow) | `gws calendar events --from "2026-03-24" --days 3` |
+| Search events by text | `gws calendar events --query "standup"` |
 | View pending invites | `gws calendar events --days 30 --pending` |
+| Filter by event type | `gws calendar events --event-types focusTime,outOfOffice` |
 | Get event by ID | `gws calendar get --id <event-id>` |
 | Create an event | `gws calendar create --title "Meeting" --start "2024-02-01 14:00" --end "2024-02-01 15:00"` |
 | Quick add from text | `gws calendar quick-add --text "Lunch with John tomorrow at noon"` |
@@ -104,8 +107,14 @@ Lists upcoming events from a calendar.
 **Flags:**
 - `--calendar-id string` -- Calendar ID (default: "primary")
 - `--days int` -- Number of days to look ahead (default 7)
+- `--from string` -- Start date (YYYY-MM-DD or RFC3339); defaults to now. Enables fetching past events.
 - `--max int` -- Maximum number of events (default 50)
 - `--pending` -- Only show events with pending RSVP (needsAction). Tip: increase `--max` when using `--pending` over long date ranges, since `--max` limits the API fetch before client-side filtering.
+- `--query string` -- Free-text search across summary, description, location, and attendees
+- `--event-types strings` -- Filter by event type: `default`, `birthday`, `focusTime`, `fromGmail`, `outOfOffice`, `workingLocation`
+- `--show-deleted` -- Include cancelled/deleted events in results
+- `--timezone string` -- Timezone for response times (e.g. `America/New_York`)
+- `--updated-min string` -- Only events modified after this time (RFC3339)
 
 **Output includes** (fields omitted when empty):
 
