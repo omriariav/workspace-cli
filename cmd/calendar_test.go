@@ -1951,7 +1951,7 @@ func TestCalendarEvents_FromFlag_QueryParams(t *testing.T) {
 	}
 
 	// Simulate --from "2026-03-24" --days 3 --query "standup" --event-types default,focusTime --show-deleted --timezone America/New_York --updated-min
-	from, _ := time.Parse("2006-01-02", "2026-03-24")
+	from, _ := time.ParseInLocation("2006-01-02", "2026-03-24", time.Local)
 	timeMin := from.Format(time.RFC3339)
 	timeMax := from.AddDate(0, 0, 3).Format(time.RFC3339)
 
@@ -2018,7 +2018,7 @@ func TestCalendarEvents_FromFlag_DateParsing(t *testing.T) {
 				parsed = time.Now()
 			} else if p, err := time.Parse(time.RFC3339, tt.from); err == nil {
 				parsed = p
-			} else if p, err := time.Parse("2006-01-02", tt.from); err == nil {
+			} else if p, err := time.ParseInLocation("2006-01-02", tt.from, time.Local); err == nil {
 				parsed = p
 			} else {
 				parseErr = err

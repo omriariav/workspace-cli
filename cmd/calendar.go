@@ -552,7 +552,7 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	if fromStr != "" {
 		if t, err := time.Parse(time.RFC3339, fromStr); err == nil {
 			start = t
-		} else if t, err := time.Parse("2006-01-02", fromStr); err == nil {
+		} else if t, err := time.ParseInLocation("2006-01-02", fromStr, time.Local); err == nil {
 			start = t
 		} else {
 			return p.PrintError(fmt.Errorf("invalid --from date %q: use YYYY-MM-DD or RFC3339 format", fromStr))
