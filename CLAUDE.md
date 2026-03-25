@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.32.0** - Docs replace-content, Drive resolve/unresolve comment, set-paragraph-style --style flag.
+**v1.33.0** - Calendar events: --from flag, --query, --event-types, --show-deleted, --timezone, --updated-min.
 
 ## Roadmap
 
