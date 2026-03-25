@@ -46,8 +46,14 @@ Usage: gws calendar events [flags]
 |------|------|---------|-------------|
 | `--calendar-id` | string | `primary` | Calendar ID |
 | `--days` | int | 7 | Number of days to look ahead |
+| `--from` | string | | Start date (YYYY-MM-DD or RFC3339); defaults to now |
 | `--max` | int | 50 | Maximum number of events |
 | `--pending` | bool | false | Only show events with pending RSVP (needsAction). Tip: increase `--max` for long date ranges. |
+| `--query` | string | | Free-text search (summary, description, location, attendees) |
+| `--event-types` | strings | | Filter by type: `default`, `birthday`, `focusTime`, `fromGmail`, `outOfOffice`, `workingLocation` |
+| `--show-deleted` | bool | false | Include cancelled/deleted events |
+| `--timezone` | string | | Timezone for response times (e.g. `America/New_York`) |
+| `--updated-min` | string | | Only events modified after this time (RFC3339) |
 
 ### Output Fields (JSON)
 

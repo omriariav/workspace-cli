@@ -129,7 +129,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | Command | Description |
 |---------|-------------|
 | `gws calendar list` | List all calendars |
-| `gws calendar events` | List upcoming events with expanded details (`--days`, `--calendar-id`, `--max`, `--pending`) |
+| `gws calendar events` | List events (`--days`, `--from`, `--calendar-id`, `--max`, `--pending`, `--query`, `--event-types`, `--show-deleted`, `--timezone`, `--updated-min`) |
 | `gws calendar create` | Create event (`--title`, `--start`, `--end`, `--attendees`) |
 | `gws calendar update <id>` | Update event (`--title`, `--start`, `--end`, `--add-attendees`) |
 | `gws calendar delete <id>` | Delete event |

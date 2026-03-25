@@ -347,9 +347,15 @@ func init() {
 
 	// Events flags
 	calendarEventsCmd.Flags().Int("days", 7, "Number of days to look ahead")
+	calendarEventsCmd.Flags().String("from", "", "Start date (YYYY-MM-DD or RFC3339); defaults to now")
 	calendarEventsCmd.Flags().String("calendar-id", "primary", "Calendar ID (default: primary)")
 	calendarEventsCmd.Flags().Int64("max", 50, "Maximum number of events")
 	calendarEventsCmd.Flags().Bool("pending", false, "Only show events with pending RSVP (needsAction)")
+	calendarEventsCmd.Flags().String("query", "", "Free-text search (summary, description, location, attendees)")
+	calendarEventsCmd.Flags().StringSlice("event-types", nil, "Filter by type: default, birthday, focusTime, fromGmail, outOfOffice, workingLocation")
+	calendarEventsCmd.Flags().Bool("show-deleted", false, "Include cancelled/deleted events")
+	calendarEventsCmd.Flags().String("timezone", "", "Timezone for response times (e.g. America/New_York)")
+	calendarEventsCmd.Flags().String("updated-min", "", "Only events modified after this time (RFC3339)")
 
 	// Create flags
 	calendarCreateCmd.Flags().String("title", "", "Event title (required)")
@@ -532,21 +538,53 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	}
 
 	days, _ := cmd.Flags().GetInt("days")
+	fromStr, _ := cmd.Flags().GetString("from")
 	calendarID, _ := cmd.Flags().GetString("calendar-id")
 	maxResults, _ := cmd.Flags().GetInt64("max")
 	pending, _ := cmd.Flags().GetBool("pending")
+	query, _ := cmd.Flags().GetString("query")
+	eventTypes, _ := cmd.Flags().GetStringSlice("event-types")
+	showDeleted, _ := cmd.Flags().GetBool("show-deleted")
+	timezone, _ := cmd.Flags().GetString("timezone")
+	updatedMin, _ := cmd.Flags().GetString("updated-min")
 
-	now := time.Now()
-	timeMin := now.Format(time.RFC3339)
-	timeMax := now.AddDate(0, 0, days).Format(time.RFC3339)
+	start := time.Now()
+	if fromStr != "" {
+		if t, err := time.Parse(time.RFC3339, fromStr); err == nil {
+			start = t
+		} else if t, err := time.ParseInLocation("2006-01-02", fromStr, time.Local); err == nil {
+			start = t
+		} else {
+			return p.PrintError(fmt.Errorf("invalid --from date %q: use YYYY-MM-DD or RFC3339 format", fromStr))
+		}
+	}
+	timeMin := start.Format(time.RFC3339)
+	timeMax := start.AddDate(0, 0, days).Format(time.RFC3339)
 
-	resp, err := svc.Events.List(calendarID).
+	call := svc.Events.List(calendarID).
 		TimeMin(timeMin).
 		TimeMax(timeMax).
 		MaxResults(maxResults).
 		SingleEvents(true).
 		OrderBy("startTime").
-		Do()
+		ShowDeleted(showDeleted)
+	if query != "" {
+		call = call.Q(query)
+	}
+	if len(eventTypes) > 0 {
+		call = call.EventTypes(eventTypes...)
+	}
+	if timezone != "" {
+		call = call.TimeZone(timezone)
+	}
+	if updatedMin != "" {
+		if _, err := time.Parse(time.RFC3339, updatedMin); err != nil {
+			return p.PrintError(fmt.Errorf("invalid --updated-min %q: use RFC3339 format", updatedMin))
+		}
+		call = call.UpdatedMin(updatedMin)
+	}
+
+	resp, err := call.Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to list events: %w", err))
 	}

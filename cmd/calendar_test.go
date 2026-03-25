@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -1927,4 +1928,111 @@ func TestResolveIANA(t *testing.T) {
 			t.Error("resolveIANA should not return 'Local'")
 		}
 	})
+}
+
+func TestCalendarEvents_FromFlag_QueryParams(t *testing.T) {
+	var receivedParams url.Values
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/calendars/primary/events" && r.Method == "GET" {
+			receivedParams = r.URL.Query()
+			resp := &calendar.Events{Items: []*calendar.Event{}}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	// Simulate --from "2026-03-24" --days 3 --query "standup" --event-types default,focusTime --show-deleted --timezone America/New_York --updated-min
+	from, _ := time.ParseInLocation("2006-01-02", "2026-03-24", time.Local)
+	timeMin := from.Format(time.RFC3339)
+	timeMax := from.AddDate(0, 0, 3).Format(time.RFC3339)
+
+	_, err = svc.Events.List("primary").
+		TimeMin(timeMin).
+		TimeMax(timeMax).
+		MaxResults(50).
+		SingleEvents(true).
+		OrderBy("startTime").
+		ShowDeleted(true).
+		Q("standup").
+		EventTypes("default", "focusTime").
+		TimeZone("America/New_York").
+		UpdatedMin("2026-03-20T00:00:00Z").
+		Do()
+	if err != nil {
+		t.Fatalf("failed to list events: %v", err)
+	}
+
+	// Verify timeMin starts from the --from date, not now
+	if got := receivedParams.Get("timeMin"); got != timeMin {
+		t.Errorf("timeMin = %q, want %q", got, timeMin)
+	}
+	if got := receivedParams.Get("timeMax"); got != timeMax {
+		t.Errorf("timeMax = %q, want %q", got, timeMax)
+	}
+	if got := receivedParams.Get("q"); got != "standup" {
+		t.Errorf("q = %q, want %q", got, "standup")
+	}
+	if got := receivedParams["eventTypes"]; len(got) != 2 || got[0] != "default" || got[1] != "focusTime" {
+		t.Errorf("eventTypes = %v, want [default focusTime]", got)
+	}
+	if got := receivedParams.Get("showDeleted"); got != "true" {
+		t.Errorf("showDeleted = %q, want %q", got, "true")
+	}
+	if got := receivedParams.Get("timeZone"); got != "America/New_York" {
+		t.Errorf("timeZone = %q, want %q", got, "America/New_York")
+	}
+	if got := receivedParams.Get("updatedMin"); got != "2026-03-20T00:00:00Z" {
+		t.Errorf("updatedMin = %q, want %q", got, "2026-03-20T00:00:00Z")
+	}
+}
+
+func TestCalendarEvents_FromFlag_DateParsing(t *testing.T) {
+	tests := []struct {
+		name    string
+		from    string
+		wantErr bool
+	}{
+		{"YYYY-MM-DD", "2026-03-24", false},
+		{"RFC3339", "2026-03-24T10:00:00Z", false},
+		{"RFC3339 with offset", "2026-03-24T10:00:00+02:00", false},
+		{"invalid format", "March 24, 2026", true},
+		{"partial date", "2026-03", true},
+		{"empty string", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var parsed time.Time
+			var parseErr error
+
+			if tt.from == "" {
+				parsed = time.Now()
+			} else if p, err := time.Parse(time.RFC3339, tt.from); err == nil {
+				parsed = p
+			} else if p, err := time.ParseInLocation("2006-01-02", tt.from, time.Local); err == nil {
+				parsed = p
+			} else {
+				parseErr = err
+			}
+
+			if tt.wantErr && parseErr == nil {
+				t.Error("expected parse error, got nil")
+			}
+			if !tt.wantErr && parseErr != nil {
+				t.Errorf("unexpected parse error: %v", parseErr)
+			}
+			if !tt.wantErr && parsed.IsZero() {
+				t.Error("parsed time is zero")
+			}
+		})
+	}
 }
