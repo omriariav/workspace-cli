@@ -247,7 +247,7 @@ func TestCalendarEventsCommand_Flags(t *testing.T) {
 		t.Fatal("calendar events command not found")
 	}
 
-	flags := []string{"days", "calendar-id", "max"}
+	flags := []string{"days", "from", "calendar-id", "max", "query", "event-types", "show-deleted", "timezone", "updated-min"}
 	for _, flag := range flags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected --%s flag", flag)
