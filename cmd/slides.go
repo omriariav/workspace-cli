@@ -1508,10 +1508,13 @@ func runSlidesAddImage(cmd *cobra.Command, args []string) error {
 
 	// If height not explicitly set, fetch image to calculate from aspect ratio.
 	// Fall back to 3:2 ratio if the image can't be fetched locally.
+	// Note: we cannot omit Height from Size — the Slides API returns
+	// UNIT_UNSPECIFIED when Size has Width but no Height.
 	if !cmd.Flags().Changed("height") {
 		h, fetchErr := getImageHeight(imageURL, width)
 		if fetchErr != nil {
-			// Image may be accessible to Google but not locally — use 3:2 default
+			// Image may be accessible to Google but not locally — use 3:2 default.
+			// Use --height for precise control.
 			height = width * 2 / 3
 			fmt.Fprintf(os.Stderr, "warning: could not fetch image for aspect ratio, using default 3:2 (%.0f×%.0f). Use --height to set explicitly.\n", width, height)
 		} else {

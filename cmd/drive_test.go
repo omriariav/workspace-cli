@@ -1384,6 +1384,17 @@ func TestDriveAddCommentCommand_Flags(t *testing.T) {
 	}
 }
 
+func TestDriveAddCommentCommand_QuotedTextFlag(t *testing.T) {
+	cmd := driveAddCommentCmd
+	flag := cmd.Flags().Lookup("quoted-text")
+	if flag == nil {
+		t.Fatal("--quoted-text flag not found")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("expected empty default for --quoted-text, got %q", flag.DefValue)
+	}
+}
+
 func TestDriveDeleteCommentCommand_Flags(t *testing.T) {
 	cmd := driveDeleteCommentCmd
 	flags := []string{"file-id", "comment-id"}
