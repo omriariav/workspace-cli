@@ -1479,14 +1479,18 @@ func runGmailForward(cmd *cobra.Command, args []string) error {
 					return p.PrintError(fmt.Errorf("failed to decode attachment %q: %w", att.Filename, err))
 				}
 			}
-			// Sanitize filename: use base name only to prevent path traversal,
-			// and add index prefix to avoid collisions between same-named attachments.
+			// Sanitize filename: use base name only to prevent path traversal.
+			// Write each attachment to its own subdirectory to avoid name collisions
+			// while preserving the original filename for MIME headers.
 			filename := filepath.Base(att.Filename)
 			if filename == "" || filename == "." || filename == "/" {
 				filename = "attachment"
 			}
-			filename = fmt.Sprintf("%d_%s", i, filename)
-			filePath := filepath.Join(tmpDir, filename)
+			attDir := filepath.Join(tmpDir, fmt.Sprintf("%d", i))
+			if err := os.Mkdir(attDir, 0700); err != nil {
+				return p.PrintError(fmt.Errorf("failed to create attachment dir: %w", err))
+			}
+			filePath := filepath.Join(attDir, filename)
 			// Verify the resolved path is still under tmpDir
 			if resolved, err := filepath.Abs(filePath); err != nil || !strings.HasPrefix(resolved, tmpDir) {
 				return p.PrintError(fmt.Errorf("unsafe attachment filename %q", att.Filename))
