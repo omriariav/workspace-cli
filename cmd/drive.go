@@ -244,7 +244,7 @@ var driveAddCommentCmd = &cobra.Command{
 	Long: `Adds a comment to a Google Drive file.
 
 Use --quoted-text to anchor the comment to a specific text selection in the document.`,
-	RunE:  runDriveAddComment,
+	RunE: runDriveAddComment,
 }
 
 var driveDeleteCommentCmd = &cobra.Command{
