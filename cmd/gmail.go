@@ -1462,9 +1462,14 @@ func runGmailForward(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return p.PrintError(fmt.Errorf("failed to get attachment %q: %w", att.Filename, err))
 			}
-			decoded, err := base64.URLEncoding.DecodeString(attData.Data)
+			// Gmail uses unpadded base64url encoding
+			decoded, err := base64.RawURLEncoding.DecodeString(attData.Data)
 			if err != nil {
-				return p.PrintError(fmt.Errorf("failed to decode attachment %q: %w", att.Filename, err))
+				// Fall back to padded decoding
+				decoded, err = base64.URLEncoding.DecodeString(attData.Data)
+				if err != nil {
+					return p.PrintError(fmt.Errorf("failed to decode attachment %q: %w", att.Filename, err))
+				}
 			}
 			// Sanitize filename: use base name only to prevent path traversal,
 			// and add index prefix to avoid collisions between same-named attachments.

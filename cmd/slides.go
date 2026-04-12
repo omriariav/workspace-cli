@@ -1234,6 +1234,10 @@ func getSlideID(svc *slides.Service, presentationID string, slideIDFlag string, 
 // getImageHeight fetches an image and calculates the height that preserves
 // the aspect ratio for the given target width.
 func getImageHeight(imageURL string, targetWidth float64) (float64, error) {
+	// Only fetch http/https URLs
+	if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
+		return 0, fmt.Errorf("unsupported URL scheme (only http/https)")
+	}
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 	resp, err := httpClient.Get(imageURL)
 	if err != nil {
