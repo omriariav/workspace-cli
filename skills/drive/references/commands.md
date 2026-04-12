@@ -361,6 +361,7 @@ Usage: gws drive add-comment [flags]
 |------|------|---------|----------|-------------|
 | `--file-id` | string | | Yes | File ID |
 | `--content` | string | | Yes | Comment content |
+| `--quoted-text` | string | | No | Anchor comment to this quoted text in the document |
 
 ---
 

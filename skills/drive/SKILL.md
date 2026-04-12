@@ -309,7 +309,13 @@ gws drive comment --file-id <id> --comment-id <cid>
 
 ```bash
 gws drive add-comment --file-id <id> --content "comment text"
+gws drive add-comment --file-id <id> --content "Fix this" --quoted-text "the text to anchor to"
 ```
+
+**Flags:**
+- `--file-id string` — File ID (required)
+- `--content string` — Comment content (required)
+- `--quoted-text string` — Anchor comment to this quoted text in the document
 
 ### delete-comment — Delete a comment
 

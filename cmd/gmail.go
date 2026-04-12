@@ -142,6 +142,22 @@ Examples:
 	RunE: runGmailReply,
 }
 
+var gmailForwardCmd = &cobra.Command{
+	Use:   "forward <message-id>",
+	Short: "Forward a message",
+	Long: `Forwards an existing email message to new recipients.
+
+Preserves the original message content and attachments.
+Adds a "Fwd:" prefix to the subject if not already present.
+
+Examples:
+  gws gmail forward 18abc123 --to "user@example.com"
+  gws gmail forward 18abc123 --to "user1@example.com,user2@example.com" --body "FYI"
+  gws gmail forward 18abc123 --to "user@example.com" --cc "manager@example.com"`,
+	Args: cobra.ExactArgs(1),
+	RunE: runGmailForward,
+}
+
 var gmailThreadCmd = &cobra.Command{
 	Use:   "thread <thread-id>",
 	Short: "Read a full thread",
@@ -307,6 +323,7 @@ func init() {
 	gmailCmd.AddCommand(gmailThreadCmd)
 	gmailCmd.AddCommand(gmailEventIDCmd)
 	gmailCmd.AddCommand(gmailReplyCmd)
+	gmailCmd.AddCommand(gmailForwardCmd)
 
 	// List flags
 	gmailListCmd.Flags().Int64("max", 10, "Maximum number of results (use --all for unlimited)")
@@ -333,6 +350,13 @@ func init() {
 	gmailReplyCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
 	gmailReplyCmd.Flags().Bool("all", false, "Reply to all recipients")
 	gmailReplyCmd.MarkFlagRequired("body")
+
+	// Forward flags
+	gmailForwardCmd.Flags().String("to", "", "Recipient email addresses (comma-separated, required)")
+	gmailForwardCmd.Flags().String("body", "", "Optional note above the forwarded content")
+	gmailForwardCmd.Flags().String("cc", "", "CC recipients (comma-separated)")
+	gmailForwardCmd.Flags().String("bcc", "", "BCC recipients (comma-separated)")
+	gmailForwardCmd.MarkFlagRequired("to")
 
 	// Label flags
 	gmailLabelCmd.Flags().String("add", "", "Label names to add (comma-separated)")
@@ -1358,6 +1382,179 @@ func runGmailReply(cmd *cobra.Command, args []string) error {
 		"thread_id":   sent.ThreadId,
 		"in_reply_to": messageID,
 	})
+}
+
+func runGmailForward(cmd *cobra.Command, args []string) error {
+	p := printer.New(os.Stdout, GetFormat())
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	messageID := args[0]
+	to, _ := cmd.Flags().GetString("to")
+	body, _ := cmd.Flags().GetString("body")
+	cc, _ := cmd.Flags().GetString("cc")
+	bcc, _ := cmd.Flags().GetString("bcc")
+
+	// Fetch the original message with full payload
+	origMsg, err := svc.Users.Messages.Get("me", messageID).Format("full").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get original message: %w", err))
+	}
+
+	// Extract headers from original
+	var origSubject, origFrom, origTo, origDate string
+	for _, header := range origMsg.Payload.Headers {
+		switch header.Name {
+		case "Subject":
+			origSubject = header.Value
+		case "From":
+			origFrom = header.Value
+		case "To":
+			origTo = header.Value
+		case "Date":
+			origDate = header.Value
+		}
+	}
+
+	// Build forwarded subject
+	fwdSubject := origSubject
+	if !strings.HasPrefix(strings.ToLower(fwdSubject), "fwd:") {
+		fwdSubject = "Fwd: " + fwdSubject
+	}
+
+	// Build forwarded body with original content
+	origBody := extractBody(origMsg.Payload)
+	var fwdBody strings.Builder
+	if body != "" {
+		fwdBody.WriteString(body)
+		fwdBody.WriteString("\r\n\r\n")
+	}
+	fwdBody.WriteString("---------- Forwarded message ---------\r\n")
+	fwdBody.WriteString(fmt.Sprintf("From: %s\r\n", origFrom))
+	fwdBody.WriteString(fmt.Sprintf("Date: %s\r\n", origDate))
+	fwdBody.WriteString(fmt.Sprintf("Subject: %s\r\n", origSubject))
+	fwdBody.WriteString(fmt.Sprintf("To: %s\r\n", origTo))
+	fwdBody.WriteString("\r\n")
+	fwdBody.WriteString(origBody)
+
+	// Collect original attachments to temporary files for buildMIMEMessage
+	var attachmentPaths []string
+	var tmpDir string
+	origAttachments := extractAttachmentParts(origMsg.Payload)
+	if len(origAttachments) > 0 {
+		tmpDir, err = os.MkdirTemp("", "gws-forward-*")
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to create temp dir: %w", err))
+		}
+		defer os.RemoveAll(tmpDir)
+
+		for i, att := range origAttachments {
+			var dataStr string
+			if att.Body.AttachmentId != "" {
+				// Fetch referenced attachment by ID
+				attData, err := svc.Users.Messages.Attachments.Get("me", messageID, att.Body.AttachmentId).Do()
+				if err != nil {
+					return p.PrintError(fmt.Errorf("failed to get attachment %q: %w", att.Filename, err))
+				}
+				dataStr = attData.Data
+			} else {
+				// Inline attachment — data is already in the part body
+				dataStr = att.Body.Data
+			}
+			// Gmail uses unpadded base64url encoding
+			decoded, err := base64.RawURLEncoding.DecodeString(dataStr)
+			if err != nil {
+				// Fall back to padded decoding
+				decoded, err = base64.URLEncoding.DecodeString(dataStr)
+				if err != nil {
+					return p.PrintError(fmt.Errorf("failed to decode attachment %q: %w", att.Filename, err))
+				}
+			}
+			// Sanitize filename: use base name only to prevent path traversal.
+			// Write each attachment to its own subdirectory to avoid name collisions
+			// while preserving the original filename for MIME headers.
+			filename := filepath.Base(att.Filename)
+			if filename == "" || filename == "." || filename == "/" {
+				filename = "attachment"
+			}
+			attDir := filepath.Join(tmpDir, fmt.Sprintf("%d", i))
+			if err := os.Mkdir(attDir, 0700); err != nil {
+				return p.PrintError(fmt.Errorf("failed to create attachment dir: %w", err))
+			}
+			filePath := filepath.Join(attDir, filename)
+			// Verify the resolved path is still under tmpDir
+			if resolved, err := filepath.Abs(filePath); err != nil || !strings.HasPrefix(resolved, tmpDir) {
+				return p.PrintError(fmt.Errorf("unsafe attachment filename %q", att.Filename))
+			}
+			if err := os.WriteFile(filePath, decoded, 0600); err != nil {
+				return p.PrintError(fmt.Errorf("failed to write attachment %q: %w", filename, err))
+			}
+			attachmentPaths = append(attachmentPaths, filePath)
+		}
+	}
+
+	// Build MIME message
+	msgHeaders := map[string]string{
+		"To":      to,
+		"Subject": fwdSubject,
+	}
+	if cc != "" {
+		msgHeaders["Cc"] = cc
+	}
+	if bcc != "" {
+		msgHeaders["Bcc"] = bcc
+	}
+
+	rawBytes, err := buildMIMEMessage(msgHeaders, fwdBody.String(), attachmentPaths)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	raw := base64.URLEncoding.EncodeToString(rawBytes)
+
+	msg := &gmail.Message{
+		Raw: raw,
+	}
+
+	sent, err := svc.Users.Messages.Send("me", msg).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to forward message: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":       "forwarded",
+		"message_id":   sent.Id,
+		"thread_id":    sent.ThreadId,
+		"forwarded_to": to,
+		"original_id":  messageID,
+	})
+}
+
+// extractAttachmentParts recursively finds attachment parts in a message payload.
+// Includes both referenced attachments (with AttachmentId) and inline attachments
+// (with body data but no AttachmentId, common for small files).
+func extractAttachmentParts(payload *gmail.MessagePart) []*gmail.MessagePart {
+	var attachments []*gmail.MessagePart
+	for _, part := range payload.Parts {
+		if part.Filename != "" && part.Body != nil {
+			if part.Body.AttachmentId != "" || part.Body.Data != "" {
+				attachments = append(attachments, part)
+			}
+		}
+		if strings.HasPrefix(part.MimeType, "multipart/") {
+			attachments = append(attachments, extractAttachmentParts(part)...)
+		}
+	}
+	return attachments
 }
 
 // emailMatchesSelf checks if an RFC 5322 address matches the user's email.

@@ -3,9 +3,14 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -96,7 +101,9 @@ var slidesAddImageCmd = &cobra.Command{
 	Short: "Add an image to a slide",
 	Long: `Adds an image to a slide from a URL.
 
-Position and size are in points (PT). The image URL must be publicly accessible.`,
+Position and size are in points (PT). The image URL must be publicly accessible.
+By default, height is auto-calculated from the image's aspect ratio.
+Use --height to set an explicit height (overrides aspect ratio).`,
 	Args: cobra.ExactArgs(1),
 	RunE: runSlidesAddImage,
 }
@@ -351,7 +358,8 @@ func init() {
 	slidesAddImageCmd.Flags().String("url", "", "Image URL (required, must be publicly accessible)")
 	slidesAddImageCmd.Flags().Float64("x", 100, "X position in points")
 	slidesAddImageCmd.Flags().Float64("y", 100, "Y position in points")
-	slidesAddImageCmd.Flags().Float64("width", 400, "Width in points (height auto-calculated to maintain aspect ratio)")
+	slidesAddImageCmd.Flags().Float64("width", 400, "Width in points (default: 400)")
+	slidesAddImageCmd.Flags().Float64("height", 0, "Height in points (default: auto-calculated from image aspect ratio)")
 	slidesAddImageCmd.MarkFlagRequired("url")
 
 	// Add-text flags
@@ -1224,6 +1232,38 @@ func getSlideID(svc *slides.Service, presentationID string, slideIDFlag string, 
 	return "", fmt.Errorf("must specify --slide-id or --slide-number")
 }
 
+// getImageHeight fetches an image and calculates the height that preserves
+// the aspect ratio for the given target width.
+func getImageHeight(imageURL string, targetWidth float64) (float64, error) {
+	// Only fetch http/https URLs
+	parsed, err := url.Parse(imageURL)
+	if err != nil || (strings.ToLower(parsed.Scheme) != "http" && strings.ToLower(parsed.Scheme) != "https") || parsed.Host == "" {
+		return 0, fmt.Errorf("unsupported URL scheme (only http/https)")
+	}
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+	resp, err := httpClient.Get(imageURL)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("image URL returned status %d", resp.StatusCode)
+	}
+
+	cfg, _, err := image.DecodeConfig(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decode image dimensions: %w", err)
+	}
+
+	if cfg.Width == 0 {
+		return 0, fmt.Errorf("image has zero width")
+	}
+
+	aspectRatio := float64(cfg.Height) / float64(cfg.Width)
+	return targetWidth * aspectRatio, nil
+}
+
 // validShapeTypes contains supported Google Slides shape types
 var validShapeTypes = map[string]bool{
 	"TEXT_BOX":                      true,
@@ -1461,10 +1501,27 @@ func runSlidesAddImage(cmd *cobra.Command, args []string) error {
 	x, _ := cmd.Flags().GetFloat64("x")
 	y, _ := cmd.Flags().GetFloat64("y")
 	width, _ := cmd.Flags().GetFloat64("width")
+	height, _ := cmd.Flags().GetFloat64("height")
 
 	slideID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
 	if err != nil {
 		return p.PrintError(err)
+	}
+
+	// If height not explicitly set, fetch image to calculate from aspect ratio.
+	// Fall back to 3:2 ratio if the image can't be fetched locally.
+	// Note: we cannot omit Height from Size — the Slides API returns
+	// UNIT_UNSPECIFIED when Size has Width but no Height.
+	if !cmd.Flags().Changed("height") {
+		h, fetchErr := getImageHeight(imageURL, width)
+		if fetchErr != nil {
+			// Image may be accessible to Google but not locally — use 3:2 default.
+			// Use --height for precise control.
+			height = width * 2 / 3
+			fmt.Fprintf(os.Stderr, "warning: could not fetch image for aspect ratio, using default 3:2 (%.0f×%.0f). Use --height to set explicitly.\n", width, height)
+		} else {
+			height = h
+		}
 	}
 
 	requests := []*slides.Request{
@@ -1474,8 +1531,8 @@ func runSlidesAddImage(cmd *cobra.Command, args []string) error {
 				ElementProperties: &slides.PageElementProperties{
 					PageObjectId: slideID,
 					Size: &slides.Size{
-						Width: &slides.Dimension{Magnitude: width, Unit: "PT"},
-						// Height not set - will maintain aspect ratio
+						Width:  &slides.Dimension{Magnitude: width, Unit: "PT"},
+						Height: &slides.Dimension{Magnitude: height, Unit: "PT"},
 					},
 					Transform: &slides.AffineTransform{
 						ScaleX:     1,
@@ -1510,6 +1567,7 @@ func runSlidesAddImage(cmd *cobra.Command, args []string) error {
 		"url":             imageURL,
 		"position":        map[string]float64{"x": x, "y": y},
 		"width":           width,
+		"height":          height,
 	}
 
 	return p.Print(result)

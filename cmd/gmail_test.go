@@ -716,6 +716,206 @@ func TestGmailReplyCommand_Flags(t *testing.T) {
 	}
 }
 
+func TestGmailForwardCommand_Flags(t *testing.T) {
+	cmd := gmailForwardCmd
+
+	expectedFlags := []string{"to", "body", "cc", "bcc"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag to exist", flag)
+		}
+	}
+}
+
+// TestExtractAttachmentParts tests attachment discovery including inline parts
+func TestExtractAttachmentParts(t *testing.T) {
+	payload := &gmail.MessagePart{
+		MimeType: "multipart/mixed",
+		Parts: []*gmail.MessagePart{
+			{
+				MimeType: "text/plain",
+				Body:     &gmail.MessagePartBody{Data: "dGV4dA"},
+			},
+			{
+				// Referenced attachment (has AttachmentId)
+				Filename: "report.pdf",
+				MimeType: "application/pdf",
+				Body:     &gmail.MessagePartBody{AttachmentId: "att-123", Size: 1024},
+			},
+			{
+				// Inline attachment (has Data but no AttachmentId)
+				Filename: "icon.png",
+				MimeType: "image/png",
+				Body:     &gmail.MessagePartBody{Data: "iVBOR", Size: 256},
+			},
+			{
+				// Not an attachment (no filename)
+				MimeType: "text/html",
+				Body:     &gmail.MessagePartBody{Data: "PCFET0NUWVBF"},
+			},
+			{
+				// Nested multipart with attachment
+				MimeType: "multipart/related",
+				Parts: []*gmail.MessagePart{
+					{
+						Filename: "nested.jpg",
+						MimeType: "image/jpeg",
+						Body:     &gmail.MessagePartBody{AttachmentId: "att-456", Size: 2048},
+					},
+				},
+			},
+		},
+	}
+
+	attachments := extractAttachmentParts(payload)
+
+	if len(attachments) != 3 {
+		t.Fatalf("expected 3 attachments, got %d", len(attachments))
+	}
+
+	names := make([]string, len(attachments))
+	for i, a := range attachments {
+		names[i] = a.Filename
+	}
+
+	expected := []string{"report.pdf", "icon.png", "nested.jpg"}
+	for i, exp := range expected {
+		if names[i] != exp {
+			t.Errorf("attachment[%d]: expected %q, got %q", i, exp, names[i])
+		}
+	}
+}
+
+// TestGmailForward_MockServer tests the forward workflow
+func TestGmailForward_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Get original message
+		if r.URL.Path == "/gmail/v1/users/me/messages/fwd-msg-123" && r.Method == "GET" {
+			resp := map[string]interface{}{
+				"id":       "fwd-msg-123",
+				"threadId": "thread-fwd",
+				"payload": map[string]interface{}{
+					"headers": []map[string]string{
+						{"name": "Subject", "value": "Original Subject"},
+						{"name": "From", "value": "sender@example.com"},
+						{"name": "To", "value": "me@example.com"},
+						{"name": "Date", "value": "Mon, 12 Apr 2026 10:00:00 +0000"},
+					},
+					"mimeType": "text/plain",
+					"body":     map[string]interface{}{"data": base64.URLEncoding.EncodeToString([]byte("Original body text"))},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Send forwarded message
+		if r.URL.Path == "/gmail/v1/users/me/messages/send" && r.Method == "POST" {
+			var msg gmail.Message
+			if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+				t.Errorf("failed to decode: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			// Decode raw to verify content
+			rawBytes, _ := base64.URLEncoding.DecodeString(msg.Raw)
+			rawStr := string(rawBytes)
+			if !strings.Contains(rawStr, "Fwd: Original Subject") {
+				t.Errorf("expected Fwd: prefix in subject, got: %s", rawStr)
+			}
+			if !strings.Contains(rawStr, "To: recipient@example.com") {
+				t.Errorf("expected To header with recipient")
+			}
+			if !strings.Contains(rawStr, "Forwarded message") {
+				t.Errorf("expected forwarded message marker in body")
+			}
+			if !strings.Contains(rawStr, "Original body text") {
+				t.Errorf("expected original body text in forwarded message")
+			}
+			if !strings.Contains(rawStr, "From: sender@example.com") {
+				t.Errorf("expected original From in forwarded header block")
+			}
+
+			resp := &gmail.Message{
+				Id:       "sent-fwd-456",
+				ThreadId: "thread-fwd-new",
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	// Fetch original message
+	origMsg, err := svc.Users.Messages.Get("me", "fwd-msg-123").Format("full").Do()
+	if err != nil {
+		t.Fatalf("failed to get original message: %v", err)
+	}
+
+	// Extract headers
+	var origSubject, origFrom, origTo, origDate string
+	for _, header := range origMsg.Payload.Headers {
+		switch header.Name {
+		case "Subject":
+			origSubject = header.Value
+		case "From":
+			origFrom = header.Value
+		case "To":
+			origTo = header.Value
+		case "Date":
+			origDate = header.Value
+		}
+	}
+
+	// Build forwarded subject
+	fwdSubject := "Fwd: " + origSubject
+
+	// Build forwarded body
+	origBody := extractBody(origMsg.Payload)
+	var fwdBody strings.Builder
+	fwdBody.WriteString("FYI see below\r\n\r\n")
+	fwdBody.WriteString("---------- Forwarded message ---------\r\n")
+	fwdBody.WriteString(fmt.Sprintf("From: %s\r\n", origFrom))
+	fwdBody.WriteString(fmt.Sprintf("Date: %s\r\n", origDate))
+	fwdBody.WriteString(fmt.Sprintf("Subject: %s\r\n", origSubject))
+	fwdBody.WriteString(fmt.Sprintf("To: %s\r\n", origTo))
+	fwdBody.WriteString("\r\n")
+	fwdBody.WriteString(origBody)
+
+	msgHeaders := map[string]string{
+		"To":      "recipient@example.com",
+		"Subject": fwdSubject,
+	}
+
+	rawBytes, err := buildMIMEMessage(msgHeaders, fwdBody.String(), nil)
+	if err != nil {
+		t.Fatalf("failed to build MIME message: %v", err)
+	}
+
+	raw := base64.URLEncoding.EncodeToString(rawBytes)
+	msg := &gmail.Message{Raw: raw}
+
+	sent, err := svc.Users.Messages.Send("me", msg).Do()
+	if err != nil {
+		t.Fatalf("failed to send forward: %v", err)
+	}
+
+	if sent.Id != "sent-fwd-456" {
+		t.Errorf("expected sent id 'sent-fwd-456', got '%s'", sent.Id)
+	}
+}
+
 // TestGmailReply_MockServer tests the reply workflow
 func TestGmailReply_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

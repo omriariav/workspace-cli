@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -647,6 +650,50 @@ func TestSlidesAddShapeCommand_Flags(t *testing.T) {
 	}
 }
 
+// TestGetImageHeight_Success tests aspect ratio calculation from a mock image server
+func TestGetImageHeight_Success(t *testing.T) {
+	// Serve a 200x100 PNG image
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		img := image.NewRGBA(image.Rect(0, 0, 200, 100))
+		for x := 0; x < 200; x++ {
+			for y := 0; y < 100; y++ {
+				img.Set(x, y, color.White)
+			}
+		}
+		w.Header().Set("Content-Type", "image/png")
+		png.Encode(w, img)
+	}))
+	defer server.Close()
+
+	height, err := getImageHeight(server.URL, 400)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// 200x100 image at width 400 → height should be 200 (2:1 ratio)
+	if height != 200 {
+		t.Errorf("expected height 200, got %f", height)
+	}
+}
+
+// TestGetImageHeight_Failure tests fallback when image can't be fetched
+func TestGetImageHeight_Failure(t *testing.T) {
+	_, err := getImageHeight("http://127.0.0.1:1/nonexistent.png", 400)
+	if err == nil {
+		t.Fatal("expected error for unreachable URL")
+	}
+}
+
+// TestGetImageHeight_BadScheme tests URL scheme restriction
+func TestGetImageHeight_BadScheme(t *testing.T) {
+	_, err := getImageHeight("ftp://example.com/image.png", 400)
+	if err == nil {
+		t.Fatal("expected error for non-http scheme")
+	}
+	if !strings.Contains(err.Error(), "unsupported URL scheme") {
+		t.Errorf("expected scheme error, got: %v", err)
+	}
+}
+
 // TestSlidesAddImageCommand_Flags tests add-image command flags
 func TestSlidesAddImageCommand_Flags(t *testing.T) {
 	cmd := findSubcommand(slidesCmd, "add-image")
@@ -654,7 +701,7 @@ func TestSlidesAddImageCommand_Flags(t *testing.T) {
 		t.Fatal("slides add-image command not found")
 	}
 
-	expectedFlags := []string{"slide-id", "slide-number", "url", "x", "y", "width"}
+	expectedFlags := []string{"slide-id", "slide-number", "url", "x", "y", "width", "height"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)

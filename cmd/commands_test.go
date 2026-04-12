@@ -127,6 +127,7 @@ func TestGmailCommands(t *testing.T) {
 		{"thread", "thread <thread-id>", true},
 		{"event-id", "event-id <message-id>", true},
 		{"reply", "reply <message-id>", true},
+		{"forward", "forward <message-id>", true},
 		{"untrash", "untrash <message-id>", true},
 		{"delete", "delete <message-id>", true},
 		{"batch-modify", "batch-modify", false},

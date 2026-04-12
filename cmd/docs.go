@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,9 +13,26 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/googleapi"
 )
 
 // flattenTabs recursively flattens a tab tree into a flat list.
+// isDocsPreconditionError checks if the error is a Google API failedPrecondition
+// error, which indicates the file is not a native Google Doc (e.g., uploaded DOCX).
+func isDocsPreconditionError(err error) bool {
+	var apiErr *googleapi.Error
+	if !errors.As(err, &apiErr) || apiErr.Code != 400 {
+		return false
+	}
+	for _, e := range apiErr.Errors {
+		if e.Reason == "failedPrecondition" {
+			return true
+		}
+	}
+	// Fall back to message check for APIs that don't populate ErrorItems
+	return strings.Contains(apiErr.Message, "not supported for this document")
+}
+
 func flattenTabs(tabs []*docs.Tab) []*docs.Tab {
 	var result []*docs.Tab
 	for _, tab := range tabs {
@@ -543,6 +561,7 @@ func init() {
 	docsFormatCmd.Flags().Bool("italic", false, "Make text italic")
 	docsFormatCmd.Flags().Int64("font-size", 0, "Font size in points")
 	docsFormatCmd.Flags().String("color", "", "Text color (hex, e.g., #FF0000)")
+	docsFormatCmd.Flags().String("font-family", "", "Font family (e.g., \"Arial\", \"David Libre\")")
 	docsFormatCmd.MarkFlagRequired("from")
 	docsFormatCmd.MarkFlagRequired("to")
 
@@ -552,6 +571,7 @@ func init() {
 	docsSetParagraphStyleCmd.Flags().String("alignment", "", "Paragraph alignment: START, CENTER, END, JUSTIFIED")
 	docsSetParagraphStyleCmd.Flags().Float64("line-spacing", 0, "Line spacing multiplier (e.g., 1.15, 1.5, 2.0)")
 	docsSetParagraphStyleCmd.Flags().String("style", "", "Named style: NORMAL_TEXT, TITLE, SUBTITLE, HEADING_1..HEADING_6")
+	docsSetParagraphStyleCmd.Flags().String("direction", "", "Text direction: LEFT_TO_RIGHT or RIGHT_TO_LEFT")
 	docsSetParagraphStyleCmd.MarkFlagRequired("from")
 	docsSetParagraphStyleCmd.MarkFlagRequired("to")
 
@@ -756,6 +776,9 @@ func runDocsRead(cmd *cobra.Command, args []string) error {
 
 	doc, err := svc.Documents.Get(docID).IncludeTabsContent(true).Do()
 	if err != nil {
+		if isDocsPreconditionError(err) {
+			return p.PrintError(fmt.Errorf("this file is not a native Google Doc (it may be an uploaded DOCX). Use 'gws drive download %s' to download it instead", docID))
+		}
 		return p.PrintError(fmt.Errorf("failed to get document: %w", err))
 	}
 
@@ -821,6 +844,9 @@ func runDocsInfo(cmd *cobra.Command, args []string) error {
 
 	doc, err := svc.Documents.Get(docID).IncludeTabsContent(true).Do()
 	if err != nil {
+		if isDocsPreconditionError(err) {
+			return p.PrintError(fmt.Errorf("this file is not a native Google Doc (it may be an uploaded DOCX). Use 'gws drive download %s' to download it instead", docID))
+		}
 		return p.PrintError(fmt.Errorf("failed to get document: %w", err))
 	}
 
@@ -903,6 +929,9 @@ func extractStructure(content []*docs.StructuralElement) []map[string]interface{
 
 	for _, elem := range content {
 		item := map[string]interface{}{}
+
+		item["start_index"] = elem.StartIndex
+		item["end_index"] = elem.EndIndex
 
 		if elem.Paragraph != nil {
 			item["type"] = "paragraph"
@@ -1514,6 +1543,7 @@ func runDocsFormat(cmd *cobra.Command, args []string) error {
 	italic, _ := cmd.Flags().GetBool("italic")
 	fontSize, _ := cmd.Flags().GetInt64("font-size")
 	textColor, _ := cmd.Flags().GetString("color")
+	fontFamily, _ := cmd.Flags().GetString("font-family")
 	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	if from < 1 {
@@ -1572,8 +1602,15 @@ func runDocsFormat(cmd *cobra.Command, args []string) error {
 		fields = append(fields, "foregroundColor")
 	}
 
+	if fontFamily != "" {
+		textStyle.WeightedFontFamily = &docs.WeightedFontFamily{
+			FontFamily: fontFamily,
+		}
+		fields = append(fields, "weightedFontFamily")
+	}
+
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no formatting options specified; use --bold, --italic, --font-size, or --color"))
+		return p.PrintError(fmt.Errorf("no formatting options specified; use --bold, --italic, --font-size, --color, or --font-family"))
 	}
 
 	rng := &docs.Range{
@@ -1629,6 +1666,7 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 	alignment, _ := cmd.Flags().GetString("alignment")
 	lineSpacing, _ := cmd.Flags().GetFloat64("line-spacing")
 	style, _ := cmd.Flags().GetString("style")
+	direction, _ := cmd.Flags().GetString("direction")
 	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	if from < 1 {
@@ -1677,8 +1715,17 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 		fields = append(fields, "namedStyleType")
 	}
 
+	if direction != "" {
+		validDirs := map[string]bool{"LEFT_TO_RIGHT": true, "RIGHT_TO_LEFT": true}
+		if !validDirs[direction] {
+			return p.PrintError(fmt.Errorf("invalid direction %q; use LEFT_TO_RIGHT or RIGHT_TO_LEFT", direction))
+		}
+		paraStyle.Direction = direction
+		fields = append(fields, "direction")
+	}
+
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no style options specified; use --alignment, --line-spacing, or --style"))
+		return p.PrintError(fmt.Errorf("no style options specified; use --alignment, --line-spacing, --style, or --direction"))
 	}
 
 	rng := &docs.Range{

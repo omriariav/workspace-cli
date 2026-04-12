@@ -150,6 +150,31 @@ Usage: gws gmail reply <message-id> [flags]
 
 ---
 
+## gws gmail forward
+
+Forwards an existing email message to new recipients. Preserves the original message content and attachments.
+
+```
+Usage: gws gmail forward <message-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--to` | string | | Yes | Recipient email addresses (comma-separated) |
+| `--body` | string | | No | Optional note above the forwarded content |
+| `--cc` | string | | No | CC recipients (comma-separated) |
+| `--bcc` | string | | No | BCC recipients (comma-separated) |
+
+### Output Fields (JSON)
+
+- `status` — Always `"forwarded"`
+- `message_id` — New forwarded message ID
+- `thread_id` — Thread ID
+- `forwarded_to` — Recipient addresses
+- `original_id` — Original message ID
+
+---
+
 ## gws gmail event-id
 
 Extracts the Google Calendar event ID from a calendar invite email.

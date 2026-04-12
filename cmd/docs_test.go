@@ -1022,7 +1022,7 @@ func TestDocsFormatCommand_Flags(t *testing.T) {
 		t.Fatal("docs format command not found")
 	}
 
-	expectedFlags := []string{"from", "to", "bold", "italic", "font-size", "color"}
+	expectedFlags := []string{"from", "to", "bold", "italic", "font-size", "color", "font-family"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)
@@ -1037,11 +1037,41 @@ func TestDocsSetParagraphStyleCommand_Flags(t *testing.T) {
 		t.Fatal("docs set-paragraph-style command not found")
 	}
 
-	expectedFlags := []string{"from", "to", "alignment", "line-spacing", "style"}
+	expectedFlags := []string{"from", "to", "alignment", "line-spacing", "style", "direction"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)
 		}
+	}
+}
+
+// TestDocsFormatCommand_FontFamilyFlag tests that --font-family has correct default
+func TestDocsFormatCommand_FontFamilyFlag(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "format")
+	if cmd == nil {
+		t.Fatal("docs format command not found")
+	}
+	flag := cmd.Flags().Lookup("font-family")
+	if flag == nil {
+		t.Fatal("--font-family flag not found")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("expected empty default for --font-family, got %q", flag.DefValue)
+	}
+}
+
+// TestDocsSetParagraphStyleCommand_DirectionFlag tests --direction flag and defaults
+func TestDocsSetParagraphStyleCommand_DirectionFlag(t *testing.T) {
+	cmd := findSubcommand(docsCmd, "set-paragraph-style")
+	if cmd == nil {
+		t.Fatal("docs set-paragraph-style command not found")
+	}
+	flag := cmd.Flags().Lookup("direction")
+	if flag == nil {
+		t.Fatal("--direction flag not found")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("expected empty default for --direction, got %q", flag.DefValue)
 	}
 }
 

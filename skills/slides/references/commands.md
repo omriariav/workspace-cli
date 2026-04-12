@@ -185,9 +185,10 @@ Usage: gws slides add-image <presentation-id> [flags]
 | `--slide-id` | string | | | Slide object ID |
 | `--x` | float | 100 | No | X position in points |
 | `--y` | float | 100 | No | Y position in points |
-| `--width` | float | 400 | No | Width in points (height auto-calculated) |
+| `--width` | float | 400 | No | Width in points |
+| `--height` | float | 0 | No | Height in points (default: auto-calculated from image aspect ratio) |
 
-Height is automatically calculated to maintain aspect ratio based on width.
+By default, height is auto-calculated from the image's aspect ratio. If the image URL is not locally reachable, falls back to a 3:2 ratio with a warning. Use `--height` to set an explicit value.
 
 ---
 
