@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -1235,7 +1236,8 @@ func getSlideID(svc *slides.Service, presentationID string, slideIDFlag string, 
 // the aspect ratio for the given target width.
 func getImageHeight(imageURL string, targetWidth float64) (float64, error) {
 	// Only fetch http/https URLs
-	if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
+	parsed, err := url.Parse(imageURL)
+	if err != nil || (strings.ToLower(parsed.Scheme) != "http" && strings.ToLower(parsed.Scheme) != "https") || parsed.Host == "" {
 		return 0, fmt.Errorf("unsupported URL scheme (only http/https)")
 	}
 	httpClient := &http.Client{Timeout: 15 * time.Second}

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,9 +13,26 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/googleapi"
 )
 
 // flattenTabs recursively flattens a tab tree into a flat list.
+// isDocsPreconditionError checks if the error is a Google API failedPrecondition
+// error, which indicates the file is not a native Google Doc (e.g., uploaded DOCX).
+func isDocsPreconditionError(err error) bool {
+	var apiErr *googleapi.Error
+	if !errors.As(err, &apiErr) || apiErr.Code != 400 {
+		return false
+	}
+	for _, e := range apiErr.Errors {
+		if e.Reason == "failedPrecondition" {
+			return true
+		}
+	}
+	// Fall back to message check for APIs that don't populate ErrorItems
+	return strings.Contains(apiErr.Message, "not supported for this document")
+}
+
 func flattenTabs(tabs []*docs.Tab) []*docs.Tab {
 	var result []*docs.Tab
 	for _, tab := range tabs {
@@ -758,7 +776,7 @@ func runDocsRead(cmd *cobra.Command, args []string) error {
 
 	doc, err := svc.Documents.Get(docID).IncludeTabsContent(true).Do()
 	if err != nil {
-		if strings.Contains(err.Error(), "failedPrecondition") {
+		if isDocsPreconditionError(err) {
 			return p.PrintError(fmt.Errorf("this file is not a native Google Doc (it may be an uploaded DOCX). Use 'gws drive download %s' to download it instead", docID))
 		}
 		return p.PrintError(fmt.Errorf("failed to get document: %w", err))
@@ -826,7 +844,7 @@ func runDocsInfo(cmd *cobra.Command, args []string) error {
 
 	doc, err := svc.Documents.Get(docID).IncludeTabsContent(true).Do()
 	if err != nil {
-		if strings.Contains(err.Error(), "failedPrecondition") {
+		if isDocsPreconditionError(err) {
 			return p.PrintError(fmt.Errorf("this file is not a native Google Doc (it may be an uploaded DOCX). Use 'gws drive download %s' to download it instead", docID))
 		}
 		return p.PrintError(fmt.Errorf("failed to get document: %w", err))
