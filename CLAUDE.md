@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.33.0** - Calendar events: --from flag, --query, --event-types, --show-deleted, --timezone, --updated-min.
+**v1.34.0** - Fix slides add-image, docs DOCX error, gmail forward, drive anchored comments, docs formatting flags.
 
 ## Roadmap
 
