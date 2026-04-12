@@ -727,6 +727,65 @@ func TestGmailForwardCommand_Flags(t *testing.T) {
 	}
 }
 
+// TestExtractAttachmentParts tests attachment discovery including inline parts
+func TestExtractAttachmentParts(t *testing.T) {
+	payload := &gmail.MessagePart{
+		MimeType: "multipart/mixed",
+		Parts: []*gmail.MessagePart{
+			{
+				MimeType: "text/plain",
+				Body:     &gmail.MessagePartBody{Data: "dGV4dA"},
+			},
+			{
+				// Referenced attachment (has AttachmentId)
+				Filename: "report.pdf",
+				MimeType: "application/pdf",
+				Body:     &gmail.MessagePartBody{AttachmentId: "att-123", Size: 1024},
+			},
+			{
+				// Inline attachment (has Data but no AttachmentId)
+				Filename: "icon.png",
+				MimeType: "image/png",
+				Body:     &gmail.MessagePartBody{Data: "iVBOR", Size: 256},
+			},
+			{
+				// Not an attachment (no filename)
+				MimeType: "text/html",
+				Body:     &gmail.MessagePartBody{Data: "PCFET0NUWVBF"},
+			},
+			{
+				// Nested multipart with attachment
+				MimeType: "multipart/related",
+				Parts: []*gmail.MessagePart{
+					{
+						Filename: "nested.jpg",
+						MimeType: "image/jpeg",
+						Body:     &gmail.MessagePartBody{AttachmentId: "att-456", Size: 2048},
+					},
+				},
+			},
+		},
+	}
+
+	attachments := extractAttachmentParts(payload)
+
+	if len(attachments) != 3 {
+		t.Fatalf("expected 3 attachments, got %d", len(attachments))
+	}
+
+	names := make([]string, len(attachments))
+	for i, a := range attachments {
+		names[i] = a.Filename
+	}
+
+	expected := []string{"report.pdf", "icon.png", "nested.jpg"}
+	for i, exp := range expected {
+		if names[i] != exp {
+			t.Errorf("attachment[%d]: expected %q, got %q", i, exp, names[i])
+		}
+	}
+}
+
 // TestGmailForward_MockServer tests the forward workflow
 func TestGmailForward_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

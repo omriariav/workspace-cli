@@ -1561,7 +1561,8 @@ func runSlidesAddImage(cmd *cobra.Command, args []string) error {
 		"image_id":        imageObjectID,
 		"url":             imageURL,
 		"position":        map[string]float64{"x": x, "y": y},
-		"size":            map[string]float64{"width": width, "height": height},
+		"width":           width,
+		"height":          height,
 	}
 
 	return p.Print(result)

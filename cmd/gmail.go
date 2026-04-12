@@ -1458,15 +1458,23 @@ func runGmailForward(cmd *cobra.Command, args []string) error {
 		defer os.RemoveAll(tmpDir)
 
 		for i, att := range origAttachments {
-			attData, err := svc.Users.Messages.Attachments.Get("me", messageID, att.Body.AttachmentId).Do()
-			if err != nil {
-				return p.PrintError(fmt.Errorf("failed to get attachment %q: %w", att.Filename, err))
+			var dataStr string
+			if att.Body.AttachmentId != "" {
+				// Fetch referenced attachment by ID
+				attData, err := svc.Users.Messages.Attachments.Get("me", messageID, att.Body.AttachmentId).Do()
+				if err != nil {
+					return p.PrintError(fmt.Errorf("failed to get attachment %q: %w", att.Filename, err))
+				}
+				dataStr = attData.Data
+			} else {
+				// Inline attachment — data is already in the part body
+				dataStr = att.Body.Data
 			}
 			// Gmail uses unpadded base64url encoding
-			decoded, err := base64.RawURLEncoding.DecodeString(attData.Data)
+			decoded, err := base64.RawURLEncoding.DecodeString(dataStr)
 			if err != nil {
 				// Fall back to padded decoding
-				decoded, err = base64.URLEncoding.DecodeString(attData.Data)
+				decoded, err = base64.URLEncoding.DecodeString(dataStr)
 				if err != nil {
 					return p.PrintError(fmt.Errorf("failed to decode attachment %q: %w", att.Filename, err))
 				}
@@ -1528,11 +1536,15 @@ func runGmailForward(cmd *cobra.Command, args []string) error {
 }
 
 // extractAttachmentParts recursively finds attachment parts in a message payload.
+// Includes both referenced attachments (with AttachmentId) and inline attachments
+// (with body data but no AttachmentId, common for small files).
 func extractAttachmentParts(payload *gmail.MessagePart) []*gmail.MessagePart {
 	var attachments []*gmail.MessagePart
 	for _, part := range payload.Parts {
-		if part.Filename != "" && part.Body != nil && part.Body.AttachmentId != "" {
-			attachments = append(attachments, part)
+		if part.Filename != "" && part.Body != nil {
+			if part.Body.AttachmentId != "" || part.Body.Data != "" {
+				attachments = append(attachments, part)
+			}
 		}
 		if strings.HasPrefix(part.MimeType, "multipart/") {
 			attachments = append(attachments, extractAttachmentParts(part)...)
