@@ -1457,7 +1457,7 @@ func runGmailForward(cmd *cobra.Command, args []string) error {
 		}
 		defer os.RemoveAll(tmpDir)
 
-		for _, att := range origAttachments {
+		for i, att := range origAttachments {
 			attData, err := svc.Users.Messages.Attachments.Get("me", messageID, att.Body.AttachmentId).Do()
 			if err != nil {
 				return p.PrintError(fmt.Errorf("failed to get attachment %q: %w", att.Filename, err))
@@ -1466,11 +1466,18 @@ func runGmailForward(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return p.PrintError(fmt.Errorf("failed to decode attachment %q: %w", att.Filename, err))
 			}
-			filename := att.Filename
-			if filename == "" {
+			// Sanitize filename: use base name only to prevent path traversal,
+			// and add index prefix to avoid collisions between same-named attachments.
+			filename := filepath.Base(att.Filename)
+			if filename == "" || filename == "." || filename == "/" {
 				filename = "attachment"
 			}
+			filename = fmt.Sprintf("%d_%s", i, filename)
 			filePath := filepath.Join(tmpDir, filename)
+			// Verify the resolved path is still under tmpDir
+			if resolved, err := filepath.Abs(filePath); err != nil || !strings.HasPrefix(resolved, tmpDir) {
+				return p.PrintError(fmt.Errorf("unsafe attachment filename %q", att.Filename))
+			}
 			if err := os.WriteFile(filePath, decoded, 0600); err != nil {
 				return p.PrintError(fmt.Errorf("failed to write attachment %q: %w", filename, err))
 			}
