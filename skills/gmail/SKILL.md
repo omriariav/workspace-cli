@@ -59,6 +59,7 @@ For initial setup, see the `gws-auth` skill.
 | Delete a thread | `gws gmail delete-thread <thread-id>` |
 | Reply to a message | `gws gmail reply <message-id> --body "Thanks!"` |
 | Reply to all | `gws gmail reply <message-id> --body "Got it" --all` |
+| Forward a message | `gws gmail forward <message-id> --to "user@example.com"` |
 | Extract event ID | `gws gmail event-id <message-id>` |
 | List drafts | `gws gmail drafts` |
 | Get a draft | `gws gmail draft --id <draft-id>` |
@@ -205,6 +206,27 @@ Replies to an existing email message within its thread. Automatically sets threa
 gws gmail reply 18abc123 --body "Thanks, got it!"
 gws gmail reply 18abc123 --body "Adding someone" --cc extra@example.com
 gws gmail reply 18abc123 --body "Sounds good" --all
+```
+
+### forward — Forward a message
+
+```bash
+gws gmail forward <message-id> --to <recipients> [flags]
+```
+
+Forwards an existing email message to new recipients. Preserves the original message content and attachments. Adds a "Fwd:" prefix to the subject.
+
+**Flags:**
+- `--to string` — Recipient email addresses (comma-separated, required)
+- `--body string` — Optional note above the forwarded content
+- `--cc string` — CC recipients (comma-separated)
+- `--bcc string` — BCC recipients (comma-separated)
+
+**Examples:**
+```bash
+gws gmail forward 18abc123 --to "user@example.com"
+gws gmail forward 18abc123 --to "user1@example.com,user2@example.com" --body "FYI"
+gws gmail forward 18abc123 --to "user@example.com" --cc "manager@example.com"
 ```
 
 ### event-id — Extract calendar event ID from an invite email

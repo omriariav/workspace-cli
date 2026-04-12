@@ -716,6 +716,17 @@ func TestGmailReplyCommand_Flags(t *testing.T) {
 	}
 }
 
+func TestGmailForwardCommand_Flags(t *testing.T) {
+	cmd := gmailForwardCmd
+
+	expectedFlags := []string{"to", "body", "cc", "bcc"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag to exist", flag)
+		}
+	}
+}
+
 // TestGmailReply_MockServer tests the reply workflow
 func TestGmailReply_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1022,7 +1022,7 @@ func TestDocsFormatCommand_Flags(t *testing.T) {
 		t.Fatal("docs format command not found")
 	}
 
-	expectedFlags := []string{"from", "to", "bold", "italic", "font-size", "color"}
+	expectedFlags := []string{"from", "to", "bold", "italic", "font-size", "color", "font-family"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)
@@ -1037,7 +1037,7 @@ func TestDocsSetParagraphStyleCommand_Flags(t *testing.T) {
 		t.Fatal("docs set-paragraph-style command not found")
 	}
 
-	expectedFlags := []string{"from", "to", "alignment", "line-spacing", "style"}
+	expectedFlags := []string{"from", "to", "alignment", "line-spacing", "style", "direction"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)

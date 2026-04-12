@@ -206,6 +206,7 @@ gws docs format <document-id> [flags]
 - `--italic` — Make text italic
 - `--font-size int` — Font size in points
 - `--color string` — Text color (hex, e.g., "#FF0000")
+- `--font-family string` — Font family (e.g., "Arial", "David Libre")
 
 ### set-paragraph-style — Set paragraph style
 
@@ -219,6 +220,7 @@ gws docs set-paragraph-style <document-id> [flags]
 - `--alignment string` — Paragraph alignment: START, CENTER, END, JUSTIFIED
 - `--line-spacing float` — Line spacing multiplier (e.g., 1.15, 1.5, 2.0)
 - `--style string` — Named style: NORMAL_TEXT, TITLE, SUBTITLE, HEADING_1..HEADING_6
+- `--direction string` — Text direction: LEFT_TO_RIGHT or RIGHT_TO_LEFT
 
 ### add-list — Add a bullet or numbered list
 

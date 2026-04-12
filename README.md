@@ -99,6 +99,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws gmail thread <id>` | Read full thread conversation |
 | `gws gmail send` | Send email (`--to`, `--subject`, `--body`, `--cc`, `--bcc`, `--thread-id`, `--reply-to-message-id`, `--attachment`) |
 | `gws gmail reply <id>` | Reply to message (`--body`, `--cc`, `--bcc`, `--all`) |
+| `gws gmail forward <id>` | Forward message (`--to`, `--body`, `--cc`, `--bcc`) |
 | `gws gmail event-id <id>` | Extract calendar event ID from invite email |
 | `gws gmail labels` | List all labels |
 | `gws gmail label <id>` | Add/remove labels (`--add`, `--remove`) |

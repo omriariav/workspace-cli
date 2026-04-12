@@ -174,7 +174,8 @@ gws slides add-image <presentation-id> --url <image-url> [flags]
 - `--slide-id string` — Slide object ID
 - `--x float` — X position in points (default: 100)
 - `--y float` — Y position in points (default: 100)
-- `--width float` — Width in points (default: 400; height auto-calculated)
+- `--width float` — Width in points (default: 400)
+- `--height float` — Height in points (default: auto-calculated from image aspect ratio)
 
 ### add-text — Add text to shape, table cell, or speaker notes
 

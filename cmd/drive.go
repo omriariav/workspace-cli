@@ -241,7 +241,9 @@ var driveCommentCmd = &cobra.Command{
 var driveAddCommentCmd = &cobra.Command{
 	Use:   "add-comment",
 	Short: "Add a comment",
-	Long:  "Adds a comment to a Google Drive file.",
+	Long: `Adds a comment to a Google Drive file.
+
+Use --quoted-text to anchor the comment to a specific text selection in the document.`,
 	RunE:  runDriveAddComment,
 }
 
@@ -532,6 +534,7 @@ func init() {
 
 	driveAddCommentCmd.Flags().String("file-id", "", "File ID (required)")
 	driveAddCommentCmd.Flags().String("content", "", "Comment content (required)")
+	driveAddCommentCmd.Flags().String("quoted-text", "", "Anchor comment to this quoted text in the document")
 	driveAddCommentCmd.MarkFlagRequired("file-id")
 	driveAddCommentCmd.MarkFlagRequired("content")
 
@@ -1937,11 +1940,17 @@ func runDriveAddComment(cmd *cobra.Command, args []string) error {
 
 	fileID, _ := cmd.Flags().GetString("file-id")
 	content, _ := cmd.Flags().GetString("content")
+	quotedText, _ := cmd.Flags().GetString("quoted-text")
 
 	comment := &drive.Comment{Content: content}
+	if quotedText != "" {
+		comment.QuotedFileContent = &drive.CommentQuotedFileContent{
+			Value: quotedText,
+		}
+	}
 
 	created, err := svc.Comments.Create(fileID, comment).
-		Fields("id,content,author(displayName,emailAddress),createdTime").
+		Fields("id,content,author(displayName,emailAddress),createdTime,quotedFileContent").
 		Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to add comment: %w", err))
@@ -1958,6 +1967,9 @@ func runDriveAddComment(cmd *cobra.Command, args []string) error {
 			"name":  created.Author.DisplayName,
 			"email": created.Author.EmailAddress,
 		}
+	}
+	if created.QuotedFileContent != nil && created.QuotedFileContent.Value != "" {
+		result["quoted_text"] = created.QuotedFileContent.Value
 	}
 
 	return p.Print(result)

@@ -654,7 +654,7 @@ func TestSlidesAddImageCommand_Flags(t *testing.T) {
 		t.Fatal("slides add-image command not found")
 	}
 
-	expectedFlags := []string{"slide-id", "slide-number", "url", "x", "y", "width"}
+	expectedFlags := []string{"slide-id", "slide-number", "url", "x", "y", "width", "height"}
 	for _, flag := range expectedFlags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)

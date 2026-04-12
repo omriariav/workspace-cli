@@ -191,6 +191,7 @@ Usage: gws docs format <document-id> [flags]
 | `--italic` | bool | false | No | Make text italic |
 | `--font-size` | int | 0 | No | Font size in points |
 | `--color` | string | | No | Text color (hex, e.g., `#FF0000`) |
+| `--font-family` | string | | No | Font family (e.g., "Arial", "David Libre") |
 
 ### Examples
 
@@ -204,13 +205,16 @@ gws docs format 1abc123xyz --from 100 --to 150 --italic --color "#FF0000"
 # Change font size
 gws docs format 1abc123xyz --from 1 --to 20 --font-size 18
 
+# Change font family
+gws docs format 1abc123xyz --from 1 --to 100 --font-family "David Libre"
+
 # Apply multiple styles
 gws docs format 1abc123xyz --from 200 --to 250 --bold --italic --font-size 14 --color "#0000FF"
 ```
 
 ### Notes
 
-- At least one formatting flag (`--bold`, `--italic`, `--font-size`, or `--color`) is required
+- At least one formatting flag (`--bold`, `--italic`, `--font-size`, `--color`, or `--font-family`) is required
 - Color must be in hex format: `#RRGGBB` (e.g., `#FF0000` for red, `#0000FF` for blue)
 - Font size is in points (typical sizes: 10, 11, 12, 14, 18, 24)
 - Use `gws docs read <id> --include-formatting` to identify positions to format
@@ -232,6 +236,7 @@ Usage: gws docs set-paragraph-style <document-id> [flags]
 | `--alignment` | string | | No | Paragraph alignment: `START`, `CENTER`, `END`, `JUSTIFIED` |
 | `--line-spacing` | float | 0 | No | Line spacing multiplier (e.g., 1.15, 1.5, 2.0) |
 | `--style` | string | | No | Named style: `NORMAL_TEXT`, `TITLE`, `SUBTITLE`, `HEADING_1`..`HEADING_6` |
+| `--direction` | string | | No | Text direction: `LEFT_TO_RIGHT` or `RIGHT_TO_LEFT` |
 
 ### Alignment Values
 
@@ -262,6 +267,9 @@ gws docs set-paragraph-style 1abc123xyz --from 1 --to 50 --style HEADING_1
 
 # Reset heading back to normal text
 gws docs set-paragraph-style 1abc123xyz --from 1 --to 50 --style NORMAL_TEXT
+
+# Set RTL direction for Hebrew/Arabic text
+gws docs set-paragraph-style 1abc123xyz --from 1 --to 5000 --direction RIGHT_TO_LEFT
 ```
 
 ### Notes
