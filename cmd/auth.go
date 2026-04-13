@@ -9,7 +9,6 @@ import (
 
 	"github.com/omriariav/workspace-cli/internal/auth"
 	"github.com/omriariav/workspace-cli/internal/config"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
@@ -61,7 +60,7 @@ func init() {
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	clientID := config.GetClientID()
 	clientSecret := config.GetClientSecret()
@@ -111,7 +110,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 }
 
 func runLogout(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	if !auth.TokenExists() {
 		return p.Print(map[string]interface{}{
@@ -141,7 +140,7 @@ func runLogout(cmd *cobra.Command, args []string) error {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	token, err := auth.LoadToken()
 	if err != nil {

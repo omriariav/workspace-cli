@@ -9,7 +9,6 @@ import (
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/markdown"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/drive/v3"
@@ -758,7 +757,7 @@ func init() {
 }
 
 func runDocsRead(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -827,7 +826,7 @@ func runDocsRead(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsInfo(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1001,7 +1000,7 @@ func buildTextRequests(text, contentFormat string, insertIndex int64, tabID stri
 }
 
 func runDocsCreate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1050,7 +1049,7 @@ func runDocsCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsAppend(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1123,7 +1122,7 @@ func runDocsAppend(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsInsert(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1184,7 +1183,7 @@ func runDocsInsert(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsReplace(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1251,7 +1250,7 @@ func runDocsReplace(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsDelete(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1323,7 +1322,7 @@ func runDocsDelete(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsReplaceContent(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1425,7 +1424,7 @@ func runDocsReplaceContent(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsAddTable(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1523,7 +1522,7 @@ func parseDocsHexColor(hex string) (*docs.OptionalColor, error) {
 }
 
 func runDocsFormat(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1647,7 +1646,7 @@ func runDocsFormat(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1762,7 +1761,7 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsAddList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1861,7 +1860,7 @@ func runDocsAddList(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsRemoveList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1931,7 +1930,7 @@ func runDocsRemoveList(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsTrash(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1997,7 +1996,7 @@ func docsBatchUpdate(docID string, requests []*docs.Request) error {
 }
 
 func runDocsAddTab(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2049,7 +2048,7 @@ func runDocsAddTab(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsDeleteTab(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2084,7 +2083,7 @@ func runDocsDeleteTab(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsRenameTab(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2129,7 +2128,7 @@ func runDocsRenameTab(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsAddImage(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2242,7 +2241,7 @@ func tableCellLocation(cmd *cobra.Command, tabID string) *docs.TableCellLocation
 }
 
 func runDocsInsertTableRow(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	below, _ := cmd.Flags().GetBool("below")
@@ -2273,7 +2272,7 @@ func runDocsInsertTableRow(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsDeleteTableRow(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 
@@ -2302,7 +2301,7 @@ func runDocsDeleteTableRow(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsInsertTableCol(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	right, _ := cmd.Flags().GetBool("right")
@@ -2333,7 +2332,7 @@ func runDocsInsertTableCol(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsDeleteTableCol(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 
@@ -2362,7 +2361,7 @@ func runDocsDeleteTableCol(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsMergeCells(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
@@ -2408,7 +2407,7 @@ func runDocsMergeCells(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsUnmergeCells(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
@@ -2454,7 +2453,7 @@ func runDocsUnmergeCells(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsPinRows(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
@@ -2495,7 +2494,7 @@ func runDocsPinRows(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsPageBreak(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	position, _ := cmd.Flags().GetInt64("at")
@@ -2544,7 +2543,7 @@ func runDocsPageBreak(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsSectionBreak(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	position, _ := cmd.Flags().GetInt64("at")
@@ -2595,7 +2594,7 @@ func runDocsSectionBreak(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsAddHeader(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	headerType, _ := cmd.Flags().GetString("type")
@@ -2621,7 +2620,7 @@ func runDocsAddHeader(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsDeleteHeader(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	headerID := args[1]
@@ -2642,7 +2641,7 @@ func runDocsDeleteHeader(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsAddFooter(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	footerType, _ := cmd.Flags().GetString("type")
@@ -2668,7 +2667,7 @@ func runDocsAddFooter(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsDeleteFooter(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	footerID := args[1]
@@ -2689,7 +2688,7 @@ func runDocsDeleteFooter(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsAddNamedRange(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	name, _ := cmd.Flags().GetString("name")
@@ -2739,7 +2738,7 @@ func runDocsAddNamedRange(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsDeleteNamedRange(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	name, _ := cmd.Flags().GetString("name")
@@ -2772,7 +2771,7 @@ func runDocsDeleteNamedRange(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsAddFootnote(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	position, _ := cmd.Flags().GetInt64("at")
@@ -2824,7 +2823,7 @@ func runDocsAddFootnote(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsDeleteObject(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	objectID := args[1]
@@ -2849,7 +2848,7 @@ func runDocsDeleteObject(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsReplaceImage(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	objectID, _ := cmd.Flags().GetString("object-id")
@@ -2876,7 +2875,7 @@ func runDocsReplaceImage(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsReplaceNamedRange(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	name, _ := cmd.Flags().GetString("name")
@@ -2912,7 +2911,7 @@ func runDocsReplaceNamedRange(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsUpdateStyle(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	marginTop, _ := cmd.Flags().GetFloat64("margin-top")
@@ -2964,7 +2963,7 @@ func runDocsUpdateStyle(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsUpdateSectionStyle(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	from, _ := cmd.Flags().GetInt64("from")
@@ -3029,7 +3028,7 @@ func runDocsUpdateSectionStyle(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsUpdateTableCellStyle(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
@@ -3104,7 +3103,7 @@ func runDocsUpdateTableCellStyle(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsUpdateTableColProperties(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	tableStart, _ := cmd.Flags().GetInt64("table-start")
@@ -3148,7 +3147,7 @@ func runDocsUpdateTableColProperties(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsUpdateTableRowStyle(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	docID := args[0]
 	tableStart, _ := cmd.Flags().GetInt64("table-start")

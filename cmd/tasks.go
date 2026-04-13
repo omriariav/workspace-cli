@@ -3,12 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/tasks/v1"
 )
@@ -191,7 +189,7 @@ func init() {
 }
 
 func runTasksLists(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -225,7 +223,7 @@ func runTasksLists(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -278,7 +276,7 @@ func runTasksList(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksCreate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -322,7 +320,7 @@ func runTasksCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksUpdate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	// Validate flags before creating client
 	titleChanged := cmd.Flags().Changed("title")
@@ -393,7 +391,7 @@ func runTasksUpdate(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksListInfo(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -422,7 +420,7 @@ func runTasksListInfo(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksCreateList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -454,7 +452,7 @@ func runTasksCreateList(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksUpdateList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -487,7 +485,7 @@ func runTasksUpdateList(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksDeleteList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -514,7 +512,7 @@ func runTasksDeleteList(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksGet(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -560,7 +558,7 @@ func runTasksGet(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksDelete(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -588,7 +586,7 @@ func runTasksDelete(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksMove(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -637,7 +635,7 @@ func runTasksMove(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksClear(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -664,7 +662,7 @@ func runTasksClear(cmd *cobra.Command, args []string) error {
 }
 
 func runTasksComplete(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)

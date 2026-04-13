@@ -5,11 +5,9 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/sheets/v4"
 )
@@ -619,7 +617,7 @@ func init() {
 }
 
 func runSheetsInfo(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -665,7 +663,7 @@ func runSheetsInfo(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsRead(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -753,7 +751,7 @@ func runSheetsRead(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -794,7 +792,7 @@ func runSheetsList(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsCreate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -852,7 +850,7 @@ func runSheetsCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsWrite(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -898,7 +896,7 @@ func runSheetsWrite(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsAppend(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -981,7 +979,7 @@ func parseValues(cmd *cobra.Command) ([][]interface{}, error) {
 }
 
 func runSheetsAddSheet(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1037,7 +1035,7 @@ func runSheetsAddSheet(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsDeleteSheet(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1104,7 +1102,7 @@ func runSheetsDeleteSheet(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsClear(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1148,7 +1146,7 @@ func getSheetID(svc *sheets.Service, spreadsheetID, sheetName string) (int64, er
 }
 
 func runSheetsInsertRows(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1203,7 +1201,7 @@ func runSheetsInsertRows(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsDeleteRows(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1262,7 +1260,7 @@ func runSheetsDeleteRows(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsInsertCols(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1317,7 +1315,7 @@ func runSheetsInsertCols(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsDeleteCols(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1376,7 +1374,7 @@ func runSheetsDeleteCols(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsRenameSheet(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1427,7 +1425,7 @@ func runSheetsRenameSheet(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsDuplicateSheet(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1592,7 +1590,7 @@ func parseCellRef(ref string) (col, row int64, err error) {
 }
 
 func runSheetsMerge(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1637,7 +1635,7 @@ func runSheetsMerge(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsUnmerge(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1691,7 +1689,7 @@ func columnLetterToIndex(col string) int64 {
 }
 
 func runSheetsSort(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1758,7 +1756,7 @@ func runSheetsSort(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsFindReplace(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1851,7 +1849,7 @@ func parseSheetsHexColor(hex string) (*sheets.Color, error) {
 }
 
 func runSheetsFormat(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1963,7 +1961,7 @@ func runSheetsFormat(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsSetColumnWidth(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2022,7 +2020,7 @@ func runSheetsSetColumnWidth(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsSetRowHeight(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2082,7 +2080,7 @@ func runSheetsSetRowHeight(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsFreeze(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2157,7 +2155,7 @@ func runSheetsFreeze(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsCopyTo(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2195,7 +2193,7 @@ func runSheetsCopyTo(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsBatchRead(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2237,7 +2235,7 @@ func runSheetsBatchRead(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsBatchWrite(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2291,7 +2289,7 @@ func runSheetsBatchWrite(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsAddNamedRange(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2346,7 +2344,7 @@ func runSheetsAddNamedRange(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsListNamedRanges(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2391,7 +2389,7 @@ func runSheetsListNamedRanges(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsDeleteNamedRange(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2430,7 +2428,7 @@ func runSheetsDeleteNamedRange(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsAddFilter(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2476,7 +2474,7 @@ func runSheetsAddFilter(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsClearFilter(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2520,7 +2518,7 @@ func runSheetsClearFilter(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsAddFilterView(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2575,7 +2573,7 @@ func runSheetsAddFilterView(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsAddChart(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2697,7 +2695,7 @@ func runSheetsAddChart(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsListCharts(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2749,7 +2747,7 @@ func runSheetsListCharts(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsDeleteChart(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2814,7 +2812,7 @@ func mapConditionType(rule string) (string, error) {
 }
 
 func runSheetsAddConditionalFormat(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	// Validate flags before creating API client
 	rule, _ := cmd.Flags().GetString("rule")
@@ -2933,7 +2931,7 @@ func runSheetsAddConditionalFormat(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsListConditionalFormats(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -3025,7 +3023,7 @@ func runSheetsListConditionalFormats(cmd *cobra.Command, args []string) error {
 }
 
 func runSheetsDeleteConditionalFormat(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	// Validate flags before creating API client
 	index, _ := cmd.Flags().GetInt64("index")

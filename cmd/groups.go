@@ -3,10 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 )
 
@@ -47,7 +45,7 @@ func init() {
 }
 
 func runGroupsList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -107,7 +105,7 @@ func runGroupsList(cmd *cobra.Command, args []string) error {
 }
 
 func runGroupsMembers(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)

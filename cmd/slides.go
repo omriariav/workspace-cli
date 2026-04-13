@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/slides/v1"
 )
@@ -520,7 +519,7 @@ func init() {
 }
 
 func runSlidesInfo(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -585,7 +584,7 @@ func runSlidesInfo(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -641,7 +640,7 @@ func runSlidesList(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesRead(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -909,7 +908,7 @@ func findSlide(presentation *slides.Presentation, slideIDFlag string, slideNumbe
 }
 
 func runSlidesCreate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -941,7 +940,7 @@ func runSlidesCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1082,7 +1081,7 @@ func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesDeleteSlide(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1143,7 +1142,7 @@ func runSlidesDeleteSlide(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesDuplicateSlide(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1400,7 +1399,7 @@ var validShapeTypes = map[string]bool{
 }
 
 func runSlidesAddShape(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1481,7 +1480,7 @@ func runSlidesAddShape(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesAddImage(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1574,7 +1573,7 @@ func runSlidesAddImage(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesAddText(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	// Parse flags first (before client creation for early validation)
 	presentationID := args[0]
@@ -1701,7 +1700,7 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesReplaceText(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1884,7 +1883,7 @@ func parseHexColor(hex string) (*slides.RgbColor, error) {
 }
 
 func runSlidesDeleteObject(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1923,7 +1922,7 @@ func runSlidesDeleteObject(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesDeleteText(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	presentationID := args[0]
 	objectID, _ := cmd.Flags().GetString("object-id")
@@ -2020,7 +2019,7 @@ func runSlidesDeleteText(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesUpdateTextStyle(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2130,7 +2129,7 @@ func runSlidesUpdateTextStyle(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesUpdateTransform(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2194,7 +2193,7 @@ func runSlidesUpdateTransform(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesCreateTable(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2270,7 +2269,7 @@ func runSlidesCreateTable(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesInsertTableRows(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2320,7 +2319,7 @@ func runSlidesInsertTableRows(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesDeleteTableRow(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2364,7 +2363,7 @@ func runSlidesDeleteTableRow(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2438,7 +2437,7 @@ func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesUpdateTableBorder(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2554,7 +2553,7 @@ func runSlidesUpdateTableBorder(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesUpdateParagraphStyle(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2648,7 +2647,7 @@ func runSlidesUpdateParagraphStyle(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesUpdateShape(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2740,7 +2739,7 @@ func runSlidesUpdateShape(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesReorderSlides(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2787,7 +2786,7 @@ func runSlidesReorderSlides(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesUpdateSlideBackground(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	presentationID := args[0]
 	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
@@ -2872,7 +2871,7 @@ func runSlidesUpdateSlideBackground(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesListLayouts(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2919,7 +2918,7 @@ func runSlidesListLayouts(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesAddLine(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -3072,7 +3071,7 @@ func runSlidesAddLine(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesGroup(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -3126,7 +3125,7 @@ func runSlidesGroup(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesUngroup(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -3165,7 +3164,7 @@ func runSlidesUngroup(cmd *cobra.Command, args []string) error {
 }
 
 func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	// Validate flags before creating API client
 	size, _ := cmd.Flags().GetString("size")

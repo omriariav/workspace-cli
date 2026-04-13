@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/gmail/v1"
 )
@@ -458,7 +457,7 @@ func init() {
 }
 
 func runGmailList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -594,7 +593,7 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 }
 
 func runGmailRead(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -775,7 +774,7 @@ func buildMIMEMessage(headers map[string]string, body string, attachmentPaths []
 }
 
 func runGmailSend(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -868,7 +867,7 @@ func runGmailSend(cmd *cobra.Command, args []string) error {
 }
 
 func runGmailLabels(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1108,7 +1107,7 @@ func runGmailTrash(cmd *cobra.Command, args []string) error {
 }
 
 func runGmailThread(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1161,7 +1160,7 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 }
 
 func runGmailEventID(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1247,7 +1246,7 @@ func extractEventIDFromBody(body string) (string, error) {
 }
 
 func runGmailReply(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1385,7 +1384,7 @@ func runGmailReply(cmd *cobra.Command, args []string) error {
 }
 
 func runGmailForward(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)

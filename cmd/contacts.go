@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/people/v1"
 )
@@ -190,7 +189,7 @@ func init() {
 const personFields = "names,emailAddresses,phoneNumbers,organizations"
 
 func runContactsList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -250,7 +249,7 @@ func runContactsList(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsSearch(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -288,7 +287,7 @@ func runContactsSearch(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsGet(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -314,7 +313,7 @@ func runContactsGet(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsCreate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -360,7 +359,7 @@ func runContactsCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsDelete(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -387,7 +386,7 @@ func runContactsDelete(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsUpdate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	// Validate flags before creating API client
 	var updateFields []string
@@ -499,7 +498,7 @@ func runContactsUpdate(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsBatchCreate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -573,7 +572,7 @@ func runContactsBatchCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsBatchUpdate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -649,7 +648,7 @@ func runContactsBatchUpdate(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsBatchDelete(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -681,7 +680,7 @@ func runContactsBatchDelete(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsDirectory(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -742,7 +741,7 @@ func runContactsDirectory(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsDirectorySearch(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -806,7 +805,7 @@ func runContactsDirectorySearch(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsPhoto(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -852,7 +851,7 @@ func runContactsPhoto(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsDeletePhoto(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -879,7 +878,7 @@ func runContactsDeletePhoto(cmd *cobra.Command, args []string) error {
 }
 
 func runContactsResolve(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)

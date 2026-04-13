@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/drive/v3"
 	driveactivity "google.golang.org/api/driveactivity/v2"
@@ -603,7 +602,7 @@ func init() {
 }
 
 func runDriveList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -660,7 +659,7 @@ func runDriveList(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveSearch(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -728,7 +727,7 @@ func buildDriveSearchQuery(searchQuery string, raw bool) string {
 }
 
 func runDriveDownload(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -820,7 +819,7 @@ func runDriveDownload(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveInfo(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -876,7 +875,7 @@ func runDriveInfo(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveComments(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1024,7 +1023,7 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveUpload(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1106,7 +1105,7 @@ func runDriveUpload(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveCreateFolder(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1156,7 +1155,7 @@ func runDriveCreateFolder(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveMove(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1215,7 +1214,7 @@ func runDriveMove(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveDelete(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1265,7 +1264,7 @@ func runDriveDelete(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveCopy(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1310,7 +1309,7 @@ func runDriveCopy(cmd *cobra.Command, args []string) error {
 // --- Permissions ---
 
 func runDrivePermissions(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1360,7 +1359,7 @@ func runDrivePermissions(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveShare(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1422,7 +1421,7 @@ func runDriveShare(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveUnshare(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1453,7 +1452,7 @@ func runDriveUnshare(cmd *cobra.Command, args []string) error {
 }
 
 func runDrivePermission(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1496,7 +1495,7 @@ func runDrivePermission(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveUpdatePermission(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1544,7 +1543,7 @@ func runDriveUpdatePermission(cmd *cobra.Command, args []string) error {
 // --- Revisions ---
 
 func runDriveRevisions(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1601,7 +1600,7 @@ func runDriveRevisions(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveRevision(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1651,7 +1650,7 @@ func runDriveRevision(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveDeleteRevision(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1682,7 +1681,7 @@ func runDriveDeleteRevision(cmd *cobra.Command, args []string) error {
 // --- Replies ---
 
 func runDriveReplies(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1736,7 +1735,7 @@ func runDriveReplies(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveReply(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1779,7 +1778,7 @@ func runDriveReply(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveGetReply(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1825,7 +1824,7 @@ func runDriveGetReply(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveDeleteReply(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1858,7 +1857,7 @@ func runDriveDeleteReply(cmd *cobra.Command, args []string) error {
 // --- Comments (single) ---
 
 func runDriveComment(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1925,7 +1924,7 @@ func runDriveComment(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveAddComment(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1976,7 +1975,7 @@ func runDriveAddComment(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveDeleteComment(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2013,7 +2012,7 @@ func runDriveUnresolveComment(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveSetCommentResolved(cmd *cobra.Command, resolved bool) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2074,7 +2073,7 @@ func runDriveSetCommentResolved(cmd *cobra.Command, resolved bool) error {
 // --- Files ---
 
 func runDriveExport(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2120,7 +2119,7 @@ func runDriveExport(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveEmptyTrash(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2144,7 +2143,7 @@ func runDriveEmptyTrash(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveUpdate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2213,7 +2212,7 @@ func runDriveUpdate(cmd *cobra.Command, args []string) error {
 // --- Shared Drives ---
 
 func runDriveSharedDrives(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2261,7 +2260,7 @@ func runDriveSharedDrives(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveSharedDrive(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2298,7 +2297,7 @@ func runDriveSharedDrive(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveCreateDrive(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2336,7 +2335,7 @@ func runDriveCreateDrive(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveDeleteDrive(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2363,7 +2362,7 @@ func runDriveDeleteDrive(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveUpdateDrive(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2401,7 +2400,7 @@ func runDriveUpdateDrive(cmd *cobra.Command, args []string) error {
 // --- Other ---
 
 func runDriveAbout(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2441,7 +2440,7 @@ func runDriveAbout(cmd *cobra.Command, args []string) error {
 }
 
 func runDriveActivity(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -2915,7 +2914,7 @@ func formatTarget(t *driveactivity.Target) map[string]interface{} {
 }
 
 func runDriveChanges(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)

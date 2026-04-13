@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/forms/v1"
 )
@@ -105,7 +104,7 @@ func init() {
 }
 
 func runFormsInfo(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -203,7 +202,7 @@ func runFormsInfo(cmd *cobra.Command, args []string) error {
 }
 
 func runFormsResponses(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -301,7 +300,7 @@ func runFormsResponses(cmd *cobra.Command, args []string) error {
 }
 
 func runFormsResponse(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -388,7 +387,7 @@ func runFormsResponse(cmd *cobra.Command, args []string) error {
 }
 
 func runFormsCreate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -435,7 +434,7 @@ func runFormsCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runFormsUpdate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 
 	// Validate flags before creating API client
 	filePath, _ := cmd.Flags().GetString("file")

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/omriariav/workspace-cli/internal/spacecache"
 	"github.com/omriariav/workspace-cli/internal/usercache"
 	"github.com/spf13/cobra"
@@ -427,7 +426,7 @@ func ensureSpaceName(s string) string {
 }
 
 func runChatList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -485,7 +484,7 @@ func runChatList(cmd *cobra.Command, args []string) error {
 }
 
 func runChatMessages(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -599,7 +598,7 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 }
 
 func runChatMembers(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -728,7 +727,7 @@ func mapMemberToOutput(m *chat.Membership) map[string]interface{} {
 }
 
 func runChatSend(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -763,7 +762,7 @@ func runChatSend(cmd *cobra.Command, args []string) error {
 }
 
 func runChatGet(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -810,7 +809,7 @@ func runChatGet(cmd *cobra.Command, args []string) error {
 }
 
 func runChatUpdate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -844,7 +843,7 @@ func runChatUpdate(cmd *cobra.Command, args []string) error {
 }
 
 func runChatDelete(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -877,7 +876,7 @@ func runChatDelete(cmd *cobra.Command, args []string) error {
 }
 
 func runChatReactions(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -949,7 +948,7 @@ func runChatReactions(cmd *cobra.Command, args []string) error {
 }
 
 func runChatReact(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -988,7 +987,7 @@ func runChatReact(cmd *cobra.Command, args []string) error {
 }
 
 func runChatUnreact(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1046,7 +1045,7 @@ func mapSpaceToOutput(space *chat.Space) map[string]interface{} {
 }
 
 func runChatGetSpace(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1070,7 +1069,7 @@ func runChatGetSpace(cmd *cobra.Command, args []string) error {
 }
 
 func runChatCreateSpace(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1106,7 +1105,7 @@ func runChatCreateSpace(cmd *cobra.Command, args []string) error {
 }
 
 func runChatDeleteSpace(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1133,7 +1132,7 @@ func runChatDeleteSpace(cmd *cobra.Command, args []string) error {
 }
 
 func runChatUpdateSpace(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1177,7 +1176,7 @@ func runChatUpdateSpace(cmd *cobra.Command, args []string) error {
 }
 
 func runChatSearchSpaces(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1232,7 +1231,7 @@ func runChatSearchSpaces(cmd *cobra.Command, args []string) error {
 }
 
 func runChatFindDm(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1256,7 +1255,7 @@ func runChatFindDm(cmd *cobra.Command, args []string) error {
 }
 
 func runChatSetupSpace(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1327,7 +1326,7 @@ func runChatSetupSpace(cmd *cobra.Command, args []string) error {
 }
 
 func runChatGetMember(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1351,7 +1350,7 @@ func runChatGetMember(cmd *cobra.Command, args []string) error {
 }
 
 func runChatAddMember(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1387,7 +1386,7 @@ func runChatAddMember(cmd *cobra.Command, args []string) error {
 }
 
 func runChatRemoveMember(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1414,7 +1413,7 @@ func runChatRemoveMember(cmd *cobra.Command, args []string) error {
 }
 
 func runChatUpdateMember(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1445,7 +1444,7 @@ func runChatUpdateMember(cmd *cobra.Command, args []string) error {
 }
 
 func runChatReadState(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1472,7 +1471,7 @@ func runChatReadState(cmd *cobra.Command, args []string) error {
 }
 
 func runChatMarkRead(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1508,7 +1507,7 @@ func runChatMarkRead(cmd *cobra.Command, args []string) error {
 }
 
 func runChatThreadReadState(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1535,7 +1534,7 @@ func runChatThreadReadState(cmd *cobra.Command, args []string) error {
 }
 
 func runChatAttachment(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1572,7 +1571,7 @@ func runChatAttachment(cmd *cobra.Command, args []string) error {
 }
 
 func runChatUpload(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1617,7 +1616,7 @@ func runChatUpload(cmd *cobra.Command, args []string) error {
 }
 
 func runChatDownload(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1658,7 +1657,7 @@ func runChatDownload(cmd *cobra.Command, args []string) error {
 }
 
 func runChatEvents(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1714,7 +1713,7 @@ func runChatEvents(cmd *cobra.Command, args []string) error {
 }
 
 func runChatEvent(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1747,7 +1746,7 @@ func mapSpaceEventToOutput(event *chat.SpaceEvent) map[string]interface{} {
 }
 
 func runChatBuildCache(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1795,7 +1794,7 @@ func runChatBuildCache(cmd *cobra.Command, args []string) error {
 }
 
 func runChatFindGroup(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	membersStr, _ := cmd.Flags().GetString("members")

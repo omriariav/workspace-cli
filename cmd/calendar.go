@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
-	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/calendar/v3"
 )
@@ -486,7 +485,7 @@ func init() {
 }
 
 func runCalendarList(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -524,7 +523,7 @@ func runCalendarList(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarEvents(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -613,7 +612,7 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarCreate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -684,7 +683,7 @@ func runCalendarCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarUpdate(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	updateFlags := []string{"title", "start", "end", "description", "location", "add-attendees"}
@@ -796,7 +795,7 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarDelete(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -831,7 +830,7 @@ func runCalendarDelete(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarRsvp(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -905,7 +904,7 @@ func runCalendarRsvp(cmd *cobra.Command, args []string) error {
 // --- New event command implementations ---
 
 func runCalendarGet(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -930,7 +929,7 @@ func runCalendarGet(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarQuickAdd(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -955,7 +954,7 @@ func runCalendarQuickAdd(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarInstances(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1011,7 +1010,7 @@ func runCalendarInstances(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarMove(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1045,7 +1044,7 @@ func runCalendarMove(cmd *cobra.Command, args []string) error {
 // --- Calendar CRUD implementations ---
 
 func runCalendarGetCalendar(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1086,7 +1085,7 @@ func runCalendarGetCalendar(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarCreateCalendar(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1134,7 +1133,7 @@ func runCalendarCreateCalendar(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarUpdateCalendar(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1189,7 +1188,7 @@ func runCalendarUpdateCalendar(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarDeleteCalendar(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1216,7 +1215,7 @@ func runCalendarDeleteCalendar(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarClear(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1245,7 +1244,7 @@ func runCalendarClear(cmd *cobra.Command, args []string) error {
 // --- Subscription implementations ---
 
 func runCalendarSubscribe(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1280,7 +1279,7 @@ func runCalendarSubscribe(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarUnsubscribe(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1307,7 +1306,7 @@ func runCalendarUnsubscribe(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarCalendarInfo(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1364,7 +1363,7 @@ func runCalendarCalendarInfo(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarUpdateSubscription(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1422,7 +1421,7 @@ func runCalendarUpdateSubscription(cmd *cobra.Command, args []string) error {
 // --- ACL implementations ---
 
 func runCalendarAcl(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1464,7 +1463,7 @@ func runCalendarAcl(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarShare(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	calendarID, _ := cmd.Flags().GetString("calendar-id")
@@ -1507,7 +1506,7 @@ func runCalendarShare(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarUnshare(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1535,7 +1534,7 @@ func runCalendarUnshare(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarUpdateAcl(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	calendarID, _ := cmd.Flags().GetString("calendar-id")
@@ -1584,7 +1583,7 @@ func runCalendarUpdateAcl(cmd *cobra.Command, args []string) error {
 // --- Other implementations ---
 
 func runCalendarFreebusy(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1657,7 +1656,7 @@ func runCalendarFreebusy(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarColors(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
@@ -1698,7 +1697,7 @@ func runCalendarColors(cmd *cobra.Command, args []string) error {
 }
 
 func runCalendarSettings(cmd *cobra.Command, args []string) error {
-	p := printer.New(os.Stdout, GetFormat())
+	p := GetPrinter()
 	ctx := context.Background()
 
 	factory, err := client.NewFactory(ctx)
