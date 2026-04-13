@@ -168,6 +168,33 @@ Usage: gws drive comments <file-id> [flags]
 
 ---
 
+## gws drive convert
+
+Converts a Microsoft Office file to its Google Workspace equivalent. Creates a new file.
+
+```
+Usage: gws drive convert <file-id> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--name` | string | | No | Name for the converted file (default: original name) |
+| `--folder` | string | | No | Destination folder ID |
+| `--to` | string | | No | Target format: docs, sheets, slides (auto-detected if omitted) |
+
+### Supported Conversions
+
+| Source | Target |
+|--------|--------|
+| .docx (Word) | Google Docs |
+| .xlsx (Excel) | Google Sheets |
+| .pptx (PowerPoint) | Google Slides |
+| .doc (legacy Word) | Google Docs |
+| .xls (legacy Excel) | Google Sheets |
+| .ppt (legacy PowerPoint) | Google Slides |
+
+---
+
 ## gws drive export
 
 Exports a Google Workspace file to a specified format.

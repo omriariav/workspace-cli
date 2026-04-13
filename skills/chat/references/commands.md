@@ -262,7 +262,10 @@ Usage: gws chat find-dm [flags]
 
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
-| `--user` | string | | Yes | User resource name (e.g. `users/123` or `users/user@example.com`) |
+| `--user` | string | | No | User resource name (e.g. `users/123`) |
+| `--email` | string | | No | User email address (e.g. `user@example.com`) |
+
+One of `--user` or `--email` is required. They are mutually exclusive.
 
 ---
 
@@ -373,6 +376,29 @@ Usage: gws chat thread-read-state <thread>
 ```
 
 Full resource name required (e.g. `users/me/spaces/AAAA/threads/thread1/threadReadState`).
+
+---
+
+## gws chat unread
+
+Lists messages received after the last read time for a Chat space. Combines read-state lookup and message filtering.
+
+```
+Usage: gws chat unread <space> [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--max` | int | 25 | No | Maximum number of unread messages |
+| `--mark-read` | bool | false | No | Mark space as read after listing |
+
+### Output Fields
+
+- `space` — Space resource name
+- `last_read_time` — When the space was last read
+- `count` — Number of unread messages
+- `messages` — Array of unread messages
+- `marked_read` — Whether the space was marked as read (only present with `--mark-read`)
 
 ---
 

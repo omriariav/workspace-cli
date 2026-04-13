@@ -149,8 +149,14 @@ var chatSearchSpacesCmd = &cobra.Command{
 var chatFindDmCmd = &cobra.Command{
 	Use:   "find-dm",
 	Short: "Find a direct message space",
-	Long:  "Finds a direct message space with a specific user.",
-	RunE:  runChatFindDm,
+	Long: `Finds a direct message space with a specific user.
+
+Use --user with a resource name or --email with an email address.
+
+Examples:
+  gws chat find-dm --user users/123456789
+  gws chat find-dm --email user@example.com`,
+	RunE: runChatFindDm,
 }
 
 var chatSetupSpaceCmd = &cobra.Command{
@@ -218,6 +224,21 @@ var chatThreadReadStateCmd = &cobra.Command{
 	Long:  "Gets the read state for a thread.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runChatThreadReadState,
+}
+
+var chatUnreadCmd = &cobra.Command{
+	Use:   "unread <space>",
+	Short: "List unread messages in a space",
+	Long: `Lists messages received after the last read time for a Chat space.
+
+Combines read-state and messages list to show only unread content.
+
+Examples:
+  gws chat unread spaces/AAAA
+  gws chat unread spaces/AAAA --max 10
+  gws chat unread spaces/AAAA --mark-read`,
+	Args: cobra.ExactArgs(1),
+	RunE: runChatUnread,
 }
 
 // --- Attachments ---
@@ -308,6 +329,7 @@ func init() {
 	chatCmd.AddCommand(chatReadStateCmd)
 	chatCmd.AddCommand(chatMarkReadCmd)
 	chatCmd.AddCommand(chatThreadReadStateCmd)
+	chatCmd.AddCommand(chatUnreadCmd)
 	chatCmd.AddCommand(chatAttachmentCmd)
 	chatCmd.AddCommand(chatUploadCmd)
 	chatCmd.AddCommand(chatDownloadCmd)
@@ -374,8 +396,12 @@ func init() {
 	chatSearchSpacesCmd.MarkFlagRequired("query")
 
 	// Find DM flags
-	chatFindDmCmd.Flags().String("user", "", "User resource name (required, e.g. users/123)")
-	chatFindDmCmd.MarkFlagRequired("user")
+	chatFindDmCmd.Flags().String("user", "", "User resource name (e.g. users/123)")
+	chatFindDmCmd.Flags().String("email", "", "User email address (e.g. user@example.com)")
+
+	// Unread flags
+	chatUnreadCmd.Flags().Int64("max", 25, "Maximum number of unread messages")
+	chatUnreadCmd.Flags().Bool("mark-read", false, "Mark space as read after listing")
 
 	// Setup space flags
 	chatSetupSpaceCmd.Flags().String("display-name", "", "Space display name (required for SPACE type)")
@@ -1245,6 +1271,17 @@ func runChatFindDm(cmd *cobra.Command, args []string) error {
 	}
 
 	user, _ := cmd.Flags().GetString("user")
+	email, _ := cmd.Flags().GetString("email")
+
+	if user == "" && email == "" {
+		return p.PrintError(fmt.Errorf("provide either --user or --email"))
+	}
+	if user != "" && email != "" {
+		return p.PrintError(fmt.Errorf("--user and --email are mutually exclusive"))
+	}
+	if email != "" {
+		user = "users/" + email
+	}
 
 	space, err := svc.Spaces.FindDirectMessage().Name(user).Context(ctx).Do()
 	if err != nil {
@@ -1531,6 +1568,112 @@ func runChatThreadReadState(cmd *cobra.Command, args []string) error {
 		"name":           state.Name,
 		"last_read_time": state.LastReadTime,
 	})
+}
+
+func runChatUnread(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Chat()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spaceName := ensureSpaceName(args[0])
+	maxResults, _ := cmd.Flags().GetInt64("max")
+	markRead, _ := cmd.Flags().GetBool("mark-read")
+
+	// Get the space read state to find last read time
+	readStateName := ensureReadStateName(args[0])
+	state, err := svc.Users.Spaces.GetSpaceReadState(readStateName).Context(ctx).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get read state: %w", err))
+	}
+
+	lastReadTime := state.LastReadTime
+
+	// Build filter for unread messages
+	var filter string
+	if lastReadTime != "" {
+		filter = fmt.Sprintf("createTime > \"%s\"", lastReadTime)
+	}
+
+	// List messages after last read time
+	var messages []map[string]interface{}
+	pageToken := ""
+	for {
+		call := svc.Spaces.Messages.List(spaceName).
+			PageSize(maxResults).
+			OrderBy("createTime ASC").
+			Context(ctx)
+		if filter != "" {
+			call = call.Filter(filter)
+		}
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+
+		resp, err := call.Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to list messages: %w", err))
+		}
+
+		for _, msg := range resp.Messages {
+			if int64(len(messages)) >= maxResults {
+				break
+			}
+			msgInfo := map[string]interface{}{
+				"name":        msg.Name,
+				"text":        msg.Text,
+				"create_time": msg.CreateTime,
+			}
+			if msg.Sender != nil {
+				senderName := msg.Sender.DisplayName
+				if senderName == "" {
+					senderName = msg.Sender.Name
+				}
+				msgInfo["sender"] = senderName
+			}
+			if msg.Thread != nil {
+				msgInfo["thread"] = msg.Thread.Name
+			}
+			messages = append(messages, msgInfo)
+		}
+
+		if resp.NextPageToken == "" || int64(len(messages)) >= maxResults {
+			break
+		}
+		pageToken = resp.NextPageToken
+	}
+
+	// Optionally mark as read
+	markedRead := false
+	if markRead && len(messages) > 0 {
+		now := time.Now().UTC().Format(time.RFC3339)
+		_, err := svc.Users.Spaces.UpdateSpaceReadState(readStateName, &chat.SpaceReadState{
+			LastReadTime: now,
+		}).UpdateMask("last_read_time").Context(ctx).Do()
+		if err == nil {
+			markedRead = true
+		}
+	}
+
+	result := map[string]interface{}{
+		"space":          spaceName,
+		"last_read_time": lastReadTime,
+		"count":          len(messages),
+		"messages":       messages,
+	}
+	if markRead {
+		result["marked_read"] = markedRead
+	}
+
+	return p.Print(result)
 }
 
 func runChatAttachment(cmd *cobra.Command, args []string) error {

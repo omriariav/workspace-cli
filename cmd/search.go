@@ -60,9 +60,12 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	site, _ := cmd.Flags().GetString("site")
 	searchType, _ := cmd.Flags().GetString("type")
 
-	// Limit max results (API limit is 10 per request)
-	if maxResults > 10 {
-		maxResults = 10
+	// Validate input ranges (Google Custom Search API limits)
+	if maxResults < 1 || maxResults > 10 {
+		return p.PrintError(fmt.Errorf("--max must be between 1 and 10"))
+	}
+	if start < 1 || start > 100 {
+		return p.PrintError(fmt.Errorf("--start must be between 1 and 100"))
 	}
 
 	// Build URL

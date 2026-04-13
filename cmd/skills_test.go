@@ -128,7 +128,7 @@ func TestMarketplaceJSON_Valid(t *testing.T) {
 var expectedSkills = []string{
 	"gmail", "calendar", "drive", "docs", "sheets",
 	"slides", "tasks", "chat", "forms", "search", "auth",
-	"contacts",
+	"contacts", "groups", "keep",
 }
 
 func TestSkillDirectories_AllExist(t *testing.T) {
@@ -301,7 +301,7 @@ func TestSKILLmd_HasAuthSection(t *testing.T) {
 func TestSKILLmd_HasOutputModes(t *testing.T) {
 	base := skillsDir(t)
 	// All service skills should document output modes
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep"}
 	for _, skill := range services {
 		t.Run(skill, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(base, skill, "SKILL.md"))
@@ -515,7 +515,7 @@ func TestReferenceFiles_HaveDisclaimer(t *testing.T) {
 	base := skillsDir(t)
 
 	// commands.md files
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep"}
 	for _, svc := range services {
 		t.Run(svc+"/commands.md", func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(base, svc, "references", "commands.md"))
@@ -542,7 +542,7 @@ func TestReferenceFiles_HaveDisclaimer(t *testing.T) {
 
 func TestReferenceFiles_DocumentGlobalFlags(t *testing.T) {
 	base := skillsDir(t)
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep"}
 
 	for _, svc := range services {
 		t.Run(svc, func(t *testing.T) {
@@ -564,7 +564,7 @@ func TestReferenceFiles_DocumentGlobalFlags(t *testing.T) {
 
 func TestReferenceFiles_DocumentQuietFlag(t *testing.T) {
 	base := skillsDir(t)
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep"}
 
 	for _, svc := range services {
 		t.Run(svc, func(t *testing.T) {
@@ -602,7 +602,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 	}
 
 	// references/commands.md files
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep"}
 	for _, svc := range services {
 		if _, err := os.Stat(filepath.Join(base, svc, "references", "commands.md")); err == nil {
 			count++
@@ -614,7 +614,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		count++
 	}
 
-	expectedTotal := 25 // 1 marketplace.json + 12 SKILL.md + 11 commands.md + 1 setup-guide.md
+	expectedTotal := 29 // 1 marketplace.json + 14 SKILL.md + 13 commands.md + 1 setup-guide.md
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}
