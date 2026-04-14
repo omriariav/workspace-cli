@@ -133,6 +133,27 @@ Examples:
 	RunE: runDriveCopy,
 }
 
+var driveConvertCmd = &cobra.Command{
+	Use:   "convert <file-id>",
+	Short: "Convert Office file to Google format",
+	Long: `Converts a Microsoft Office file to its Google Workspace equivalent.
+
+Supported conversions:
+  .docx  → Google Docs
+  .xlsx  → Google Sheets
+  .pptx  → Google Slides
+
+Creates a new file (does not modify the original). The target format is
+auto-detected from the source file's MIME type, or use --to to specify.
+
+Examples:
+  gws drive convert 1abc123xyz
+  gws drive convert 1abc123xyz --name "Converted Doc"
+  gws drive convert 1abc123xyz --to slides --folder 2def456uvw`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDriveConvert,
+}
+
 // --- Permissions ---
 
 var drivePermissionsCmd = &cobra.Command{
@@ -385,6 +406,12 @@ func init() {
 	driveCmd.AddCommand(driveMoveCmd)
 	driveCmd.AddCommand(driveDeleteCmd)
 	driveCmd.AddCommand(driveCopyCmd)
+	driveCmd.AddCommand(driveConvertCmd)
+
+	// Convert flags
+	driveConvertCmd.Flags().String("name", "", "Name for the converted file (default: original name)")
+	driveConvertCmd.Flags().String("folder", "", "Destination folder ID")
+	driveConvertCmd.Flags().String("to", "", "Target format: docs, sheets, slides (auto-detected if omitted)")
 
 	// List flags
 	driveListCmd.Flags().String("folder", "root", "Folder ID to list (default: root)")
@@ -1303,6 +1330,96 @@ func runDriveCopy(cmd *cobra.Command, args []string) error {
 		"name":      copied.Name,
 		"mime_type": copied.MimeType,
 		"web_link":  copied.WebViewLink,
+	})
+}
+
+// MIME type mappings for Office → Google conversion
+var officeToGoogleMime = map[string]string{
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   "application/vnd.google-apps.document",
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         "application/vnd.google-apps.spreadsheet",
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": "application/vnd.google-apps.presentation",
+	"application/msword":            "application/vnd.google-apps.document",
+	"application/vnd.ms-excel":      "application/vnd.google-apps.spreadsheet",
+	"application/vnd.ms-powerpoint": "application/vnd.google-apps.presentation",
+}
+
+var formatToGoogleMime = map[string]string{
+	"docs":   "application/vnd.google-apps.document",
+	"sheets": "application/vnd.google-apps.spreadsheet",
+	"slides": "application/vnd.google-apps.presentation",
+}
+
+func runDriveConvert(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID := args[0]
+	name, _ := cmd.Flags().GetString("name")
+	folderID, _ := cmd.Flags().GetString("folder")
+	toFormat, _ := cmd.Flags().GetString("to")
+
+	var targetMime string
+
+	if toFormat != "" {
+		var ok bool
+		targetMime, ok = formatToGoogleMime[toFormat]
+		if !ok {
+			return p.PrintError(fmt.Errorf("unsupported format %q; use docs, sheets, or slides", toFormat))
+		}
+	} else {
+		// Auto-detect from source file MIME type
+		src, err := svc.Files.Get(fileID).
+			SupportsAllDrives(true).
+			Fields("id,name,mimeType").
+			Context(ctx).Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to get file info: %w", err))
+		}
+		var ok bool
+		targetMime, ok = officeToGoogleMime[src.MimeType]
+		if !ok {
+			return p.PrintError(fmt.Errorf("unsupported source MIME type %q; use --to to specify target format", src.MimeType))
+		}
+		if name == "" {
+			name = src.Name
+		}
+	}
+
+	copyFile := &drive.File{
+		MimeType:        targetMime,
+		ForceSendFields: []string{"MimeType"},
+	}
+	if name != "" {
+		copyFile.Name = name
+	}
+	if folderID != "" {
+		copyFile.Parents = []string{folderID}
+	}
+
+	converted, err := svc.Files.Copy(fileID, copyFile).
+		SupportsAllDrives(true).
+		Fields("id,name,mimeType,webViewLink").
+		Context(ctx).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to convert file: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":    "converted",
+		"id":        converted.Id,
+		"name":      converted.Name,
+		"mime_type": converted.MimeType,
+		"web_link":  converted.WebViewLink,
 	})
 }
 

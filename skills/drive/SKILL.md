@@ -43,6 +43,7 @@ For initial setup, see the `gws-auth` skill.
 | Move a file | `gws drive move <file-id> --to <folder-id>` |
 | Delete a file | `gws drive delete <file-id>` |
 | Copy a file | `gws drive copy <file-id>` |
+| Convert Office file | `gws drive convert <file-id>` |
 | Export file | `gws drive export --file-id <id> --mime-type application/pdf --output report.pdf` |
 | Update metadata | `gws drive update --file-id <id> --name "New Name"` |
 | Empty trash | `gws drive empty-trash` |
@@ -193,6 +194,19 @@ gws drive copy <file-id> [flags]
 **Flags:**
 - `--name string` — Name for the copy
 - `--folder string` — Destination folder ID
+
+### convert — Convert Office file to Google format
+
+```bash
+gws drive convert <file-id> [flags]
+```
+
+Converts DOCX/XLSX/PPTX to native Google Docs/Sheets/Slides. Creates a new file (does not modify the original). Target format is auto-detected from source MIME type.
+
+**Flags:**
+- `--name string` — Name for the converted file (default: original name)
+- `--folder string` — Destination folder ID
+- `--to string` — Target format: docs, sheets, slides (auto-detected if omitted)
 
 ### export — Export a Google Workspace file
 

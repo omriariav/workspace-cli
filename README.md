@@ -204,6 +204,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws drive delete-comment` | Delete comment (`--file-id`, `--comment-id`) |
 | `gws drive resolve-comment` | Resolve a comment (`--file-id`, `--comment-id`) |
 | `gws drive unresolve-comment` | Unresolve a comment (`--file-id`, `--comment-id`) |
+| `gws drive convert <id>` | Convert Office file to Google format (`--to`, `--name`, `--folder`) |
 | `gws drive export` | Export Google Workspace file (`--file-id`, `--mime-type`, `--output`) |
 | `gws drive empty-trash` | Empty trash permanently |
 | `gws drive update` | Update file metadata (`--file-id`, `--name`, `--description`, `--starred`, `--trashed`) |
@@ -361,7 +362,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat delete-space <space>` | Delete a space |
 | `gws chat update-space <space>` | Update a space (`--display-name`, `--description`) |
 | `gws chat search-spaces` | Search spaces — admin only (`--query`, `--page-size`) |
-| `gws chat find-dm` | Find DM space with a user (`--user`) |
+| `gws chat find-dm` | Find DM space with a user (`--user`, `--email`) |
 | `gws chat setup-space` | Create space with initial members (`--display-name`, `--type`, `--members`) |
 | `gws chat get-member <member>` | Get member details |
 | `gws chat add-member <space>` | Add a member (`--user`, `--role`) |
@@ -370,6 +371,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat read-state <space>` | Get space read state |
 | `gws chat mark-read <space>` | Mark space as read (`--time`) |
 | `gws chat thread-read-state <thread>` | Get thread read state |
+| `gws chat unread <space>` | List unread messages (`--max`, `--mark-read`) |
 | `gws chat attachment <attachment>` | Get attachment metadata |
 | `gws chat upload <space>` | Upload a file (`--file`) |
 | `gws chat download <resource>` | Download media (`--output`) |
@@ -396,6 +398,25 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws contacts get <resource-name>` | Get contact details |
 | `gws contacts create` | Create contact (`--name`, `--email`, `--phone`) |
 | `gws contacts delete <resource-name>` | Delete a contact |
+
+### Groups
+
+> Requires Admin SDK API enabled and Workspace admin privileges.
+
+| Command | Description |
+|---------|-------------|
+| `gws groups list` | List groups in domain (`--max`, `--domain`, `--user-email`) |
+| `gws groups members <group-email>` | List group members (`--max`, `--role`) |
+
+### Keep
+
+> Requires Keep API enabled and Workspace Enterprise plan.
+
+| Command | Description |
+|---------|-------------|
+| `gws keep list` | List notes (`--max`) |
+| `gws keep get <note-id>` | Get a note |
+| `gws keep create` | Create note (`--title`, `--text`) |
 
 ### Custom Search
 

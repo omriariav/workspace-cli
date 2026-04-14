@@ -72,11 +72,11 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// Determine scopes and services based on --services flag, config, or all
 	scopes, grantedServices := resolveScopes(cmd)
 
-	// Validate service names
+	// Validate service names — fail fast on unknown services
 	if unknown := auth.ValidateServices(grantedServices); len(unknown) > 0 {
-		fmt.Fprintf(os.Stderr, "Warning: unknown service(s): %s\nValid services: %s\n",
+		return p.PrintError(fmt.Errorf("unknown service(s): %s\nValid services: %s",
 			strings.Join(unknown, ", "),
-			strings.Join(auth.ValidServiceNames(), ", "))
+			strings.Join(auth.ValidServiceNames(), ", ")))
 	}
 
 	client := auth.NewOAuthClient(clientID, clientSecret, scopes)

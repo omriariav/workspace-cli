@@ -45,7 +45,7 @@ For initial setup, see the `gws-auth` skill.
 | Delete a space | `gws chat delete-space <space-id>` |
 | Update a space | `gws chat update-space <space-id> --display-name "New Name"` |
 | Search spaces (admin only) | `gws chat search-spaces --query "Engineering"` |
-| Find DM with user | `gws chat find-dm --user users/123` |
+| Find DM with user | `gws chat find-dm --email user@example.com` |
 | Create space + members | `gws chat setup-space --display-name "Team" --members "users/1,users/2"` |
 | Create DM | `gws chat setup-space --type DIRECT_MESSAGE --members "users/123"` |
 | Create group chat | `gws chat setup-space --type GROUP_CHAT --members "users/1,users/2"` |
@@ -74,6 +74,7 @@ For initial setup, see the `gws-auth` skill.
 | Get read state | `gws chat read-state <space-id>` |
 | Mark space as read | `gws chat mark-read <space-id>` |
 | Get thread read state | `gws chat thread-read-state <thread-name>` |
+| List unread messages | `gws chat unread <space-id>` |
 | **Attachments & Media** | |
 | Get attachment info | `gws chat attachment <attachment-name>` |
 | Upload a file | `gws chat upload <space-id> --file ./report.pdf` |
@@ -241,11 +242,13 @@ gws chat search-spaces --query "Engineering" [flags]
 ### find-dm — Find direct message space
 
 ```bash
+gws chat find-dm --email user@example.com
 gws chat find-dm --user users/123
 ```
 
 **Flags:**
-- `--user string` — User resource name or email (required, e.g. `users/123` or `users/user@example.com`)
+- `--user string` — User resource name (e.g. `users/123`)
+- `--email string` — User email address (e.g. `user@example.com`)
 
 ### setup-space — Create space with members
 
@@ -320,6 +323,18 @@ gws chat thread-read-state <thread-name>
 ```
 
 Full resource name required (e.g. `users/me/spaces/AAAA/threads/thread1/threadReadState`).
+
+### unread — List unread messages
+
+```bash
+gws chat unread <space-id> [flags]
+```
+
+Lists messages received after the last read time. Combines read-state lookup and message filtering.
+
+**Flags:**
+- `--max int` — Maximum number of unread messages (default: 25)
+- `--mark-read` — Mark space as read after listing
 
 ### attachment — Get attachment metadata
 
