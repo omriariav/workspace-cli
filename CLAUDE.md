@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.34.0** - Fix slides add-image, docs DOCX error, gmail forward, drive anchored comments, docs formatting flags.
+**v1.35.0** - Quiet flag enforced, drive convert, chat unread, chat find-dm email, groups/keep docs, validation fixes.
 
 ## Roadmap
 
