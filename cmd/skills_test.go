@@ -39,6 +39,11 @@ func codexPluginDir(t *testing.T) string {
 	return dir
 }
 
+func codexSkillsDir(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(codexPluginDir(t), "skills")
+}
+
 func codexMarketplacePath(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join("..", ".agents", "plugins", "marketplace.json")
@@ -251,7 +256,7 @@ func TestSkillFiles_AllHaveSKILLmd(t *testing.T) {
 }
 
 func TestCodexSkillFiles_AllHaveSKILLmd(t *testing.T) {
-	base := filepath.Join(codexPluginDir(t), "skills")
+	base := codexSkillsDir(t)
 	for _, skill := range expectedSkills {
 		path := filepath.Join(base, skill, "SKILL.md")
 		if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -261,7 +266,7 @@ func TestCodexSkillFiles_AllHaveSKILLmd(t *testing.T) {
 }
 
 func TestCodexSkillFiles_AllHaveOpenAIYAML(t *testing.T) {
-	base := filepath.Join(codexPluginDir(t), "skills")
+	base := codexSkillsDir(t)
 	for _, skill := range expectedSkills {
 		path := filepath.Join(base, skill, "agents", "openai.yaml")
 		data, err := os.ReadFile(path)
@@ -303,7 +308,7 @@ func TestSkillFiles_AllHaveReferences(t *testing.T) {
 }
 
 func TestCodexSkillFiles_AllHaveReferences(t *testing.T) {
-	base := filepath.Join(codexPluginDir(t), "skills")
+	base := codexSkillsDir(t)
 
 	servicesWithCommands := []string{
 		"gmail", "calendar", "drive", "docs", "sheets",
@@ -390,7 +395,7 @@ func TestSKILLmd_HasYAMLFrontmatter(t *testing.T) {
 }
 
 func TestCodexSKILLmd_HasCodexFrontmatter(t *testing.T) {
-	base := filepath.Join(codexPluginDir(t), "skills")
+	base := codexSkillsDir(t)
 	for _, skill := range expectedSkills {
 		t.Run(skill, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(base, skill, "SKILL.md"))
@@ -423,8 +428,35 @@ func TestCodexSKILLmd_HasCodexFrontmatter(t *testing.T) {
 	}
 }
 
+func TestSkillFiles_NoUnexpectedCodexSkills(t *testing.T) {
+	base := codexSkillsDir(t)
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		t.Fatalf("failed to read Codex skills directory: %v", err)
+	}
+
+	expectedSet := make(map[string]bool)
+	for _, s := range expectedSkills {
+		expectedSet[s] = true
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() && !expectedSet[entry.Name()] {
+			t.Errorf("unexpected Codex skill directory: %s", entry.Name())
+		}
+	}
+}
+
 func TestSKILLmd_HasDisclaimer(t *testing.T) {
-	base := skillsDir(t)
+	assertSKILLmdHasDisclaimer(t, skillsDir(t))
+}
+
+func TestCodexSKILLmd_HasDisclaimer(t *testing.T) {
+	assertSKILLmdHasDisclaimer(t, codexSkillsDir(t))
+}
+
+func assertSKILLmdHasDisclaimer(t *testing.T, base string) {
+	t.Helper()
 	for _, skill := range expectedSkills {
 		t.Run(skill, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(base, skill, "SKILL.md"))
@@ -441,7 +473,15 @@ func TestSKILLmd_HasDisclaimer(t *testing.T) {
 }
 
 func TestSKILLmd_HasDependencyCheck(t *testing.T) {
-	base := skillsDir(t)
+	assertSKILLmdHasDependencyCheck(t, skillsDir(t))
+}
+
+func TestCodexSKILLmd_HasDependencyCheck(t *testing.T) {
+	assertSKILLmdHasDependencyCheck(t, codexSkillsDir(t))
+}
+
+func assertSKILLmdHasDependencyCheck(t *testing.T, base string) {
+	t.Helper()
 	for _, skill := range expectedSkills {
 		t.Run(skill, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(base, skill, "SKILL.md"))
@@ -458,8 +498,15 @@ func TestSKILLmd_HasDependencyCheck(t *testing.T) {
 }
 
 func TestSKILLmd_HasAuthSection(t *testing.T) {
-	base := skillsDir(t)
-	// All service skills (not auth itself) should reference authentication
+	assertSKILLmdHasAuthSection(t, skillsDir(t))
+}
+
+func TestCodexSKILLmd_HasAuthSection(t *testing.T) {
+	assertSKILLmdHasAuthSection(t, codexSkillsDir(t))
+}
+
+func assertSKILLmdHasAuthSection(t *testing.T, base string) {
+	t.Helper()
 	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts"}
 	for _, skill := range services {
 		t.Run(skill, func(t *testing.T) {
@@ -477,8 +524,15 @@ func TestSKILLmd_HasAuthSection(t *testing.T) {
 }
 
 func TestSKILLmd_HasOutputModes(t *testing.T) {
-	base := skillsDir(t)
-	// All service skills should document output modes
+	assertSKILLmdHasOutputModes(t, skillsDir(t))
+}
+
+func TestCodexSKILLmd_HasOutputModes(t *testing.T) {
+	assertSKILLmdHasOutputModes(t, codexSkillsDir(t))
+}
+
+func assertSKILLmdHasOutputModes(t *testing.T, base string) {
+	t.Helper()
 	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep"}
 	for _, skill := range services {
 		t.Run(skill, func(t *testing.T) {
@@ -488,15 +542,23 @@ func TestSKILLmd_HasOutputModes(t *testing.T) {
 			}
 			content := string(data)
 
-			if !strings.Contains(content, "--format json") || !strings.Contains(content, "--format text") {
-				t.Error("SKILL.md missing output modes documentation (--format json/text)")
+			if !strings.Contains(content, "--format json") || !strings.Contains(content, "--format yaml") || !strings.Contains(content, "--format text") {
+				t.Error("SKILL.md missing output modes documentation (--format json/yaml/text)")
 			}
 		})
 	}
 }
 
 func TestSKILLmd_HasAgentTips(t *testing.T) {
-	base := skillsDir(t)
+	assertSKILLmdHasAgentTips(t, skillsDir(t))
+}
+
+func TestCodexSKILLmd_HasAgentTips(t *testing.T) {
+	assertSKILLmdHasAgentTips(t, codexSkillsDir(t))
+}
+
+func assertSKILLmdHasAgentTips(t *testing.T, base string) {
+	t.Helper()
 	for _, skill := range expectedSkills {
 		t.Run(skill, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(base, skill, "SKILL.md"))
@@ -515,6 +577,15 @@ func TestSKILLmd_HasAgentTips(t *testing.T) {
 // --- Cross-Reference: Skills Document Real CLI Commands ---
 
 func TestSkillCommands_MatchCLI(t *testing.T) {
+	assertSkillCommandsMatchCLI(t, skillsDir(t))
+}
+
+func TestCodexSkillCommands_MatchCLI(t *testing.T) {
+	assertSkillCommandsMatchCLI(t, codexSkillsDir(t))
+}
+
+func assertSkillCommandsMatchCLI(t *testing.T, base string) {
+	t.Helper()
 	// Map of service name to the cobra parent command and expected subcommand names
 	type serviceCommands struct {
 		parentCmd   *cobra.Command
@@ -581,9 +652,15 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 			parentCmd:   contactsCmd,
 			subcommands: []string{"list", "search", "get", "create", "delete", "update", "batch-create", "batch-update", "batch-delete", "directory", "directory-search", "photo", "delete-photo", "resolve"},
 		},
+		"groups": {
+			parentCmd:   groupsCmd,
+			subcommands: []string{"list", "members"},
+		},
+		"keep": {
+			parentCmd:   keepCmd,
+			subcommands: []string{"list", "get", "create"},
+		},
 	}
-
-	base := skillsDir(t)
 
 	for svcName, svc := range services {
 		t.Run(svcName, func(t *testing.T) {
@@ -629,8 +706,15 @@ func TestSkillCommands_MatchCLI(t *testing.T) {
 
 // TestSearchSkill_DocumentsCLI tests search separately since it's not a parent+subcommand structure.
 func TestSearchSkill_DocumentsCLI(t *testing.T) {
-	base := skillsDir(t)
+	assertSearchSkillDocumentsCLI(t, skillsDir(t))
+}
 
+func TestCodexSearchSkill_DocumentsCLI(t *testing.T) {
+	assertSearchSkillDocumentsCLI(t, codexSkillsDir(t))
+}
+
+func assertSearchSkillDocumentsCLI(t *testing.T, base string) {
+	t.Helper()
 	data, err := os.ReadFile(filepath.Join(base, "search", "SKILL.md"))
 	if err != nil {
 		t.Fatalf("failed to read search SKILL.md: %v", err)
@@ -660,8 +744,15 @@ func TestSearchSkill_DocumentsCLI(t *testing.T) {
 
 // TestAuthSkill_HasSetupGuide tests the auth skill has the GCP setup guide.
 func TestAuthSkill_HasSetupGuide(t *testing.T) {
-	base := skillsDir(t)
+	assertAuthSkillHasSetupGuide(t, skillsDir(t))
+}
 
+func TestCodexAuthSkill_HasSetupGuide(t *testing.T) {
+	assertAuthSkillHasSetupGuide(t, codexSkillsDir(t))
+}
+
+func assertAuthSkillHasSetupGuide(t *testing.T, base string) {
+	t.Helper()
 	data, err := os.ReadFile(filepath.Join(base, "auth", "references", "setup-guide.md"))
 	if err != nil {
 		t.Fatalf("failed to read auth setup-guide.md: %v", err)
@@ -690,8 +781,15 @@ func TestAuthSkill_HasSetupGuide(t *testing.T) {
 // --- Reference File Content Tests ---
 
 func TestReferenceFiles_HaveDisclaimer(t *testing.T) {
-	base := skillsDir(t)
+	assertReferenceFilesHaveDisclaimer(t, skillsDir(t))
+}
 
+func TestCodexReferenceFiles_HaveDisclaimer(t *testing.T) {
+	assertReferenceFilesHaveDisclaimer(t, codexSkillsDir(t))
+}
+
+func assertReferenceFilesHaveDisclaimer(t *testing.T, base string) {
+	t.Helper()
 	// commands.md files
 	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep"}
 	for _, svc := range services {
@@ -719,7 +817,15 @@ func TestReferenceFiles_HaveDisclaimer(t *testing.T) {
 }
 
 func TestReferenceFiles_DocumentGlobalFlags(t *testing.T) {
-	base := skillsDir(t)
+	assertReferenceFilesDocumentGlobalFlags(t, skillsDir(t))
+}
+
+func TestCodexReferenceFiles_DocumentGlobalFlags(t *testing.T) {
+	assertReferenceFilesDocumentGlobalFlags(t, codexSkillsDir(t))
+}
+
+func assertReferenceFilesDocumentGlobalFlags(t *testing.T, base string) {
+	t.Helper()
 	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep"}
 
 	for _, svc := range services {
@@ -736,12 +842,23 @@ func TestReferenceFiles_DocumentGlobalFlags(t *testing.T) {
 			if !strings.Contains(content, "--format") {
 				t.Error("references/commands.md missing --format global flag")
 			}
+			if !strings.Contains(content, "Output format: `json`, `yaml`, or `text`") {
+				t.Error("references/commands.md missing yaml in --format global flag description")
+			}
 		})
 	}
 }
 
 func TestReferenceFiles_DocumentQuietFlag(t *testing.T) {
-	base := skillsDir(t)
+	assertReferenceFilesDocumentQuietFlag(t, skillsDir(t))
+}
+
+func TestCodexReferenceFiles_DocumentQuietFlag(t *testing.T) {
+	assertReferenceFilesDocumentQuietFlag(t, codexSkillsDir(t))
+}
+
+func assertReferenceFilesDocumentQuietFlag(t *testing.T, base string) {
+	t.Helper()
 	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep"}
 
 	for _, svc := range services {

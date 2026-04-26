@@ -533,9 +533,3 @@ SLIDE_ID=$(gws slides list "<PRES_ID>" | jq -r '.slides[2].id')
 # Move to high position (API adjusts to valid range)
 gws slides reorder-slides "<PRES_ID>" --slide-ids "$SLIDE_ID" --to 99
 ```
-
-## Learnings
-
-See [LEARNINGS.md](./LEARNINGS.md) for session-specific learnings and gotchas discovered during real usage.
-
-> **Note**: LEARNINGS.md is a template. Keep sensitive/proprietary learnings local - don't commit them to the repo.

@@ -11,7 +11,7 @@ These flags apply to all `gws gmail` commands:
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--config` | string | `~/.config/gws/config.yaml` | Config file path |
-| `--format` | string | `json` | Output format: `json` or `text` |
+| `--format` | string | `json` | Output format: `json`, `yaml`, or `text` |
 | `--quiet` | bool | `false` | Suppress output (useful for scripted actions) |
 
 ---
