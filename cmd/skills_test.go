@@ -30,6 +30,24 @@ func pluginDir(t *testing.T) string {
 	return dir
 }
 
+func codexPluginDir(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join("..", "plugins", "gws")
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		t.Fatalf("Codex plugin directory not found at %s", dir)
+	}
+	return dir
+}
+
+func codexMarketplacePath(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join("..", ".agents", "plugins", "marketplace.json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Fatalf("Codex marketplace.json not found at %s", path)
+	}
+	return path
+}
+
 // --- Plugin Manifest Tests ---
 
 func TestMarketplaceJSON_Valid(t *testing.T) {
@@ -97,7 +115,7 @@ func TestMarketplaceJSON_Valid(t *testing.T) {
 		t.Errorf("expected plugin name 'gws', got '%v'", gwsPlugin["name"])
 	}
 
-	// Validate skills array lists all 11 skill paths
+	// Validate skills array lists all expected skill paths
 	skills, ok := gwsPlugin["skills"].([]interface{})
 	if !ok {
 		t.Fatal("plugin skills is not an array")
@@ -120,6 +138,82 @@ func TestMarketplaceJSON_Valid(t *testing.T) {
 		if !found {
 			t.Errorf("marketplace.json missing skill path: %s", expectedPath)
 		}
+	}
+}
+
+func TestCodexMarketplaceJSON_Valid(t *testing.T) {
+	data, err := os.ReadFile(codexMarketplacePath(t))
+	if err != nil {
+		t.Fatalf("failed to read Codex marketplace.json: %v", err)
+	}
+
+	var manifest map[string]interface{}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("Codex marketplace.json is not valid JSON: %v", err)
+	}
+
+	if name, ok := manifest["name"].(string); !ok || name != "workspace-cli" {
+		t.Errorf("expected Codex marketplace name 'workspace-cli', got '%v'", manifest["name"])
+	}
+
+	plugins, ok := manifest["plugins"].([]interface{})
+	if !ok || len(plugins) == 0 {
+		t.Fatal("Codex marketplace plugins should be a non-empty array")
+	}
+
+	gwsPlugin, ok := plugins[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("first Codex marketplace plugin entry is not an object")
+	}
+	if name, ok := gwsPlugin["name"].(string); !ok || name != "gws" {
+		t.Errorf("expected Codex plugin name 'gws', got '%v'", gwsPlugin["name"])
+	}
+	source, ok := gwsPlugin["source"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Codex marketplace source is not an object")
+	}
+	if path, ok := source["path"].(string); !ok || path != "./plugins/gws" {
+		t.Errorf("expected Codex plugin source path './plugins/gws', got '%v'", source["path"])
+	}
+	policy, ok := gwsPlugin["policy"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Codex marketplace policy is not an object")
+	}
+	if policy["installation"] != "AVAILABLE" {
+		t.Errorf("expected Codex installation policy AVAILABLE, got '%v'", policy["installation"])
+	}
+	if policy["authentication"] != "ON_INSTALL" {
+		t.Errorf("expected Codex authentication policy ON_INSTALL, got '%v'", policy["authentication"])
+	}
+}
+
+func TestCodexPluginJSON_Valid(t *testing.T) {
+	path := filepath.Join(codexPluginDir(t), ".codex-plugin", "plugin.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read Codex plugin.json: %v", err)
+	}
+	if strings.Contains(string(data), "[TODO:") {
+		t.Fatal("Codex plugin.json still contains TODO placeholders")
+	}
+
+	var manifest map[string]interface{}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("Codex plugin.json is not valid JSON: %v", err)
+	}
+
+	requiredFields := []string{"name", "version", "description", "author", "repository", "license", "skills", "interface"}
+	for _, field := range requiredFields {
+		if _, ok := manifest[field]; !ok {
+			t.Errorf("Codex plugin.json missing required field: %s", field)
+		}
+	}
+
+	if name, ok := manifest["name"].(string); !ok || name != "gws" {
+		t.Errorf("expected Codex plugin name 'gws', got '%v'", manifest["name"])
+	}
+	if skills, ok := manifest["skills"].(string); !ok || skills != "./skills/" {
+		t.Errorf("expected Codex plugin skills path './skills/', got '%v'", manifest["skills"])
 	}
 }
 
@@ -156,6 +250,35 @@ func TestSkillFiles_AllHaveSKILLmd(t *testing.T) {
 	}
 }
 
+func TestCodexSkillFiles_AllHaveSKILLmd(t *testing.T) {
+	base := filepath.Join(codexPluginDir(t), "skills")
+	for _, skill := range expectedSkills {
+		path := filepath.Join(base, skill, "SKILL.md")
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Errorf("Codex SKILL.md missing for skill: %s", skill)
+		}
+	}
+}
+
+func TestCodexSkillFiles_AllHaveOpenAIYAML(t *testing.T) {
+	base := filepath.Join(codexPluginDir(t), "skills")
+	for _, skill := range expectedSkills {
+		path := filepath.Join(base, skill, "agents", "openai.yaml")
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			t.Errorf("Codex agents/openai.yaml missing for skill: %s", skill)
+			continue
+		}
+		if err != nil {
+			t.Errorf("failed to read Codex openai.yaml for %s: %v", skill, err)
+			continue
+		}
+		if !strings.Contains(string(data), "default_prompt: \"Use $gws-") {
+			t.Errorf("Codex openai.yaml for %s missing $gws-* default prompt", skill)
+		}
+	}
+}
+
 func TestSkillFiles_AllHaveReferences(t *testing.T) {
 	base := skillsDir(t)
 
@@ -176,6 +299,27 @@ func TestSkillFiles_AllHaveReferences(t *testing.T) {
 	authGuide := filepath.Join(base, "auth", "references", "setup-guide.md")
 	if _, err := os.Stat(authGuide); os.IsNotExist(err) {
 		t.Error("references/setup-guide.md missing for auth skill")
+	}
+}
+
+func TestCodexSkillFiles_AllHaveReferences(t *testing.T) {
+	base := filepath.Join(codexPluginDir(t), "skills")
+
+	servicesWithCommands := []string{
+		"gmail", "calendar", "drive", "docs", "sheets",
+		"slides", "tasks", "chat", "forms", "search",
+		"contacts", "groups", "keep",
+	}
+	for _, skill := range servicesWithCommands {
+		path := filepath.Join(base, skill, "references", "commands.md")
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Errorf("Codex references/commands.md missing for skill: %s", skill)
+		}
+	}
+
+	authGuide := filepath.Join(base, "auth", "references", "setup-guide.md")
+	if _, err := os.Stat(authGuide); os.IsNotExist(err) {
+		t.Error("Codex references/setup-guide.md missing for auth skill")
 	}
 }
 
@@ -240,6 +384,40 @@ func TestSKILLmd_HasYAMLFrontmatter(t *testing.T) {
 			// Verify version is set (1.0.0 for service skills, 0.x.0 for workflow skills)
 			if !strings.Contains(frontmatter, "version:") {
 				t.Error("expected frontmatter to contain version field")
+			}
+		})
+	}
+}
+
+func TestCodexSKILLmd_HasCodexFrontmatter(t *testing.T) {
+	base := filepath.Join(codexPluginDir(t), "skills")
+	for _, skill := range expectedSkills {
+		t.Run(skill, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(base, skill, "SKILL.md"))
+			if err != nil {
+				t.Fatalf("failed to read Codex SKILL.md: %v", err)
+			}
+			content := string(data)
+
+			if !strings.HasPrefix(content, "---\n") {
+				t.Error("Codex SKILL.md does not start with YAML frontmatter")
+			}
+
+			secondDash := strings.Index(content[4:], "\n---\n")
+			if secondDash == -1 {
+				t.Error("Codex SKILL.md missing closing YAML frontmatter")
+				return
+			}
+
+			frontmatter := content[4 : 4+secondDash]
+			if !strings.Contains(frontmatter, "name: gws-"+skill) {
+				t.Errorf("expected Codex frontmatter name 'gws-%s'", skill)
+			}
+			if !strings.Contains(frontmatter, "description:") {
+				t.Error("Codex SKILL.md frontmatter missing description")
+			}
+			if strings.Contains(frontmatter, "version:") {
+				t.Error("Codex SKILL.md frontmatter should not contain top-level version")
 			}
 		})
 	}

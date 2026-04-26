@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Slides"
+  short_description: "Google Slides commands via gws"
+  default_prompt: "Use $gws-slides to inspect, create, or edit Google Slides decks."

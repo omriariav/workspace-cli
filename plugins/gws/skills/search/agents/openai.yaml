@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Search"
+  short_description: "Google Custom Search via gws"
+  default_prompt: "Use $gws-search to run Google Programmable Search queries."

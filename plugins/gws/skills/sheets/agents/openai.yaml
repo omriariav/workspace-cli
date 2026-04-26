@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Sheets"
+  short_description: "Google Sheets commands via gws"
+  default_prompt: "Use $gws-sheets to read, write, format, or manage Sheets data."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Calendar"
+  short_description: "Google Calendar commands via gws"
+  default_prompt: "Use $gws-calendar to review or manage Google Calendar events."

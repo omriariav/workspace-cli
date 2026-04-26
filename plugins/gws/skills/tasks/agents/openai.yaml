@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Tasks"
+  short_description: "Google Tasks commands via gws"
+  default_prompt: "Use $gws-tasks to manage Google task lists and tasks."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Chat"
+  short_description: "Google Chat commands via gws"
+  default_prompt: "Use $gws-chat to inspect spaces, messages, members, or unread state."

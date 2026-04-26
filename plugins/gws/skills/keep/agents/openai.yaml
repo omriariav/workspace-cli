@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Keep"
+  short_description: "Google Keep commands via gws"
+  default_prompt: "Use $gws-keep to list, read, or create Google Keep notes."

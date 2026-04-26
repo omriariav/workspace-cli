@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Forms"
+  short_description: "Google Forms commands via gws"
+  default_prompt: "Use $gws-forms to inspect forms or retrieve form responses."

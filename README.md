@@ -488,7 +488,13 @@ gws auth logout && gws auth login
 /install-plugin omriariav/workspace-cli
 ```
 
-The plugin includes 11 skills (one per Google service + auth setup), each with quick reference tables, detailed flag documentation, and AI agent tips.
+The plugin includes 14 skills (one per Google service + auth setup), each with quick reference tables, detailed flag documentation, and AI agent tips.
+
+## Codex Plugin
+
+`gws` also ships with a repo-local Codex plugin under `plugins/gws`, registered through `.agents/plugins/marketplace.json`. It mirrors the Claude Code skills with Codex-valid `SKILL.md` frontmatter and `agents/openai.yaml` metadata, so Codex can invoke skills such as `$gws-gmail`, `$gws-calendar`, and `$gws-drive`.
+
+The Codex plugin is intentionally self-contained: its skill docs live under `plugins/gws/skills/`, while the original Claude Code skill docs remain under `skills/`.
 
 ## License
 

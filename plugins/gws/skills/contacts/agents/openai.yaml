@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Contacts"
+  short_description: "Google Contacts commands via gws"
+  default_prompt: "Use $gws-contacts to search, resolve, or manage Google contacts."

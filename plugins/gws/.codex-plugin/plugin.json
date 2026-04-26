@@ -1,0 +1,43 @@
+{
+  "name": "gws",
+  "version": "1.35.0",
+  "description": "Unofficial Google Workspace CLI skills for Codex. Teaches Codex how to use gws for Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Groups, Keep, and Search.",
+  "author": {
+    "name": "Omri Ariav",
+    "email": "omri.ariav@gmail.com",
+    "url": "https://github.com/omriariav"
+  },
+  "homepage": "https://github.com/omriariav/workspace-cli",
+  "repository": "https://github.com/omriariav/workspace-cli",
+  "license": "MIT",
+  "keywords": [
+    "google-workspace",
+    "gmail",
+    "calendar",
+    "drive",
+    "docs",
+    "sheets",
+    "slides",
+    "codex-skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "gws",
+    "shortDescription": "Google Workspace commands for Codex",
+    "longDescription": "Use the unofficial gws CLI from Codex to inspect and manage Google Workspace services with structured command output. Not affiliated with or endorsed by Google.",
+    "developerName": "Omri Ariav",
+    "category": "Productivity",
+    "capabilities": [
+      "CLI",
+      "Google Workspace",
+      "Automation"
+    ],
+    "websiteURL": "https://github.com/omriariav/workspace-cli",
+    "defaultPrompt": [
+      "Use $gws-gmail to summarize unread inbox threads.",
+      "Use $gws-calendar to review this week's meetings.",
+      "Use $gws-drive to find recent project documents."
+    ],
+    "brandColor": "#4285F4"
+  }
+}
