@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Docs"
+  short_description: "Google Docs commands via gws"
+  default_prompt: "Use $gws-docs to read, create, or edit Google Docs documents."

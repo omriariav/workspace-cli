@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Auth"
+  short_description: "Google Workspace auth setup via gws"
+  default_prompt: "Use $gws-auth to help set up or troubleshoot gws authentication."

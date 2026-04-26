@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Gmail"
+  short_description: "Google Gmail commands via gws"
+  default_prompt: "Use $gws-gmail to list, read, send, label, archive, or triage email."

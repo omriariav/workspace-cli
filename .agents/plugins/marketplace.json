@@ -1,0 +1,20 @@
+{
+  "name": "workspace-cli",
+  "interface": {
+    "displayName": "Workspace CLI Plugins"
+  },
+  "plugins": [
+    {
+      "name": "gws",
+      "source": {
+        "source": "local",
+        "path": "./plugins/gws"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

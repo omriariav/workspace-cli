@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Drive"
+  short_description: "Google Drive commands via gws"
+  default_prompt: "Use $gws-drive to find, inspect, share, upload, or download Drive files."

@@ -1,6 +1,5 @@
 ---
 name: gws-drive
-version: 2.0.0
 description: "Google Drive CLI operations via gws. Use when users need to list, search, upload, download, manage files/folders, permissions, revisions, comments, shared drives, and more. Triggers: drive, files, upload, download, folders, google drive, file management, permissions, share, shared drives."
 metadata:
   short-description: Google Drive CLI operations
