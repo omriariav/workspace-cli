@@ -2118,7 +2118,7 @@ func TestCalendarCreate_AddsSelfByDefault(t *testing.T) {
 			_ = json.Unmarshal(body, inserted)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
-				"id":      "evt-1",
+				"id":       "evt-1",
 				"htmlLink": "https://calendar.google.com/event?eid=1",
 			})
 		default:
@@ -2189,15 +2189,22 @@ func TestCalendarCreate_DoesNotDuplicateSelf(t *testing.T) {
 		{Email: "other@example.com"},
 	}
 	selfEmail := "user@example.com"
+
+	// Mirror the runner's --add-self branch: only append when self is absent.
 	if !attendeeListContainsEmail(atts, selfEmail) {
-		t.Fatal("expected case-insensitive containment to find self")
+		atts = append(atts, &calendar.EventAttendee{
+			Email:          selfEmail,
+			ResponseStatus: "accepted",
+			Self:           true,
+		})
 	}
-	// Simulate the addSelf branch behavior: don't append.
-	if attendeeListContainsEmail(atts, selfEmail) {
-		// no-op: we should NOT append
-	}
+
 	if len(atts) != 2 {
 		t.Errorf("attendees should remain 2 after dedupe, got %d", len(atts))
+	}
+	// Confirm the original case-preserved entry is intact (we did not rewrite it).
+	if atts[0].Email != "User@Example.com" {
+		t.Errorf("original attendee email mutated: %s", atts[0].Email)
 	}
 }
 
