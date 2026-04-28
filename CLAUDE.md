@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.36.0** - Chat attachment metadata in messages output, calendar create self-attendee (default-on, opt-out via --add-self=false), chat find-space by display name with metadata-only retention.
+**v1.37.0** - `gws version --check` plus passive stale-version notice (24h cache, --quiet/GWS_NO_UPDATE_CHECK suppression), and Chat sender attribution: additive sender_type/sender_resource/sender_display_name in default output, with opt-in `--resolve-senders` on chat messages/get/unread to fill missing display names and add a self marker.
 
 ## Roadmap
 
