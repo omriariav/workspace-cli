@@ -84,6 +84,31 @@ func FindByMembers(cache *CacheData, emails []string) map[string]SpaceEntry {
 	return results
 }
 
+// FindByDisplayName returns spaces whose display_name contains the (case-insensitive)
+// query substring. If spaceType is non-empty, results are filtered to that type
+// (e.g. "SPACE", "GROUP_CHAT", "DIRECT_MESSAGE"). Spaces without a display_name
+// (typically DMs) are skipped.
+func FindByDisplayName(cache *CacheData, query, spaceType string) map[string]SpaceEntry {
+	results := make(map[string]SpaceEntry)
+	if cache == nil || query == "" {
+		return results
+	}
+	needle := strings.ToLower(query)
+	wantType := strings.ToUpper(spaceType)
+	for name, entry := range cache.Spaces {
+		if entry.DisplayName == "" {
+			continue
+		}
+		if wantType != "" && strings.ToUpper(entry.Type) != wantType {
+			continue
+		}
+		if strings.Contains(strings.ToLower(entry.DisplayName), needle) {
+			results[name] = entry
+		}
+	}
+	return results
+}
+
 // Build iterates spaces, fetches members, resolves emails, and saves the cache.
 // spaceTypeFilter can be "GROUP_CHAT", "SPACE", "DIRECT_MESSAGE", or "all".
 // progress is called with (current, total) for progress reporting (may be nil).

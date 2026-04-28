@@ -522,3 +522,28 @@ Usage: gws chat find-group [flags]
 - `matches` — Array of matching spaces with `space`, `type`, `display_name`, `members`, `member_count`
 - `count` — Number of matching spaces
 - `query` — The email addresses searched for
+
+---
+
+## gws chat find-space
+
+Searches the local space cache for spaces whose `display_name` contains the given query (case-insensitive substring match). Requires `build-cache` to be run first (or pass `--refresh`).
+
+```
+Usage: gws chat find-space [flags]
+```
+
+### Flags
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--name` | string | | Yes | Display name substring to search for (case-insensitive) |
+| `--type` | string | | No | Filter by space type: SPACE, GROUP_CHAT, or DIRECT_MESSAGE |
+| `--refresh` | bool | false | No | Rebuild cache before searching |
+
+### Output Fields (JSON)
+
+- `matches` — Array of matching spaces with `space`, `type`, `display_name`, `member_count`
+- `count` — Number of matching spaces
+- `query` — The display-name substring searched for
+- `type` — The type filter (only present when `--type` is set)

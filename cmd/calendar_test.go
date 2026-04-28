@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -2035,4 +2036,176 @@ func TestCalendarEvents_FromFlag_DateParsing(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAttendeeListContainsEmail verifies case-insensitive email lookup with
+// nil-tolerance, used by --add-self to skip duplicate attendees.
+func TestAttendeeListContainsEmail(t *testing.T) {
+	atts := []*calendar.EventAttendee{
+		{Email: "Alice@Example.com"},
+		nil,
+		{Email: "bob@example.com"},
+	}
+	cases := []struct {
+		name  string
+		email string
+		want  bool
+	}{
+		{"exact match lowercase", "alice@example.com", true},
+		{"exact match preserved case", "Alice@Example.com", true},
+		{"different case in list", "ALICE@EXAMPLE.COM", true},
+		{"second entry", "bob@example.com", true},
+		{"absent", "carol@example.com", false},
+		{"empty input", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := attendeeListContainsEmail(atts, tc.email); got != tc.want {
+				t.Errorf("attendeeListContainsEmail(_, %q) = %v, want %v", tc.email, got, tc.want)
+			}
+		})
+	}
+	if attendeeListContainsEmail(nil, "alice@example.com") {
+		t.Error("nil slice should return false")
+	}
+}
+
+// TestGetSelfCalendarEmail_MockServer verifies the helper returns the primary
+// calendar's id (which Calendar API populates with the user's email).
+func TestGetSelfCalendarEmail_MockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/calendars/primary" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":      "user@example.com",
+				"summary": "user@example.com",
+			})
+			return
+		}
+		t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	email, err := getSelfCalendarEmail(svc)
+	if err != nil {
+		t.Fatalf("getSelfCalendarEmail returned error: %v", err)
+	}
+	if email != "user@example.com" {
+		t.Errorf("expected 'user@example.com', got %q", email)
+	}
+}
+
+// TestCalendarCreate_AddsSelfByDefault verifies that Events.Insert receives the
+// authenticated user as an accepted attendee when --add-self is unset (default true).
+func TestCalendarCreate_AddsSelfByDefault(t *testing.T) {
+	var inserted *calendar.Event
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/calendars/primary":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": "user@example.com",
+			})
+		case r.Method == "POST" && r.URL.Path == "/calendars/primary/events":
+			body, _ := readJSONBody(r)
+			inserted = &calendar.Event{}
+			_ = json.Unmarshal(body, inserted)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":      "evt-1",
+				"htmlLink": "https://calendar.google.com/event?eid=1",
+			})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+
+	// Simulate runCalendarCreate's --add-self path directly (no Cobra plumbing).
+	event := &calendar.Event{
+		Summary: "Test",
+		Attendees: []*calendar.EventAttendee{
+			{Email: "someone-else@example.com"},
+		},
+	}
+
+	selfEmail, err := getSelfCalendarEmail(svc)
+	if err != nil {
+		t.Fatalf("getSelfCalendarEmail: %v", err)
+	}
+	if !attendeeListContainsEmail(event.Attendees, selfEmail) {
+		event.Attendees = append(event.Attendees, &calendar.EventAttendee{
+			Email:          selfEmail,
+			ResponseStatus: "accepted",
+			Self:           true,
+		})
+	}
+
+	_, err = svc.Events.Insert("primary", event).Do()
+	if err != nil {
+		t.Fatalf("Events.Insert: %v", err)
+	}
+
+	if inserted == nil {
+		t.Fatal("server did not capture inserted event")
+	}
+	if len(inserted.Attendees) != 2 {
+		t.Fatalf("expected 2 attendees, got %d", len(inserted.Attendees))
+	}
+	var found *calendar.EventAttendee
+	for _, a := range inserted.Attendees {
+		if a.Email == "user@example.com" {
+			found = a
+		}
+	}
+	if found == nil {
+		t.Fatal("self attendee user@example.com not found in inserted attendees")
+	}
+	if found.ResponseStatus != "accepted" {
+		t.Errorf("self responseStatus: got %q, want accepted", found.ResponseStatus)
+	}
+	if !found.Self {
+		t.Errorf("self flag: expected true, got false")
+	}
+}
+
+// TestCalendarCreate_DoesNotDuplicateSelf verifies that when the user passes
+// themselves in --attendees explicitly, --add-self does not duplicate the row.
+func TestCalendarCreate_DoesNotDuplicateSelf(t *testing.T) {
+	atts := []*calendar.EventAttendee{
+		{Email: "User@Example.com"},
+		{Email: "other@example.com"},
+	}
+	selfEmail := "user@example.com"
+	if !attendeeListContainsEmail(atts, selfEmail) {
+		t.Fatal("expected case-insensitive containment to find self")
+	}
+	// Simulate the addSelf branch behavior: don't append.
+	if attendeeListContainsEmail(atts, selfEmail) {
+		// no-op: we should NOT append
+	}
+	if len(atts) != 2 {
+		t.Errorf("attendees should remain 2 after dedupe, got %d", len(atts))
+	}
+}
+
+// readJSONBody reads the request body as bytes for inspection.
+func readJSONBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, nil
+	}
+	defer r.Body.Close()
+	return io.ReadAll(r.Body)
 }

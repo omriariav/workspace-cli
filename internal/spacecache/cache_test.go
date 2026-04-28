@@ -342,3 +342,58 @@ func TestBuild_SkipsSpaceOnPartialPageFailure(t *testing.T) {
 		t.Error("expected spaces/PARTIAL to be skipped due to partial page failure")
 	}
 }
+
+func TestFindByDisplayName(t *testing.T) {
+	cache := &CacheData{
+		Spaces: map[string]SpaceEntry{
+			"spaces/A": {Type: "SPACE", DisplayName: "Sales Skills", MemberCount: 3},
+			"spaces/B": {Type: "SPACE", DisplayName: "sales-pipeline", MemberCount: 5},
+			"spaces/C": {Type: "GROUP_CHAT", DisplayName: "Sales lunch crew", MemberCount: 4},
+			"spaces/D": {Type: "SPACE", DisplayName: "Engineering", MemberCount: 12},
+			"spaces/E": {Type: "DIRECT_MESSAGE", DisplayName: "", MemberCount: 2},
+		},
+	}
+
+	cases := []struct {
+		name      string
+		query     string
+		spaceType string
+		want      []string
+	}{
+		{"substring case insensitive", "sales", "", []string{"spaces/A", "spaces/B", "spaces/C"}},
+		{"prefix match", "Sales Skills", "", []string{"spaces/A"}},
+		{"type filter SPACE", "sales", "SPACE", []string{"spaces/A", "spaces/B"}},
+		{"type filter lowercase", "sales", "space", []string{"spaces/A", "spaces/B"}},
+		{"type filter GROUP_CHAT", "sales", "GROUP_CHAT", []string{"spaces/C"}},
+		{"no match", "missing", "", nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FindByDisplayName(cache, tc.query, tc.spaceType)
+			if len(got) != len(tc.want) {
+				t.Fatalf("expected %d match(es), got %d (%v)", len(tc.want), len(got), keysOf(got))
+			}
+			for _, w := range tc.want {
+				if _, ok := got[w]; !ok {
+					t.Errorf("expected %s in results, got %v", w, keysOf(got))
+				}
+			}
+		})
+	}
+
+	if got := FindByDisplayName(cache, "", ""); len(got) != 0 {
+		t.Errorf("empty query: expected 0 results, got %d", len(got))
+	}
+	if got := FindByDisplayName(nil, "x", ""); len(got) != 0 {
+		t.Errorf("nil cache: expected empty result, got %v", got)
+	}
+}
+
+func keysOf(m map[string]SpaceEntry) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

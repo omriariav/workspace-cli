@@ -379,6 +379,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat event <event>` | Get event details |
 | `gws chat build-cache` | Build space-members cache (`--type`) |
 | `gws chat find-group` | Find group chats by member emails (`--members`, `--refresh`) |
+| `gws chat find-space` | Find spaces by display name substring (`--name`, `--type`, `--refresh`) |
 
 ### Forms
 
