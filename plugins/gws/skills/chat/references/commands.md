@@ -545,7 +545,7 @@ Usage: gws chat find-space [flags]
 
 ### Output Fields (JSON)
 
-- `matches` — Array of matching spaces with `space`, `type`, `display_name`, `member_count`
+- `matches` — Array of matching spaces, sorted by `display_name` then `space`. Each entry has `space`, `type`, `display_name`, `member_count`. When the cache could not resolve a space's member list, the entry also carries `members_unresolved: true` (and `member_count: 0`); display-name search still surfaces it, but member-based search will skip it.
 - `count` — Number of matching spaces
 - `query` — The display-name substring searched for
 - `type` — The type filter (only present when `--type` is set)

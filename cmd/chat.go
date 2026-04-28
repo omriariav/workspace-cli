@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -2182,14 +2183,34 @@ func runChatFindSpace(cmd *cobra.Command, args []string) error {
 
 	matches := spacecache.FindByDisplayName(cache, name, spaceType)
 
-	results := make([]map[string]interface{}, 0, len(matches))
+	type matchRow struct {
+		space, displayName string
+		entry              spacecache.SpaceEntry
+	}
+	rows := make([]matchRow, 0, len(matches))
 	for spaceName, entry := range matches {
-		results = append(results, map[string]interface{}{
-			"space":        spaceName,
-			"type":         entry.Type,
-			"display_name": entry.DisplayName,
-			"member_count": entry.MemberCount,
-		})
+		rows = append(rows, matchRow{space: spaceName, displayName: entry.DisplayName, entry: entry})
+	}
+	// Stable order across runs: by display_name, then by space resource name.
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].displayName != rows[j].displayName {
+			return rows[i].displayName < rows[j].displayName
+		}
+		return rows[i].space < rows[j].space
+	})
+
+	results := make([]map[string]interface{}, 0, len(rows))
+	for _, r := range rows {
+		row := map[string]interface{}{
+			"space":        r.space,
+			"type":         r.entry.Type,
+			"display_name": r.entry.DisplayName,
+			"member_count": r.entry.MemberCount,
+		}
+		if r.entry.MembersUnresolved {
+			row["members_unresolved"] = true
+		}
+		results = append(results, row)
 	}
 
 	out := map[string]interface{}{

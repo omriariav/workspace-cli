@@ -3371,18 +3371,29 @@ func TestChatFindSpace_RefreshTypeScoped(t *testing.T) {
 		t.Fatalf("expected 2 matches (resolved + metadata-only), got %v\nraw: %s", count, output)
 	}
 	matches, _ := result["matches"].([]interface{})
-	gotNames := map[string]bool{}
-	for _, m := range matches {
-		row, _ := m.(map[string]interface{})
-		if s, _ := row["space"].(string); s != "" {
-			gotNames[s] = true
-		}
+	if len(matches) != 2 {
+		t.Fatalf("expected 2 entries in matches array, got %d", len(matches))
 	}
-	if !gotNames["spaces/AAA"] {
-		t.Error("expected spaces/AAA in matches")
+
+	// Sort is by display_name then space. "Sales Skills" < "Sales lunch crew"
+	// in byte order because 'S' (0x53) < 'l' (0x6c). AAA must come first.
+	first, _ := matches[0].(map[string]interface{})
+	second, _ := matches[1].(map[string]interface{})
+	if first["space"] != "spaces/AAA" {
+		t.Errorf("expected matches[0]=spaces/AAA, got %v", first["space"])
 	}
-	if !gotNames["spaces/BBB"] {
-		t.Error("expected spaces/BBB (metadata-only after member fetch failure) in matches")
+	if second["space"] != "spaces/BBB" {
+		t.Errorf("expected matches[1]=spaces/BBB, got %v", second["space"])
+	}
+
+	// Resolved entry should NOT carry members_unresolved.
+	if _, present := first["members_unresolved"]; present {
+		t.Errorf("spaces/AAA should not have members_unresolved set; got %v", first["members_unresolved"])
+	}
+	// Metadata-only entry (BBB) MUST carry members_unresolved=true so callers
+	// can distinguish it from a real zero-member space.
+	if v, _ := second["members_unresolved"].(bool); !v {
+		t.Errorf("spaces/BBB should have members_unresolved=true; got %v", second["members_unresolved"])
 	}
 
 	// Cache file should have been written to the temp HOME.

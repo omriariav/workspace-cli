@@ -686,12 +686,19 @@ func runCalendarCreate(cmd *cobra.Command, args []string) error {
 	// created. Mirrors the Calendar UI which always shows the organizer as attending.
 	// Note: attendees[].self is read-only; we set Email + ResponseStatus only and let
 	// the API populate self on the returned event.
+	//
+	// On the default path (user didn't explicitly set --add-self), if the primary
+	// calendar lookup fails we warn to stderr and continue with the original
+	// attendees — event creation must not break because of an opt-in convenience.
+	// If the user explicitly passed --add-self=true, the failure is fatal.
 	if addSelf {
 		selfEmail, lookupErr := getSelfCalendarEmail(svc)
 		if lookupErr != nil {
-			return p.PrintError(fmt.Errorf("failed to resolve self email for --add-self: %w (pass --add-self=false to skip)", lookupErr))
-		}
-		if !attendeeListContainsEmail(event.Attendees, selfEmail) {
+			if cmd.Flags().Changed("add-self") {
+				return p.PrintError(fmt.Errorf("failed to resolve self email for --add-self: %w (pass --add-self=false to skip)", lookupErr))
+			}
+			fmt.Fprintf(os.Stderr, "warning: --add-self default could not resolve primary calendar (%v); creating event without self attendee\n", lookupErr)
+		} else if !attendeeListContainsEmail(event.Attendees, selfEmail) {
 			event.Attendees = append(event.Attendees, &calendar.EventAttendee{
 				Email:          selfEmail,
 				ResponseStatus: "accepted",

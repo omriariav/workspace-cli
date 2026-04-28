@@ -2211,6 +2211,74 @@ func TestCalendarCreate_AddsSelfByDefault(t *testing.T) {
 	}
 }
 
+// TestCalendarCreate_PrimaryLookupFailureDefaultPath proves event creation
+// continues even if Calendars.Get("primary") fails on the default --add-self
+// path. Existing event creation must not break because of an opt-in convenience.
+// On the default path the failure is a stderr warning; only an explicit
+// --add-self=true makes the failure fatal.
+func TestCalendarCreate_PrimaryLookupFailureDefaultPath(t *testing.T) {
+	var insertedRaw []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/calendars/primary":
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.Method == "POST" && r.URL.Path == "/calendars/primary/events":
+			body, _ := readJSONBody(r)
+			insertedRaw = body
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "evt-3"})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+	calendarServiceForTest = svc
+	defer func() { calendarServiceForTest = nil }()
+
+	cmd := newCalendarCreateCmd()
+	_ = cmd.Flags().Set("title", "Test event")
+	_ = cmd.Flags().Set("start", "2026-04-28 15:00")
+	_ = cmd.Flags().Set("end", "2026-04-28 15:30")
+	_ = cmd.Flags().Set("attendees", "someone-else@example.com")
+	// Note: --add-self left at default true and NOT explicitly set.
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	if err := cmd.RunE(cmd, []string{}); err != nil {
+		os.Stdout = oldStdout
+		t.Fatalf("runCalendarCreate must not error on default add-self primary lookup failure; got %v", err)
+	}
+	w.Close()
+	os.Stdout = oldStdout
+	output, _ := io.ReadAll(r)
+
+	var stdoutResult map[string]interface{}
+	if err := json.Unmarshal(output, &stdoutResult); err != nil {
+		t.Fatalf("failed to parse stdout: %v\nraw: %s", err, output)
+	}
+	if stdoutResult["status"] != "created" {
+		t.Errorf("expected status=created on default-path lookup failure; got %v\nraw: %s", stdoutResult["status"], output)
+	}
+	if insertedRaw == nil {
+		t.Fatal("server did not capture inserted event — POST should still happen on default-path lookup failure")
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(insertedRaw, &raw); err != nil {
+		t.Fatalf("failed to parse inserted body: %v\nraw: %s", err, insertedRaw)
+	}
+	rawAttendees, _ := raw["attendees"].([]interface{})
+	if len(rawAttendees) != 1 {
+		t.Fatalf("expected 1 attendee (no self appended after lookup failure), got %d (raw: %s)", len(rawAttendees), insertedRaw)
+	}
+}
+
 // TestCalendarCreate_RespectsAddSelfFalse drives the runner with --add-self=false
 // and asserts no GET /calendars/primary call is made and no self attendee is appended.
 func TestCalendarCreate_RespectsAddSelfFalse(t *testing.T) {
