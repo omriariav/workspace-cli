@@ -54,7 +54,7 @@ release-check: fmt vet test ## Pre-release quality gate
 release: release-check ## Full release: build, tag, upload, verify (VERSION required)
 	@if [ "$(VERSION)" = "" ]; then echo "ERROR: VERSION is required (make release VERSION=x.y.z)"; exit 1; fi
 	@echo "==> Releasing v$(VERSION)..."
-	git tag v$(VERSION)
+	git tag -a v$(VERSION) -m "v$(VERSION)"
 	git push origin v$(VERSION)
 	gh release create v$(VERSION) --title "v$(VERSION)" --notes "Release v$(VERSION)" --draft
 	@echo "==> Cross-compiling..."
