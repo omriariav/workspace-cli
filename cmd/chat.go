@@ -2096,11 +2096,12 @@ func runChatFindSpace(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 	ctx := context.Background()
 
-	name, _ := cmd.Flags().GetString("name")
+	rawName, _ := cmd.Flags().GetString("name")
 	spaceType, _ := cmd.Flags().GetString("type")
 	refresh, _ := cmd.Flags().GetBool("refresh")
 
-	if strings.TrimSpace(name) == "" {
+	name := strings.TrimSpace(rawName)
+	if name == "" {
 		return p.PrintError(fmt.Errorf("--name must not be empty"))
 	}
 

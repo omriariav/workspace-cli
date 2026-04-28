@@ -612,18 +612,27 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	})
 }
 
+// calendarServiceForTest, when non-nil, replaces the factory-built calendar
+// service in runCalendarCreate. Tests set this to point at httptest endpoints;
+// production code never assigns it so the factory path is taken.
+var calendarServiceForTest *calendar.Service
+
 func runCalendarCreate(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 	ctx := context.Background()
 
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.Calendar()
-	if err != nil {
-		return p.PrintError(err)
+	var svc *calendar.Service
+	if calendarServiceForTest != nil {
+		svc = calendarServiceForTest
+	} else {
+		factory, err := client.NewFactory(ctx)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		svc, err = factory.Calendar()
+		if err != nil {
+			return p.PrintError(err)
+		}
 	}
 
 	title, _ := cmd.Flags().GetString("title")
@@ -671,20 +680,21 @@ func runCalendarCreate(cmd *cobra.Command, args []string) error {
 		event.Attendees = eventAttendees
 	}
 
-	// Add the authenticated user as an accepted attendee unless --no-add-self is set.
+	// Add the authenticated user as an accepted attendee unless --add-self=false.
 	// The Calendar API does not auto-include the organizer in attendees, so downstream
 	// consumers checking attendees[].self/email get a missing entry for events you
 	// created. Mirrors the Calendar UI which always shows the organizer as attending.
+	// Note: attendees[].self is read-only; we set Email + ResponseStatus only and let
+	// the API populate self on the returned event.
 	if addSelf {
 		selfEmail, lookupErr := getSelfCalendarEmail(svc)
 		if lookupErr != nil {
-			return p.PrintError(fmt.Errorf("failed to resolve self email for --add-self: %w (pass --no-add-self to skip)", lookupErr))
+			return p.PrintError(fmt.Errorf("failed to resolve self email for --add-self: %w (pass --add-self=false to skip)", lookupErr))
 		}
 		if !attendeeListContainsEmail(event.Attendees, selfEmail) {
 			event.Attendees = append(event.Attendees, &calendar.EventAttendee{
 				Email:          selfEmail,
 				ResponseStatus: "accepted",
-				Self:           true,
 			})
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
 )
@@ -2101,23 +2102,43 @@ func TestGetSelfCalendarEmail_MockServer(t *testing.T) {
 	}
 }
 
-// TestCalendarCreate_AddsSelfByDefault verifies that Events.Insert receives the
-// authenticated user as an accepted attendee when --add-self is unset (default true).
+// newCalendarCreateCmd returns a fresh create command for tests, mirroring the
+// flags registered in init(). Avoids global flag-state bleed between tests.
+func newCalendarCreateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:  "create",
+		RunE: runCalendarCreate,
+	}
+	cmd.Flags().String("title", "", "Event title (required)")
+	cmd.Flags().String("start", "", "Start time")
+	cmd.Flags().String("end", "", "End time")
+	cmd.Flags().String("calendar-id", "primary", "Calendar ID")
+	cmd.Flags().String("description", "", "Event description")
+	cmd.Flags().String("location", "", "Event location")
+	cmd.Flags().StringSlice("attendees", nil, "Attendee emails")
+	cmd.Flags().Bool("add-self", true, "Add the authenticated user as an accepted attendee")
+	return cmd
+}
+
+// TestCalendarCreate_AddsSelfByDefault drives runCalendarCreate via the Cobra
+// command path with default --add-self. The mock server captures the GET on
+// /calendars/primary and the POST on /calendars/primary/events, then we assert
+// the outbound payload contains self as an accepted attendee with no `self`
+// field set (the API treats that field as read-only).
 func TestCalendarCreate_AddsSelfByDefault(t *testing.T) {
-	var inserted *calendar.Event
+	var insertedRaw []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == "GET" && r.URL.Path == "/calendars/primary":
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": "user@example.com",
 			})
 		case r.Method == "POST" && r.URL.Path == "/calendars/primary/events":
 			body, _ := readJSONBody(r)
-			inserted = &calendar.Event{}
-			_ = json.Unmarshal(body, inserted)
+			insertedRaw = body
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id":       "evt-1",
 				"htmlLink": "https://calendar.google.com/event?eid=1",
 			})
@@ -2132,52 +2153,128 @@ func TestCalendarCreate_AddsSelfByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create calendar service: %v", err)
 	}
+	calendarServiceForTest = svc
+	defer func() { calendarServiceForTest = nil }()
 
-	// Simulate runCalendarCreate's --add-self path directly (no Cobra plumbing).
-	event := &calendar.Event{
-		Summary: "Test",
-		Attendees: []*calendar.EventAttendee{
-			{Email: "someone-else@example.com"},
-		},
+	cmd := newCalendarCreateCmd()
+	_ = cmd.Flags().Set("title", "Test event")
+	_ = cmd.Flags().Set("start", "2026-04-28 15:00")
+	_ = cmd.Flags().Set("end", "2026-04-28 15:30")
+	_ = cmd.Flags().Set("attendees", "someone-else@example.com")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	if err := cmd.RunE(cmd, []string{}); err != nil {
+		os.Stdout = oldStdout
+		t.Fatalf("runCalendarCreate returned error: %v", err)
+	}
+	w.Close()
+	os.Stdout = oldStdout
+
+	output, _ := io.ReadAll(r)
+	var stdoutResult map[string]interface{}
+	if err := json.Unmarshal(output, &stdoutResult); err != nil {
+		t.Fatalf("failed to parse stdout: %v\nraw: %s", err, output)
+	}
+	if stdoutResult["status"] != "created" {
+		t.Errorf("stdout status: got %v, want created", stdoutResult["status"])
 	}
 
-	selfEmail, err := getSelfCalendarEmail(svc)
-	if err != nil {
-		t.Fatalf("getSelfCalendarEmail: %v", err)
-	}
-	if !attendeeListContainsEmail(event.Attendees, selfEmail) {
-		event.Attendees = append(event.Attendees, &calendar.EventAttendee{
-			Email:          selfEmail,
-			ResponseStatus: "accepted",
-			Self:           true,
-		})
-	}
-
-	_, err = svc.Events.Insert("primary", event).Do()
-	if err != nil {
-		t.Fatalf("Events.Insert: %v", err)
-	}
-
-	if inserted == nil {
+	if insertedRaw == nil {
 		t.Fatal("server did not capture inserted event")
 	}
-	if len(inserted.Attendees) != 2 {
-		t.Fatalf("expected 2 attendees, got %d", len(inserted.Attendees))
+	// Inspect the raw JSON the SDK sent so we can prove `self` was NOT serialized.
+	var raw map[string]interface{}
+	if err := json.Unmarshal(insertedRaw, &raw); err != nil {
+		t.Fatalf("failed to parse inserted body: %v\nraw: %s", err, insertedRaw)
 	}
-	var found *calendar.EventAttendee
-	for _, a := range inserted.Attendees {
-		if a.Email == "user@example.com" {
-			found = a
+	rawAttendees, _ := raw["attendees"].([]interface{})
+	if len(rawAttendees) != 2 {
+		t.Fatalf("expected 2 attendees in payload, got %d (raw: %s)", len(rawAttendees), insertedRaw)
+	}
+	var selfRow map[string]interface{}
+	for _, a := range rawAttendees {
+		row, _ := a.(map[string]interface{})
+		if row["email"] == "user@example.com" {
+			selfRow = row
 		}
 	}
-	if found == nil {
-		t.Fatal("self attendee user@example.com not found in inserted attendees")
+	if selfRow == nil {
+		t.Fatal("self attendee user@example.com not found in payload")
 	}
-	if found.ResponseStatus != "accepted" {
-		t.Errorf("self responseStatus: got %q, want accepted", found.ResponseStatus)
+	if selfRow["responseStatus"] != "accepted" {
+		t.Errorf("self responseStatus: got %v, want accepted", selfRow["responseStatus"])
 	}
-	if !found.Self {
-		t.Errorf("self flag: expected true, got false")
+	if _, present := selfRow["self"]; present {
+		t.Errorf("payload should not include `self` field (it is read-only); got %v", selfRow["self"])
+	}
+}
+
+// TestCalendarCreate_RespectsAddSelfFalse drives the runner with --add-self=false
+// and asserts no GET /calendars/primary call is made and no self attendee is appended.
+func TestCalendarCreate_RespectsAddSelfFalse(t *testing.T) {
+	var primaryCalled bool
+	var insertedRaw []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/calendars/primary":
+			primaryCalled = true
+			w.WriteHeader(http.StatusInternalServerError) // should not be reached
+		case r.Method == "POST" && r.URL.Path == "/calendars/primary/events":
+			body, _ := readJSONBody(r)
+			insertedRaw = body
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "evt-2"})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+	calendarServiceForTest = svc
+	defer func() { calendarServiceForTest = nil }()
+
+	cmd := newCalendarCreateCmd()
+	_ = cmd.Flags().Set("title", "Test event")
+	_ = cmd.Flags().Set("start", "2026-04-28 15:00")
+	_ = cmd.Flags().Set("end", "2026-04-28 15:30")
+	_ = cmd.Flags().Set("attendees", "someone-else@example.com")
+	_ = cmd.Flags().Set("add-self", "false")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	if err := cmd.RunE(cmd, []string{}); err != nil {
+		os.Stdout = oldStdout
+		t.Fatalf("runCalendarCreate returned error: %v", err)
+	}
+	w.Close()
+	os.Stdout = oldStdout
+	_, _ = io.ReadAll(r)
+
+	if primaryCalled {
+		t.Error("GET /calendars/primary should not be called when --add-self=false")
+	}
+	if insertedRaw == nil {
+		t.Fatal("server did not capture inserted event")
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(insertedRaw, &raw); err != nil {
+		t.Fatalf("failed to parse inserted body: %v\nraw: %s", err, insertedRaw)
+	}
+	rawAttendees, _ := raw["attendees"].([]interface{})
+	if len(rawAttendees) != 1 {
+		t.Fatalf("expected 1 attendee with --add-self=false, got %d (raw: %s)", len(rawAttendees), insertedRaw)
+	}
+	row, _ := rawAttendees[0].(map[string]interface{})
+	if row["email"] != "someone-else@example.com" {
+		t.Errorf("unexpected attendee email: %v", row["email"])
 	}
 }
 
@@ -2191,11 +2288,11 @@ func TestCalendarCreate_DoesNotDuplicateSelf(t *testing.T) {
 	selfEmail := "user@example.com"
 
 	// Mirror the runner's --add-self branch: only append when self is absent.
+	// We do not set Self here — Calendar API treats attendees[].self as read-only.
 	if !attendeeListContainsEmail(atts, selfEmail) {
 		atts = append(atts, &calendar.EventAttendee{
 			Email:          selfEmail,
 			ResponseStatus: "accepted",
-			Self:           true,
 		})
 	}
 

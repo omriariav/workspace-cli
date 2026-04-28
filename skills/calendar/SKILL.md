@@ -152,6 +152,7 @@ gws calendar create --title <title> --start <time> --end <time> [flags]
 - `--description string` -- Event description
 - `--location string` -- Event location
 - `--attendees strings` -- Attendee email addresses
+- `--add-self bool` (default `true`) -- Add the authenticated user as an `accepted` attendee. Pass `--add-self=false` to opt out.
 
 ### quick-add -- Quick add from text
 
