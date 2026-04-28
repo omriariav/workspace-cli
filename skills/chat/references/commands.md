@@ -527,7 +527,9 @@ Usage: gws chat find-group [flags]
 
 ## gws chat find-space
 
-Searches the local space cache for spaces whose `display_name` contains the given query (case-insensitive substring match). Requires `build-cache` to be run first (or pass `--refresh`).
+Searches the local space cache for spaces whose `display_name` contains the given query (case-insensitive substring match).
+
+**Cache scope.** Default `gws chat build-cache` caches only `GROUP_CHAT`. To find `SPACE`-type rooms or all types, either prebuild with `gws chat build-cache --type SPACE` (or `--type all`), or pass `--refresh` to rebuild the cache from `spaces.list` before searching. When `--refresh` is set together with `--type`, the cache is rebuilt scoped to that type only.
 
 ```
 Usage: gws chat find-space [flags]

@@ -408,17 +408,20 @@ Searches the local space-members cache for spaces where ALL specified emails are
 ### find-space — Find spaces by display name
 
 ```bash
-gws chat find-space --name "sales-skills"
+gws chat find-space --name "sales-skills" --refresh
 gws chat find-space --name "team" --type SPACE
-gws chat find-space --name "lunch" --refresh
 ```
 
-Searches the local space cache for spaces whose `display_name` contains the given query (case-insensitive substring match). Requires `build-cache` to be run first (or use `--refresh`). DMs without a display name are skipped.
+Searches the local space cache for spaces whose `display_name` contains the given query (case-insensitive substring match). DMs without a display name are skipped.
+
+**Cache scope matters.** Default `gws chat build-cache` only caches `GROUP_CHAT`. To find `SPACE`-type rooms (most named spaces) or all types, either:
+- prebuild with `gws chat build-cache --type SPACE` (or `--type all`), or
+- pass `--refresh` so this command rebuilds the cache before searching.
 
 **Flags:**
 - `--name string` — Display name substring to search for (case-insensitive, required)
 - `--type string` — Filter by space type: SPACE, GROUP_CHAT, or DIRECT_MESSAGE
-- `--refresh` — Rebuild cache before searching
+- `--refresh` — Rebuild cache before searching (scoped to `--type` if set, otherwise all types)
 
 ## Output Modes
 

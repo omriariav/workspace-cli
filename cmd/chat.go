@@ -307,8 +307,16 @@ var chatFindSpaceCmd = &cobra.Command{
 	Use:   "find-space",
 	Short: "Find spaces by display name",
 	Long: `Searches the local space cache for spaces whose display_name contains the
-given query (case-insensitive substring match). Run 'gws chat build-cache' first
-or pass --refresh to rebuild the cache before searching.`,
+given query (case-insensitive substring match).
+
+The cache must already cover the space type you want to search. The default
+'gws chat build-cache' run only caches GROUP_CHAT, so to search SPACE-type
+rooms or all types either:
+  - prebuild with 'gws chat build-cache --type SPACE' (or '--type all'), or
+  - pass --refresh to rebuild the cache from spaces.list before searching.
+
+When --refresh is set together with --type, the cache is rebuilt scoped to that
+type only; otherwise --refresh rebuilds for all space types.`,
 	RunE: runChatFindSpace,
 }
 

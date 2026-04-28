@@ -282,14 +282,26 @@ func TestBuild_SkipsSpaceOnMemberFetchFailure(t *testing.T) {
 		t.Fatalf("Build failed: %v", err)
 	}
 
-	// spaces/FAIL should be skipped (0 members due to error)
-	if _, ok := cache.Spaces["spaces/FAIL"]; ok {
-		t.Error("expected spaces/FAIL to be skipped due to member fetch failure")
+	// spaces/FAIL is retained as a metadata-only entry so display-name search can
+	// still find it. Member-based search must skip it via MembersUnresolved.
+	failEntry, ok := cache.Spaces["spaces/FAIL"]
+	if !ok {
+		t.Fatal("expected spaces/FAIL to remain in cache as metadata-only entry")
+	}
+	if !failEntry.MembersUnresolved {
+		t.Error("spaces/FAIL: expected MembersUnresolved=true")
+	}
+	if len(failEntry.Members) != 0 {
+		t.Errorf("spaces/FAIL: expected empty members, got %v", failEntry.Members)
 	}
 
-	// spaces/OK should be present
-	if _, ok := cache.Spaces["spaces/OK"]; !ok {
-		t.Error("expected spaces/OK to be in cache")
+	// spaces/OK should be present and fully resolved
+	okEntry, ok := cache.Spaces["spaces/OK"]
+	if !ok {
+		t.Fatal("expected spaces/OK to be in cache")
+	}
+	if okEntry.MembersUnresolved {
+		t.Error("spaces/OK: MembersUnresolved must be false")
 	}
 }
 
@@ -337,9 +349,18 @@ func TestBuild_SkipsSpaceOnPartialPageFailure(t *testing.T) {
 		t.Fatalf("Build failed: %v", err)
 	}
 
-	// Space should be skipped entirely — partial member list is unreliable
-	if _, ok := cache.Spaces["spaces/PARTIAL"]; ok {
-		t.Error("expected spaces/PARTIAL to be skipped due to partial page failure")
+	// Partial page failure is treated like full failure: the entry is retained
+	// as metadata-only with MembersUnresolved=true, so member search filters it
+	// out while display-name search can still match.
+	entry, ok := cache.Spaces["spaces/PARTIAL"]
+	if !ok {
+		t.Fatal("expected spaces/PARTIAL to remain in cache as metadata-only entry")
+	}
+	if !entry.MembersUnresolved {
+		t.Error("spaces/PARTIAL: expected MembersUnresolved=true")
+	}
+	if len(entry.Members) != 0 {
+		t.Errorf("spaces/PARTIAL: expected empty members, got %v", entry.Members)
 	}
 }
 
@@ -396,4 +417,36 @@ func keysOf(m map[string]SpaceEntry) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// TestFindByDisplayName_FindsMetadataOnly verifies that a space whose member
+// list could not be resolved is still discoverable by display-name search.
+func TestFindByDisplayName_FindsMetadataOnly(t *testing.T) {
+	cache := &CacheData{
+		Spaces: map[string]SpaceEntry{
+			"spaces/A": {Type: "SPACE", DisplayName: "Sales Skills", MembersUnresolved: true},
+		},
+	}
+	got := FindByDisplayName(cache, "sales", "")
+	if _, ok := got["spaces/A"]; !ok {
+		t.Errorf("expected spaces/A (metadata-only) to be found by display name; got %v", keysOf(got))
+	}
+}
+
+// TestFindByMembers_SkipsMembersUnresolved verifies member-based search ignores
+// metadata-only entries even if they would coincidentally match.
+func TestFindByMembers_SkipsMembersUnresolved(t *testing.T) {
+	cache := &CacheData{
+		Spaces: map[string]SpaceEntry{
+			"spaces/UNRESOLVED": {Type: "SPACE", DisplayName: "X", Members: nil, MembersUnresolved: true},
+			"spaces/RESOLVED":   {Type: "SPACE", DisplayName: "Y", Members: []string{"alice@example.com"}},
+		},
+	}
+	got := FindByMembers(cache, []string{"alice@example.com"})
+	if _, ok := got["spaces/UNRESOLVED"]; ok {
+		t.Error("spaces/UNRESOLVED must be skipped by FindByMembers")
+	}
+	if _, ok := got["spaces/RESOLVED"]; !ok {
+		t.Error("expected spaces/RESOLVED to match")
+	}
 }
