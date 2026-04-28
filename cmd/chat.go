@@ -376,6 +376,7 @@ func init() {
 	chatMessagesCmd.Flags().Bool("show-deleted", false, "Include deleted messages in results")
 	chatMessagesCmd.Flags().String("after", "", "Show messages after this time (RFC3339, e.g. 2026-02-17T00:00:00Z)")
 	chatMessagesCmd.Flags().String("before", "", "Show messages before this time (RFC3339, e.g. 2026-02-20T00:00:00Z)")
+	chatMessagesCmd.Flags().Bool("resolve-senders", false, "Resolve sender display names by listing the space membership (one extra API call per space)")
 
 	// Send flags
 	chatSendCmd.Flags().String("space", "", "Space ID or name (required)")
@@ -422,6 +423,10 @@ func init() {
 	// Unread flags
 	chatUnreadCmd.Flags().Int64("max", 25, "Maximum number of unread messages")
 	chatUnreadCmd.Flags().Bool("mark-read", false, "Mark space as read after listing")
+	chatUnreadCmd.Flags().Bool("resolve-senders", false, "Resolve sender display names by listing the space membership (one extra API call per space)")
+
+	// Get flags
+	chatGetCmd.Flags().Bool("resolve-senders", false, "Resolve sender display name by listing the space membership (one extra API call)")
 
 	// Setup space flags
 	chatSetupSpaceCmd.Flags().String("display-name", "", "Space display name (required for SPACE type)")
@@ -609,6 +614,7 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 	showDeleted, _ := cmd.Flags().GetBool("show-deleted")
 	after, _ := cmd.Flags().GetString("after")
 	before, _ := cmd.Flags().GetString("before")
+	resolveSenders, _ := cmd.Flags().GetBool("resolve-senders")
 
 	// Build filter from --after/--before flags, combining with --filter
 	var filterParts []string
@@ -630,6 +636,12 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 			"messages": []map[string]interface{}{},
 			"count":    0,
 		})
+	}
+
+	senderCtx := nilSenderContext()
+	if resolveSenders {
+		peopleSvc, _ := factory.PeopleProfile() // best-effort; nil-tolerant inside resolver
+		senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceName)
 	}
 
 	var results []map[string]interface{}
@@ -673,11 +685,15 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 			if msg.Sender != nil {
 				senderName := msg.Sender.DisplayName
 				if senderName == "" {
-					senderName = msg.Sender.Name
+					if resolved, ok := senderCtx.displayNames[msg.Sender.Name]; ok && resolved != "" {
+						senderName = resolved
+					} else {
+						senderName = msg.Sender.Name
+					}
 				}
 				msgInfo["sender"] = senderName
-				msgInfo["sender_type"] = msg.Sender.Type
 			}
+			senderCtx.annotate(msg, msgInfo)
 			if msg.Thread != nil {
 				msgInfo["thread"] = msg.Thread.Name
 			}
@@ -884,6 +900,7 @@ func runChatGet(cmd *cobra.Command, args []string) error {
 	}
 
 	messageName := args[0]
+	resolveSenders, _ := cmd.Flags().GetBool("resolve-senders")
 
 	msg, err := svc.Spaces.Messages.Get(messageName).Context(ctx).Do()
 	if err != nil {
@@ -895,14 +912,23 @@ func runChatGet(cmd *cobra.Command, args []string) error {
 		"text":        msg.Text,
 		"create_time": msg.CreateTime,
 	}
+	senderCtx := nilSenderContext()
+	if resolveSenders {
+		peopleSvc, _ := factory.PeopleProfile()
+		senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceFromMessageName(msg.Name))
+	}
 	if msg.Sender != nil {
 		senderName := msg.Sender.DisplayName
 		if senderName == "" {
-			senderName = msg.Sender.Name
+			if resolved, ok := senderCtx.displayNames[msg.Sender.Name]; ok && resolved != "" {
+				senderName = resolved
+			} else {
+				senderName = msg.Sender.Name
+			}
 		}
 		result["sender"] = senderName
-		result["sender_type"] = msg.Sender.Type
 	}
+	senderCtx.annotate(msg, result)
 	if msg.Thread != nil {
 		result["thread"] = msg.Thread.Name
 	}
@@ -1672,6 +1698,7 @@ func runChatUnread(cmd *cobra.Command, args []string) error {
 	spaceName := ensureSpaceName(args[0])
 	maxResults, _ := cmd.Flags().GetInt64("max")
 	markRead, _ := cmd.Flags().GetBool("mark-read")
+	resolveSenders, _ := cmd.Flags().GetBool("resolve-senders")
 
 	// Get the space read state to find last read time
 	readStateName := ensureReadStateName(args[0])
@@ -1686,6 +1713,12 @@ func runChatUnread(cmd *cobra.Command, args []string) error {
 	var filter string
 	if lastReadTime != "" {
 		filter = fmt.Sprintf("createTime > \"%s\"", lastReadTime)
+	}
+
+	senderCtx := nilSenderContext()
+	if resolveSenders {
+		peopleSvc, _ := factory.PeopleProfile()
+		senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceName)
 	}
 
 	// List messages after last read time
@@ -1720,10 +1753,15 @@ func runChatUnread(cmd *cobra.Command, args []string) error {
 			if msg.Sender != nil {
 				senderName := msg.Sender.DisplayName
 				if senderName == "" {
-					senderName = msg.Sender.Name
+					if resolved, ok := senderCtx.displayNames[msg.Sender.Name]; ok && resolved != "" {
+						senderName = resolved
+					} else {
+						senderName = msg.Sender.Name
+					}
 				}
 				msgInfo["sender"] = senderName
 			}
+			senderCtx.annotate(msg, msgInfo)
 			if msg.Thread != nil {
 				msgInfo["thread"] = msg.Thread.Name
 			}
@@ -2222,4 +2260,109 @@ func runChatFindSpace(cmd *cobra.Command, args []string) error {
 		out["type"] = strings.ToUpper(spaceType)
 	}
 	return p.Print(out)
+}
+
+// senderContext resolves sender display names and self markers for a single
+// space within one command invocation. Resolution is best-effort: failures
+// degrade to "no resolution" rather than failing the whole command. When
+// constructed via nilSenderContext (the default-path object), it makes no
+// API calls and only annotates fields available directly on the message.
+type senderContext struct {
+	space        string
+	selfResource string            // canonical "users/{id}" for the authenticated user, or "".
+	displayNames map[string]string // users/{id} -> display name (only populated when --resolve-senders).
+}
+
+// nilSenderContext returns a no-op resolver suitable for the default path:
+// no API calls, no self detection, no display-name resolution. annotate still
+// adds sender_type and sender_resource purely from the message payload.
+func nilSenderContext() *senderContext {
+	return &senderContext{}
+}
+
+// resolveSendersForSpace builds a fully-populated resolver for one space.
+// Self detection uses the People API people/me (cached implicitly per
+// invocation by the caller), then maps people/{id} to the canonical
+// users/{id} that Chat returns for sender resources. Display names come from
+// listing space membership. Both calls are best-effort: a failure in either
+// one leaves the corresponding fields empty, never aborts the command.
+func resolveSendersForSpace(ctx context.Context, chatSvc *chat.Service, peopleSvc *people.Service, space string) *senderContext {
+	sc := &senderContext{space: space, displayNames: map[string]string{}}
+
+	if peopleSvc != nil {
+		if me, err := peopleSvc.People.Get("people/me").PersonFields("metadata").Context(ctx).Do(); err == nil {
+			if me != nil && strings.HasPrefix(me.ResourceName, "people/") {
+				sc.selfResource = "users/" + strings.TrimPrefix(me.ResourceName, "people/")
+			}
+		}
+	}
+
+	if chatSvc == nil || space == "" {
+		return sc
+	}
+
+	pageToken := ""
+	for {
+		call := chatSvc.Spaces.Members.List(space).PageSize(1000).Context(ctx)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+		resp, err := call.Do()
+		if err != nil {
+			return sc // Best-effort: leave unresolved senders as-is.
+		}
+		for _, m := range resp.Memberships {
+			if m == nil || m.Member == nil || m.Member.Name == "" {
+				continue
+			}
+			if m.Member.DisplayName != "" {
+				sc.displayNames[m.Member.Name] = m.Member.DisplayName
+			}
+		}
+		if resp.NextPageToken == "" {
+			return sc
+		}
+		pageToken = resp.NextPageToken
+	}
+}
+
+// annotate adds additive sender attribution fields to the given output map
+// without disturbing the existing "sender" field set by callers. Safe to call
+// when ctx is nil (no-op aside from the existing fields).
+func (sc *senderContext) annotate(msg *chat.Message, info map[string]interface{}) {
+	if msg == nil || msg.Sender == nil || info == nil {
+		return
+	}
+	s := msg.Sender
+	if s.Type != "" {
+		info["sender_type"] = s.Type
+	}
+	if s.Name != "" {
+		info["sender_resource"] = s.Name
+	}
+	if sc != nil {
+		display := s.DisplayName
+		if display == "" {
+			if name, ok := sc.displayNames[s.Name]; ok {
+				display = name
+			}
+		}
+		if display != "" {
+			info["sender_display_name"] = display
+		}
+		if sc.selfResource != "" && s.Name != "" {
+			info["self"] = s.Name == sc.selfResource
+		}
+	}
+}
+
+// spaceFromMessageName returns "spaces/{space}" derived from a Chat message
+// resource name like "spaces/AAAA/messages/msg1". Returns "" when the input
+// does not match the expected shape so callers can keep output usable.
+func spaceFromMessageName(name string) string {
+	parts := strings.Split(name, "/")
+	if len(parts) < 4 || parts[0] != "spaces" || parts[2] != "messages" {
+		return ""
+	}
+	return parts[0] + "/" + parts[1]
 }

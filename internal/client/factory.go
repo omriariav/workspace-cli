@@ -348,22 +348,38 @@ func (f *Factory) DriveActivity() (*driveactivity.Service, error) {
 	return svc, nil
 }
 
-// People returns the People API service client.
+// People returns the People API service client. Used by Contacts commands
+// and any path that needs the directory/contacts scopes.
 func (f *Factory) People() (*people.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.checkServiceScopes("contacts")
 
+	return f.peopleLocked()
+}
+
+// PeopleProfile returns the People API service client for profile-only paths
+// (e.g. self-identity lookups via people/me) that work with the userinfo
+// scope and do not require the contacts scope. This avoids printing a
+// misleading "requires contacts" warning to users who authenticated with a
+// scoped login that omitted contacts.
+func (f *Factory) PeopleProfile() (*people.Service, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.peopleLocked()
+}
+
+// peopleLocked builds (or returns the cached) People service. Caller must
+// hold f.mu.
+func (f *Factory) peopleLocked() (*people.Service, error) {
 	if f.people != nil {
 		return f.people, nil
 	}
-
 	svc, err := people.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create People client: %w", err)
 	}
-
 	f.people = svc
 	return svc, nil
 }

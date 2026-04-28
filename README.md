@@ -348,10 +348,10 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | Command | Description |
 |---------|-------------|
 | `gws chat list` | List spaces (`--filter`, `--page-size`) |
-| `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`, `--after`, `--before`) |
+| `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`, `--after`, `--before`, `--resolve-senders`) |
 | `gws chat members <space>` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`) |
 | `gws chat send` | Send message (`--space`, `--text`) |
-| `gws chat get <message>` | Get a single message |
+| `gws chat get <message>` | Get a single message (`--resolve-senders`) |
 | `gws chat update <message>` | Update message text (`--text`) |
 | `gws chat delete <message>` | Delete a message (`--force`) |
 | `gws chat reactions <message>` | List reactions (`--filter`, `--page-size`) |
@@ -371,7 +371,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat read-state <space>` | Get space read state |
 | `gws chat mark-read <space>` | Mark space as read (`--time`) |
 | `gws chat thread-read-state <thread>` | Get thread read state |
-| `gws chat unread <space>` | List unread messages (`--max`, `--mark-read`) |
+| `gws chat unread <space>` | List unread messages (`--max`, `--mark-read`, `--resolve-senders`) |
 | `gws chat attachment <attachment>` | Get attachment metadata |
 | `gws chat upload <space>` | Upload a file (`--file`) |
 | `gws chat download <resource>` | Download media (`--output`) |
@@ -426,6 +426,19 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | Command | Description |
 |---------|-------------|
 | `gws search <query>` | Search the web (`--max`, `--site`, `--type`) |
+
+### Version
+
+| Command | Description |
+|---------|-------------|
+| `gws version` | Print version, commit, and build date |
+| `gws version --check` | Check GitHub for the latest release and report whether `gws` is up to date |
+
+`gws` will also print a low-noise stale-version notice on stderr when a newer
+release is available. The notice is suppressed by `--quiet` and by setting
+`GWS_NO_UPDATE_CHECK=1`. The latest-release lookup is cached for 24 hours at
+`~/.config/gws/version-cache.json` and dev/pseudo builds skip the comparison
+entirely.
 
 ## Structured Output
 

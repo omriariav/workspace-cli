@@ -1,11 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/config"
 	"github.com/omriariav/workspace-cli/internal/printer"
+	"github.com/omriariav/workspace-cli/internal/updatecheck"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -24,6 +28,38 @@ var rootCmd = &cobra.Command{
 It provides structured, token-efficient access to Gmail, Calendar, Drive,
 Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Groups, Keep,
 and Custom Search.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		emitVersionNotice(cmd, os.Stderr, quiet, os.Getenv("GWS_NO_UPDATE_CHECK") != "")
+	},
+}
+
+// emitVersionNotice writes a low-noise line when a newer release is
+// available. All errors are swallowed so unrelated commands stay healthy.
+// Suppressed by --quiet, by GWS_NO_UPDATE_CHECK (passed in as suppressEnv),
+// and on the version command itself (which has its own --check path) and
+// shell completion subcommands.
+func emitVersionNotice(cmd *cobra.Command, w io.Writer, quietFlag, suppressEnv bool) {
+	if quietFlag || suppressEnv {
+		return
+	}
+	if cmd == nil {
+		return
+	}
+	if cmd == versionCmd || (cmd.Parent() != nil && cmd.Parent().Name() == "completion") {
+		return
+	}
+
+	checker := newVersionChecker()
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	res, err := checker.Check(ctx, Version, false)
+	if err != nil || res == nil {
+		return
+	}
+	if notice := updatecheck.FormatPassiveNotice(res); notice != "" {
+		fmt.Fprint(w, notice)
+	}
 }
 
 func Execute() error {
