@@ -3292,6 +3292,109 @@ func TestChatFindSpace_InvalidType(t *testing.T) {
 	}
 }
 
+// TestChatFindSpace_RefreshTypeScoped drives runChatFindSpace --refresh --type SPACE
+// against a mock spaces.list + members.list. It proves three things end-to-end:
+//   - the refresh path rebuilds the cache from spaces.list rather than relying on
+//     a pre-existing cache file
+//   - --type filters spaces.list scoping (verified via captured Filter param)
+//   - a space whose members.list call fails is still discoverable by display
+//     name through the command path (metadata-only retention)
+func TestChatFindSpace_RefreshTypeScoped(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	var capturedListFilter string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/spaces", func(w http.ResponseWriter, r *http.Request) {
+		capturedListFilter = r.URL.Query().Get("filter")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"spaces": []map[string]interface{}{
+				{"name": "spaces/AAA", "spaceType": "SPACE", "displayName": "Sales Skills"},
+				{"name": "spaces/BBB", "spaceType": "SPACE", "displayName": "Sales lunch crew"},
+			},
+		})
+	})
+	mux.HandleFunc("/v1/spaces/AAA/members", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"memberships": []map[string]interface{}{
+				{"name": "spaces/AAA/members/1", "member": map[string]interface{}{"name": "users/111", "type": "HUMAN"}},
+			},
+		})
+	})
+	mux.HandleFunc("/v1/spaces/BBB/members", func(w http.ResponseWriter, r *http.Request) {
+		// Member listing fails for BBB — must still be present as metadata-only.
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "forbidden"})
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	chatSvc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+	chatServiceForTest = chatSvc
+	peopleServiceForTest = nil // Build's people calls are best-effort and can be nil
+	defer func() {
+		chatServiceForTest = nil
+		peopleServiceForTest = nil
+	}()
+
+	cmd := newFindSpaceCmd()
+	_ = cmd.Flags().Set("name", "sales")
+	_ = cmd.Flags().Set("type", "SPACE")
+	_ = cmd.Flags().Set("refresh", "true")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	if err := cmd.RunE(cmd, []string{}); err != nil {
+		os.Stdout = oldStdout
+		t.Fatalf("runChatFindSpace returned error: %v", err)
+	}
+	w.Close()
+	os.Stdout = oldStdout
+	output, _ := io.ReadAll(r)
+
+	if capturedListFilter != `spaceType = "SPACE"` {
+		t.Errorf("expected spaces.list filter scoped to SPACE, got %q", capturedListFilter)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse stdout: %v\nraw: %s", err, output)
+	}
+	count, _ := result["count"].(float64)
+	if int(count) != 2 {
+		t.Fatalf("expected 2 matches (resolved + metadata-only), got %v\nraw: %s", count, output)
+	}
+	matches, _ := result["matches"].([]interface{})
+	gotNames := map[string]bool{}
+	for _, m := range matches {
+		row, _ := m.(map[string]interface{})
+		if s, _ := row["space"].(string); s != "" {
+			gotNames[s] = true
+		}
+	}
+	if !gotNames["spaces/AAA"] {
+		t.Error("expected spaces/AAA in matches")
+	}
+	if !gotNames["spaces/BBB"] {
+		t.Error("expected spaces/BBB (metadata-only after member fetch failure) in matches")
+	}
+
+	// Cache file should have been written to the temp HOME.
+	cached, err := spacecache.Load(spacecache.DefaultPath())
+	if err != nil {
+		t.Fatalf("failed to load cache after refresh: %v", err)
+	}
+	if entry, ok := cached.Spaces["spaces/BBB"]; !ok || !entry.MembersUnresolved {
+		t.Errorf("expected spaces/BBB in cache with MembersUnresolved=true; got %+v (ok=%v)", entry, ok)
+	}
+}
+
 // TestChatFindSpace_NoCache verifies the runner errors clearly when no cache exists.
 func TestChatFindSpace_NoCache(t *testing.T) {
 	tmpHome := t.TempDir()

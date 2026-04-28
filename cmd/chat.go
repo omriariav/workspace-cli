@@ -15,6 +15,7 @@ import (
 	"github.com/omriariav/workspace-cli/internal/usercache"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/chat/v1"
+	"google.golang.org/api/people/v1"
 )
 
 var chatCmd = &cobra.Command{
@@ -2100,6 +2101,15 @@ func runChatFindGroup(cmd *cobra.Command, args []string) error {
 	})
 }
 
+// chatServiceForTest and peopleServiceForTest, when non-nil, replace the
+// factory-built services in runChatFindSpace's --refresh path. Tests set these
+// to point at httptest endpoints; production paths leave both nil so the
+// factory is used.
+var (
+	chatServiceForTest   *chat.Service
+	peopleServiceForTest *people.Service
+)
+
 func runChatFindSpace(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 	ctx := context.Background()
@@ -2124,19 +2134,24 @@ func runChatFindSpace(cmd *cobra.Command, args []string) error {
 	cachePath := spacecache.DefaultPath()
 
 	if refresh {
-		factory, err := client.NewFactory(ctx)
-		if err != nil {
-			return p.PrintError(err)
-		}
-
-		chatSvc, err := factory.Chat()
-		if err != nil {
-			return p.PrintError(err)
-		}
-
-		peopleSvc, err := factory.People()
-		if err != nil {
-			return p.PrintError(err)
+		var chatSvc *chat.Service
+		var peopleSvc *people.Service
+		if chatServiceForTest != nil {
+			chatSvc = chatServiceForTest
+			peopleSvc = peopleServiceForTest
+		} else {
+			factory, err := client.NewFactory(ctx)
+			if err != nil {
+				return p.PrintError(err)
+			}
+			chatSvc, err = factory.Chat()
+			if err != nil {
+				return p.PrintError(err)
+			}
+			peopleSvc, err = factory.People()
+			if err != nil {
+				return p.PrintError(err)
+			}
 		}
 
 		buildType := "all"

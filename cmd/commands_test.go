@@ -262,7 +262,7 @@ func TestCalendarCreateCommand_Flags(t *testing.T) {
 		t.Fatal("calendar create command not found")
 	}
 
-	flags := []string{"title", "start", "end", "attendees", "description", "calendar-id"}
+	flags := []string{"title", "start", "end", "attendees", "description", "calendar-id", "add-self"}
 	for _, flag := range flags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected --%s flag", flag)
