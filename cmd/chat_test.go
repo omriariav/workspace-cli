@@ -267,6 +267,198 @@ func TestChatList_Pagination(t *testing.T) {
 	}
 }
 
+func TestChatResolveSendersFlag(t *testing.T) {
+	for _, name := range []string{"messages", "get", "unread"} {
+		sub := findSubcommand(chatCmd, name)
+		if sub == nil {
+			t.Fatalf("chat %s command not found", name)
+		}
+		flag := sub.Flags().Lookup("resolve-senders")
+		if flag == nil {
+			t.Fatalf("expected --resolve-senders on chat %s", name)
+		}
+		if flag.DefValue != "false" {
+			t.Errorf("expected --resolve-senders default false on chat %s, got %s", name, flag.DefValue)
+		}
+	}
+}
+
+func TestSpaceFromMessageName(t *testing.T) {
+	cases := []struct {
+		name string
+		want string
+	}{
+		{"spaces/AAAA/messages/msg1", "spaces/AAAA"},
+		{"spaces/AAAA/messages/foo.bar", "spaces/AAAA"},
+		{"spaces/AAAA/threads/t1", ""},
+		{"users/me/spaces/foo", ""},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := spaceFromMessageName(c.name); got != c.want {
+			t.Errorf("spaceFromMessageName(%q) = %q; want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestSenderContext_DefaultMarksSelf(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/members/me": func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"name":   "spaces/AAAA/members/users-111",
+				"member": map[string]interface{}{"name": "users/111", "type": "HUMAN"},
+			})
+		},
+	}
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sc := newSenderContext(context.Background(), svc, "spaces/AAAA", false)
+	if sc.selfResource != "users/111" {
+		t.Fatalf("selfResource = %q; want users/111", sc.selfResource)
+	}
+	if len(sc.displayNames) != 0 {
+		t.Errorf("expected no member resolution without --resolve-senders, got %v", sc.displayNames)
+	}
+
+	selfMsg := &chat.Message{Sender: &chat.User{Name: "users/111", DisplayName: "Alice", Type: "HUMAN"}}
+	out := map[string]interface{}{}
+	sc.annotate(selfMsg, out)
+	if got := out["self"]; got != true {
+		t.Errorf("expected self=true, got %v", got)
+	}
+	if got := out["sender_resource"]; got != "users/111" {
+		t.Errorf("sender_resource = %v; want users/111", got)
+	}
+	if got := out["sender_type"]; got != "HUMAN" {
+		t.Errorf("sender_type = %v; want HUMAN", got)
+	}
+
+	otherMsg := &chat.Message{Sender: &chat.User{Name: "users/222", Type: "HUMAN"}}
+	out2 := map[string]interface{}{}
+	sc.annotate(otherMsg, out2)
+	if got := out2["self"]; got != false {
+		t.Errorf("expected self=false for other user, got %v", got)
+	}
+	// Without --resolve-senders, no display name should be filled in.
+	if _, exists := out2["sender_display_name"]; exists {
+		t.Errorf("sender_display_name should not be set without --resolve-senders, got %v", out2["sender_display_name"])
+	}
+}
+
+func TestSenderContext_ResolveSendersFillsDisplayName(t *testing.T) {
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/members/me": func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"member": map[string]interface{}{"name": "users/111", "type": "HUMAN"},
+			})
+		},
+		"/v1/spaces/AAAA/members": func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"memberships": []map[string]interface{}{
+					{"member": map[string]interface{}{"name": "users/222", "displayName": "Bob", "type": "HUMAN"}},
+					{"member": map[string]interface{}{"name": "users/333", "displayName": "Carol", "type": "HUMAN"}},
+				},
+			})
+		},
+	}
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sc := newSenderContext(context.Background(), svc, "spaces/AAAA", true)
+	if sc.displayNames["users/222"] != "Bob" {
+		t.Errorf("expected Bob in displayNames, got %v", sc.displayNames)
+	}
+
+	// Sender API response had no displayName: resolution should fill it in.
+	msg := &chat.Message{Sender: &chat.User{Name: "users/222", Type: "HUMAN"}}
+	out := map[string]interface{}{}
+	sc.annotate(msg, out)
+	if got := out["sender_display_name"]; got != "Bob" {
+		t.Errorf("sender_display_name = %v; want Bob", got)
+	}
+	if got := out["self"]; got != false {
+		t.Errorf("self = %v; want false", got)
+	}
+}
+
+func TestSenderContext_UnresolvedSenderIsUsable(t *testing.T) {
+	// /members/me succeeds but /members list fails. Resolution should be
+	// best-effort: annotate should still set sender_type and sender_resource,
+	// just no display_name.
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/members/me": func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"member": map[string]interface{}{"name": "users/111", "type": "HUMAN"},
+			})
+		},
+		"/v1/spaces/AAAA/members": func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "permission denied", http.StatusForbidden)
+		},
+	}
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sc := newSenderContext(context.Background(), svc, "spaces/AAAA", true)
+
+	msg := &chat.Message{Sender: &chat.User{Name: "users/777", Type: "HUMAN"}}
+	out := map[string]interface{}{}
+	sc.annotate(msg, out)
+	if _, ok := out["sender_display_name"]; ok {
+		t.Errorf("sender_display_name should be absent when membership listing fails, got %v", out["sender_display_name"])
+	}
+	if out["sender_resource"] != "users/777" {
+		t.Errorf("sender_resource = %v; want users/777", out["sender_resource"])
+	}
+	if out["self"] != false {
+		t.Errorf("self = %v; want false", out["self"])
+	}
+}
+
+func TestSenderContext_NoSelfWhenLookupFails(t *testing.T) {
+	// When members/me returns an error, we cannot prove self. The annotate
+	// path should omit the "self" field rather than guess.
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/members/me": func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "permission denied", http.StatusForbidden)
+		},
+	}
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sc := newSenderContext(context.Background(), svc, "spaces/AAAA", false)
+	if sc.selfResource != "" {
+		t.Fatalf("selfResource should be empty when lookup fails, got %q", sc.selfResource)
+	}
+
+	msg := &chat.Message{Sender: &chat.User{Name: "users/111", DisplayName: "Alice", Type: "HUMAN"}}
+	out := map[string]interface{}{}
+	sc.annotate(msg, out)
+	if _, ok := out["self"]; ok {
+		t.Errorf("self should be omitted when self resource is unknown, got %v", out["self"])
+	}
+}
+
 func TestChatMessages_MockServer(t *testing.T) {
 	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
 		"/v1/spaces/AAAA/messages": func(w http.ResponseWriter, r *http.Request) {
