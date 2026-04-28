@@ -133,6 +133,67 @@ func TestCheck_NetworkErrorReturnsError(t *testing.T) {
 	}
 }
 
+func TestCheck_PassiveDevSkipsNetwork(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_ = json.NewEncoder(w).Encode(map[string]string{"tag_name": "v1.37.0"})
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	cachePath := filepath.Join(dir, "v.json")
+
+	c := New(cachePath)
+	c.Endpoint = srv.URL
+	c.HTTPClient = srv.Client()
+
+	res, err := c.Check(context.Background(), "dev", false)
+	if err != nil {
+		t.Fatalf("Check err: %v", err)
+	}
+	if calls != 0 {
+		t.Errorf("passive dev check must not hit the endpoint, got %d calls", calls)
+	}
+	if !res.Skipped {
+		t.Errorf("expected Skipped=true for dev build, got %+v", res)
+	}
+	if res.Latest != "" {
+		t.Errorf("expected Latest empty when passive dev skip short-circuits, got %q", res.Latest)
+	}
+	// The cache should not have been written either.
+	if _, err := os.Stat(cachePath); err == nil {
+		t.Errorf("passive dev check should not write cache; file exists at %s", cachePath)
+	}
+}
+
+func TestCheck_ForceFetchDevStillFetches(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_ = json.NewEncoder(w).Encode(map[string]string{"tag_name": "v1.37.0"})
+	}))
+	defer srv.Close()
+
+	c := New("")
+	c.Endpoint = srv.URL
+	c.HTTPClient = srv.Client()
+
+	res, err := c.Check(context.Background(), "dev", true)
+	if err != nil {
+		t.Fatalf("Check err: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("explicit dev check should still fetch, got %d calls", calls)
+	}
+	if !res.Skipped {
+		t.Errorf("expected Skipped=true for dev build, got %+v", res)
+	}
+	if res.Latest != "v1.37.0" {
+		t.Errorf("expected Latest populated for explicit dev check, got %q", res.Latest)
+	}
+}
+
 func TestCheck_DevVersionSkipsComparison(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"tag_name": "v1.37.0"})
@@ -143,7 +204,9 @@ func TestCheck_DevVersionSkipsComparison(t *testing.T) {
 	c.Endpoint = srv.URL
 	c.HTTPClient = srv.Client()
 
-	res, err := c.Check(context.Background(), "dev", false)
+	// Use forceFetch=true so the latest release is still populated even
+	// though the comparison itself is skipped.
+	res, err := c.Check(context.Background(), "dev", true)
 	if err != nil {
 		t.Fatalf("Check err: %v", err)
 	}

@@ -110,11 +110,15 @@ gws chat messages <space-id> [flags]
 - `--filter string` — Filter messages (e.g. `createTime > "2024-01-01T00:00:00Z"`)
 - `--order-by string` — Order messages (e.g. `createTime DESC`)
 - `--show-deleted` — Include deleted messages in results
-- `--resolve-senders` — Add `sender_display_name` (via space membership listing) and `self` (via People API `people/me`); also adds `sender_type` and `sender_resource` fields. Costs one extra API call per space and one People call per invocation.
+- `--resolve-senders` — Make extra API calls to fill missing `sender_display_name` (via space membership listing) and add a `self` boolean (via People API `people/me`). One extra Chat call per space plus one People call per invocation.
 
 `--after` and `--before` are convenience shortcuts for `--filter`. They combine with `--filter` using AND.
 
-The default output keeps the existing `sender` field. With `--resolve-senders`, each message also gets `sender_type`, `sender_resource` (canonical `users/{id}`), `sender_display_name` when resolvable, and a `self` boolean when the authenticated user can be confidently identified. Unresolved senders never fail the command.
+Sender attribution fields:
+- `sender` — existing display-name-or-resource string. Always present when the message has a sender.
+- `sender_type`, `sender_resource`, `sender_display_name` — additive fields populated from the Chat message payload itself. They appear in default output whenever the API returned them, with no extra calls.
+- `self` — only populated when `--resolve-senders` is set and the People API self lookup succeeds. Omitted otherwise rather than guessed.
+- `--resolve-senders` only adds work for the cases the payload alone can't satisfy: filling `sender_display_name` when the API didn't include one, and adding `self`. Failures degrade gracefully — messages stay usable.
 
 ### members — List space members
 

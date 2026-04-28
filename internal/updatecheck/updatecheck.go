@@ -70,12 +70,21 @@ func New(cachePath string) *Checker {
 // bypasses the cache. Errors from the network or cache are returned for
 // callers that want to surface them (e.g. `version --check`); passive callers
 // should ignore the error and just consult the result.
+//
+// For non-comparable current versions (dev / unknown / pseudo / unparseable),
+// passive callers (forceFetch=false) get an early return with no network or
+// cache I/O — there is nothing useful a passive notice could emit. Explicit
+// callers (forceFetch=true) still fetch so `gws version --check` can report
+// the latest release alongside the skip reason.
 func (c *Checker) Check(ctx context.Context, current string, forceFetch bool) (*Result, error) {
 	res := &Result{Current: current}
 
 	if reason, ok := nonComparable(current); ok {
 		res.Skipped = true
 		res.SkippedReason = reason
+		if !forceFetch {
+			return res, nil
+		}
 	}
 
 	latest, err := c.latest(ctx, forceFetch)
