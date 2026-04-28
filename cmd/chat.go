@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/omriariav/workspace-cli/internal/usercache"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/chat/v1"
+	"google.golang.org/api/people/v1"
 )
 
 var chatCmd = &cobra.Command{
@@ -303,6 +305,23 @@ var chatFindGroupCmd = &cobra.Command{
 	RunE:  runChatFindGroup,
 }
 
+var chatFindSpaceCmd = &cobra.Command{
+	Use:   "find-space",
+	Short: "Find spaces by display name",
+	Long: `Searches the local space cache for spaces whose display_name contains the
+given query (case-insensitive substring match).
+
+The cache must already cover the space type you want to search. The default
+'gws chat build-cache' run only caches GROUP_CHAT, so to search SPACE-type
+rooms or all types either:
+  - prebuild with 'gws chat build-cache --type SPACE' (or '--type all'), or
+  - pass --refresh to rebuild the cache from spaces.list before searching.
+
+When --refresh is set together with --type, the cache is rebuilt scoped to that
+type only; otherwise --refresh rebuilds for all space types.`,
+	RunE: runChatFindSpace,
+}
+
 func init() {
 	rootCmd.AddCommand(chatCmd)
 	chatCmd.AddCommand(chatListCmd)
@@ -337,6 +356,7 @@ func init() {
 	chatCmd.AddCommand(chatEventCmd)
 	chatCmd.AddCommand(chatBuildCacheCmd)
 	chatCmd.AddCommand(chatFindGroupCmd)
+	chatCmd.AddCommand(chatFindSpaceCmd)
 
 	// List flags
 	chatListCmd.Flags().String("filter", "", "Filter spaces (e.g. 'spaceType = \"SPACE\"')")
@@ -441,6 +461,12 @@ func init() {
 	chatFindGroupCmd.Flags().String("members", "", "Comma-separated email addresses to search for (required)")
 	chatFindGroupCmd.Flags().Bool("refresh", false, "Rebuild cache before searching")
 	chatFindGroupCmd.MarkFlagRequired("members")
+
+	// Find space flags
+	chatFindSpaceCmd.Flags().String("name", "", "Display name substring to search for (case-insensitive, required)")
+	chatFindSpaceCmd.Flags().String("type", "", "Filter by space type: SPACE, GROUP_CHAT, or DIRECT_MESSAGE")
+	chatFindSpaceCmd.Flags().Bool("refresh", false, "Rebuild cache before searching")
+	chatFindSpaceCmd.MarkFlagRequired("name")
 }
 
 // ensureSpaceName normalizes a space identifier to its full resource name.
@@ -449,6 +475,59 @@ func ensureSpaceName(s string) string {
 		return "spaces/" + s
 	}
 	return s
+}
+
+// serializeChatAttachments converts a Message.Attachment slice into a JSON-friendly
+// shape, exposing the resource name needed by `gws chat attachment` and
+// `gws chat download`. Returns nil when there are no attachments so the field
+// is omitted from output by callers that check for nil.
+func serializeChatAttachments(atts []*chat.Attachment) []map[string]interface{} {
+	if len(atts) == 0 {
+		return nil
+	}
+	out := make([]map[string]interface{}, 0, len(atts))
+	for _, a := range atts {
+		if a == nil {
+			continue
+		}
+		entry := map[string]interface{}{}
+		if a.Name != "" {
+			entry["name"] = a.Name
+		}
+		if a.ContentName != "" {
+			entry["content_name"] = a.ContentName
+		}
+		if a.ContentType != "" {
+			entry["content_type"] = a.ContentType
+		}
+		if a.Source != "" {
+			entry["source"] = a.Source
+		}
+		if a.DownloadUri != "" {
+			entry["download_uri"] = a.DownloadUri
+		}
+		if a.ThumbnailUri != "" {
+			entry["thumbnail_uri"] = a.ThumbnailUri
+		}
+		if a.AttachmentDataRef != nil && a.AttachmentDataRef.ResourceName != "" {
+			entry["attachment_data_ref"] = map[string]interface{}{
+				"resource_name": a.AttachmentDataRef.ResourceName,
+			}
+		}
+		if a.DriveDataRef != nil && a.DriveDataRef.DriveFileId != "" {
+			entry["drive_data_ref"] = map[string]interface{}{
+				"drive_file_id": a.DriveDataRef.DriveFileId,
+			}
+		}
+		if len(entry) == 0 {
+			continue
+		}
+		out = append(out, entry)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func runChatList(cmd *cobra.Command, args []string) error {
@@ -607,6 +686,9 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 			}
 			if msg.DeleteTime != "" {
 				msgInfo["delete_time"] = msg.DeleteTime
+			}
+			if atts := serializeChatAttachments(msg.Attachment); atts != nil {
+				msgInfo["attachment"] = atts
 			}
 			results = append(results, msgInfo)
 		}
@@ -829,6 +911,9 @@ func runChatGet(cmd *cobra.Command, args []string) error {
 	}
 	if msg.DeleteTime != "" {
 		result["delete_time"] = msg.DeleteTime
+	}
+	if atts := serializeChatAttachments(msg.Attachment); atts != nil {
+		result["attachment"] = atts
 	}
 
 	return p.Print(result)
@@ -1642,6 +1727,9 @@ func runChatUnread(cmd *cobra.Command, args []string) error {
 			if msg.Thread != nil {
 				msgInfo["thread"] = msg.Thread.Name
 			}
+			if atts := serializeChatAttachments(msg.Attachment); atts != nil {
+				msgInfo["attachment"] = atts
+			}
 			messages = append(messages, msgInfo)
 		}
 
@@ -2012,4 +2100,126 @@ func runChatFindGroup(cmd *cobra.Command, args []string) error {
 		"count":   len(results),
 		"query":   emails,
 	})
+}
+
+// chatServiceForTest and peopleServiceForTest, when non-nil, replace the
+// factory-built services in runChatFindSpace's --refresh path. Tests set these
+// to point at httptest endpoints; production paths leave both nil so the
+// factory is used.
+var (
+	chatServiceForTest   *chat.Service
+	peopleServiceForTest *people.Service
+)
+
+func runChatFindSpace(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	rawName, _ := cmd.Flags().GetString("name")
+	spaceType, _ := cmd.Flags().GetString("type")
+	refresh, _ := cmd.Flags().GetBool("refresh")
+
+	name := strings.TrimSpace(rawName)
+	if name == "" {
+		return p.PrintError(fmt.Errorf("--name must not be empty"))
+	}
+
+	if spaceType != "" {
+		switch strings.ToUpper(spaceType) {
+		case "SPACE", "GROUP_CHAT", "DIRECT_MESSAGE":
+		default:
+			return p.PrintError(fmt.Errorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType))
+		}
+	}
+
+	cachePath := spacecache.DefaultPath()
+
+	if refresh {
+		var chatSvc *chat.Service
+		var peopleSvc *people.Service
+		if chatServiceForTest != nil {
+			chatSvc = chatServiceForTest
+			peopleSvc = peopleServiceForTest
+		} else {
+			factory, err := client.NewFactory(ctx)
+			if err != nil {
+				return p.PrintError(err)
+			}
+			chatSvc, err = factory.Chat()
+			if err != nil {
+				return p.PrintError(err)
+			}
+			peopleSvc, err = factory.People()
+			if err != nil {
+				return p.PrintError(err)
+			}
+		}
+
+		buildType := "all"
+		if spaceType != "" {
+			buildType = strings.ToUpper(spaceType)
+		}
+		cache, err := spacecache.Build(ctx, chatSvc, peopleSvc, buildType, func(current, total int) {
+			fmt.Fprintf(os.Stderr, "\rScanning spaces... %d/%d", current, total)
+		})
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to build cache: %w", err))
+		}
+		fmt.Fprintln(os.Stderr)
+
+		if err := spacecache.Save(cachePath, cache); err != nil {
+			return p.PrintError(fmt.Errorf("failed to save cache: %w", err))
+		}
+	}
+
+	cache, err := spacecache.Load(cachePath)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to load cache: %w", err))
+	}
+
+	if len(cache.Spaces) == 0 {
+		return p.PrintError(fmt.Errorf("no cache found — run 'gws chat build-cache' first or pass --refresh"))
+	}
+
+	matches := spacecache.FindByDisplayName(cache, name, spaceType)
+
+	type matchRow struct {
+		space, displayName string
+		entry              spacecache.SpaceEntry
+	}
+	rows := make([]matchRow, 0, len(matches))
+	for spaceName, entry := range matches {
+		rows = append(rows, matchRow{space: spaceName, displayName: entry.DisplayName, entry: entry})
+	}
+	// Stable order across runs: by display_name, then by space resource name.
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].displayName != rows[j].displayName {
+			return rows[i].displayName < rows[j].displayName
+		}
+		return rows[i].space < rows[j].space
+	})
+
+	results := make([]map[string]interface{}, 0, len(rows))
+	for _, r := range rows {
+		row := map[string]interface{}{
+			"space":        r.space,
+			"type":         r.entry.Type,
+			"display_name": r.entry.DisplayName,
+			"member_count": r.entry.MemberCount,
+		}
+		if r.entry.MembersUnresolved {
+			row["members_unresolved"] = true
+		}
+		results = append(results, row)
+	}
+
+	out := map[string]interface{}{
+		"matches": results,
+		"count":   len(results),
+		"query":   name,
+	}
+	if spaceType != "" {
+		out["type"] = strings.ToUpper(spaceType)
+	}
+	return p.Print(out)
 }

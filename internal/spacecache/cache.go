@@ -20,6 +20,11 @@ type SpaceEntry struct {
 	DisplayName string   `json:"display_name,omitempty"`
 	Members     []string `json:"members"`
 	MemberCount int      `json:"member_count"`
+	// MembersUnresolved is true when the space appeared in spaces.list but the
+	// member-listing call failed (or was paginated and a later page failed).
+	// Display-name search still matches these entries; member-based search must
+	// skip them since the member list is incomplete.
+	MembersUnresolved bool `json:"members_unresolved,omitempty"`
 }
 
 // CacheData is the on-disk format for the space-members cache.
@@ -73,11 +78,41 @@ func Save(path string, cache *CacheData) error {
 	return os.Rename(tmp, path)
 }
 
-// FindByMembers returns spaces where ALL specified emails are members.
+// FindByMembers returns spaces where ALL specified emails are members. Entries
+// flagged MembersUnresolved are skipped because their member list is incomplete
+// and a positive match cannot be claimed honestly.
 func FindByMembers(cache *CacheData, emails []string) map[string]SpaceEntry {
 	results := make(map[string]SpaceEntry)
 	for name, entry := range cache.Spaces {
+		if entry.MembersUnresolved {
+			continue
+		}
 		if containsAll(entry.Members, emails) {
+			results[name] = entry
+		}
+	}
+	return results
+}
+
+// FindByDisplayName returns spaces whose display_name contains the (case-insensitive)
+// query substring. If spaceType is non-empty, results are filtered to that type
+// (e.g. "SPACE", "GROUP_CHAT", "DIRECT_MESSAGE"). Spaces without a display_name
+// (typically DMs) are skipped.
+func FindByDisplayName(cache *CacheData, query, spaceType string) map[string]SpaceEntry {
+	results := make(map[string]SpaceEntry)
+	if cache == nil || query == "" {
+		return results
+	}
+	needle := strings.ToLower(query)
+	wantType := strings.ToUpper(spaceType)
+	for name, entry := range cache.Spaces {
+		if entry.DisplayName == "" {
+			continue
+		}
+		if wantType != "" && strings.ToUpper(entry.Type) != wantType {
+			continue
+		}
+		if strings.Contains(strings.ToLower(entry.DisplayName), needle) {
 			results[name] = entry
 		}
 	}
@@ -147,8 +182,17 @@ func Build(ctx context.Context, chatSvc *chat.Service, peopleSvc *people.Service
 			memberPageToken = mResp.NextPageToken
 		}
 
-		// Skip spaces where member fetch failed to avoid partial/incorrect caches
+		// When member fetch fails, retain space metadata so display-name search
+		// can still find it. Member-based search filters these via
+		// MembersUnresolved to avoid partial/incorrect matches.
 		if memberFetchFailed {
+			cache.Spaces[space.Name] = SpaceEntry{
+				Type:              space.SpaceType,
+				DisplayName:       space.DisplayName,
+				Members:           nil,
+				MemberCount:       0,
+				MembersUnresolved: true,
+			}
 			continue
 		}
 

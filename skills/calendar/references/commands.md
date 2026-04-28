@@ -137,6 +137,7 @@ Usage: gws calendar create [flags]
 | `--description` | string | | No | Event description |
 | `--location` | string | | No | Event location |
 | `--attendees` | strings | | No | Attendee email addresses (repeatable) |
+| `--add-self` | bool | `true` | No | Add the authenticated user as an `accepted` attendee. Pass `--add-self=false` to opt out. |
 
 ### Time Format
 

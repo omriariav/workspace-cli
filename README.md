@@ -131,7 +131,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 |---------|-------------|
 | `gws calendar list` | List all calendars |
 | `gws calendar events` | List events (`--days`, `--from`, `--calendar-id`, `--max`, `--pending`, `--query`, `--event-types`, `--show-deleted`, `--timezone`, `--updated-min`) |
-| `gws calendar create` | Create event (`--title`, `--start`, `--end`, `--attendees`) |
+| `gws calendar create` | Create event (`--title`, `--start`, `--end`, `--attendees`, `--add-self`) |
 | `gws calendar update <id>` | Update event (`--title`, `--start`, `--end`, `--add-attendees`) |
 | `gws calendar delete <id>` | Delete event |
 | `gws calendar rsvp <id>` | RSVP to invite (`--response accepted/declined/tentative`, `--message`) |
@@ -379,6 +379,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat event <event>` | Get event details |
 | `gws chat build-cache` | Build space-members cache (`--type`) |
 | `gws chat find-group` | Find group chats by member emails (`--members`, `--refresh`) |
+| `gws chat find-space` | Find spaces by display name substring (`--name`, `--type`, `--refresh`) |
 
 ### Forms
 

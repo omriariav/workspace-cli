@@ -522,3 +522,30 @@ Usage: gws chat find-group [flags]
 - `matches` — Array of matching spaces with `space`, `type`, `display_name`, `members`, `member_count`
 - `count` — Number of matching spaces
 - `query` — The email addresses searched for
+
+---
+
+## gws chat find-space
+
+Searches the local space cache for spaces whose `display_name` contains the given query (case-insensitive substring match).
+
+**Cache scope.** Default `gws chat build-cache` caches only `GROUP_CHAT`. To find `SPACE`-type rooms or all types, either prebuild with `gws chat build-cache --type SPACE` (or `--type all`), or pass `--refresh` to rebuild the cache from `spaces.list` before searching. When `--refresh` is set together with `--type`, the cache is rebuilt scoped to that type only.
+
+```
+Usage: gws chat find-space [flags]
+```
+
+### Flags
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--name` | string | | Yes | Display name substring to search for (case-insensitive) |
+| `--type` | string | | No | Filter by space type: SPACE, GROUP_CHAT, or DIRECT_MESSAGE |
+| `--refresh` | bool | false | No | Rebuild cache before searching |
+
+### Output Fields (JSON)
+
+- `matches` — Array of matching spaces, sorted by `display_name` then `space`. Each entry has `space`, `type`, `display_name`, `member_count`. When the cache could not resolve a space's member list, the entry also carries `members_unresolved: true` (and `member_count: 0`); display-name search still surfaces it, but member-based search will skip it.
+- `count` — Number of matching spaces
+- `query` — The display-name substring searched for
+- `type` — The type filter (only present when `--type` is set)

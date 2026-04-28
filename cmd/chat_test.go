@@ -2943,6 +2943,19 @@ func newFindGroupCmd() *cobra.Command {
 	return cmd
 }
 
+// newFindSpaceCmd creates a fresh find-space command for tests.
+func newFindSpaceCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "find-space",
+		Short: "Find spaces by display name",
+		RunE:  runChatFindSpace,
+	}
+	cmd.Flags().String("name", "", "Display name substring to search for (case-insensitive, required)")
+	cmd.Flags().String("type", "", "Filter by space type: SPACE, GROUP_CHAT, or DIRECT_MESSAGE")
+	cmd.Flags().Bool("refresh", false, "Rebuild cache before searching")
+	return cmd
+}
+
 func TestChatFindGroup_CommandE2E(t *testing.T) {
 	// Use temp HOME so DefaultPath() resolves to our temp dir
 	tmpHome := t.TempDir()
@@ -3057,6 +3070,366 @@ func TestChatFindGroup_ErrorOnEmptyMembers(t *testing.T) {
 	errMsg, ok := result["error"].(string)
 	if !ok || errMsg == "" {
 		t.Errorf("expected error message in output, got %v", result)
+	}
+}
+
+// TestSerializeChatAttachments_Empty verifies nil/empty input returns nil so callers
+// can omit the attachment field from output.
+func TestSerializeChatAttachments_Empty(t *testing.T) {
+	if got := serializeChatAttachments(nil); got != nil {
+		t.Errorf("nil input: expected nil, got %v", got)
+	}
+	if got := serializeChatAttachments([]*chat.Attachment{}); got != nil {
+		t.Errorf("empty slice: expected nil, got %v", got)
+	}
+	if got := serializeChatAttachments([]*chat.Attachment{nil, nil}); got != nil {
+		t.Errorf("slice of nils: expected nil, got %v", got)
+	}
+}
+
+// TestSerializeChatAttachments_AllFields verifies every populated field is forwarded
+// with snake_case keys, including the resource name needed by `gws chat attachment`
+// and `gws chat download`.
+func TestSerializeChatAttachments_AllFields(t *testing.T) {
+	atts := []*chat.Attachment{
+		{
+			Name:         "spaces/AAAA/messages/MMM/attachments/abc",
+			ContentName:  "resume.pdf",
+			ContentType:  "application/pdf",
+			Source:       "UPLOADED_CONTENT",
+			DownloadUri:  "https://example.com/d/abc",
+			ThumbnailUri: "https://example.com/t/abc",
+			AttachmentDataRef: &chat.AttachmentDataRef{
+				ResourceName: "spaces/AAAA/messages/MMM/attachments/abc",
+			},
+		},
+		{
+			ContentName: "linked.docx",
+			ContentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			Source:      "DRIVE_FILE",
+			DriveDataRef: &chat.DriveDataRef{
+				DriveFileId: "1abcDriveID",
+			},
+		},
+	}
+
+	got := serializeChatAttachments(atts)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(got))
+	}
+
+	first := got[0]
+	if first["name"] != "spaces/AAAA/messages/MMM/attachments/abc" {
+		t.Errorf("first.name: got %v", first["name"])
+	}
+	if first["content_name"] != "resume.pdf" {
+		t.Errorf("first.content_name: got %v", first["content_name"])
+	}
+	if first["content_type"] != "application/pdf" {
+		t.Errorf("first.content_type: got %v", first["content_type"])
+	}
+	if first["source"] != "UPLOADED_CONTENT" {
+		t.Errorf("first.source: got %v", first["source"])
+	}
+	if first["download_uri"] != "https://example.com/d/abc" {
+		t.Errorf("first.download_uri: got %v", first["download_uri"])
+	}
+	if first["thumbnail_uri"] != "https://example.com/t/abc" {
+		t.Errorf("first.thumbnail_uri: got %v", first["thumbnail_uri"])
+	}
+	ref, ok := first["attachment_data_ref"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("first.attachment_data_ref: expected map, got %T", first["attachment_data_ref"])
+	}
+	if ref["resource_name"] != "spaces/AAAA/messages/MMM/attachments/abc" {
+		t.Errorf("first.attachment_data_ref.resource_name: got %v", ref["resource_name"])
+	}
+	if _, present := first["drive_data_ref"]; present {
+		t.Errorf("first should not have drive_data_ref, got %v", first["drive_data_ref"])
+	}
+
+	second := got[1]
+	if _, present := second["name"]; present {
+		t.Errorf("second.name should be omitted when empty")
+	}
+	if _, present := second["attachment_data_ref"]; present {
+		t.Errorf("second.attachment_data_ref should be omitted when empty")
+	}
+	dref, ok := second["drive_data_ref"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("second.drive_data_ref: expected map, got %T", second["drive_data_ref"])
+	}
+	if dref["drive_file_id"] != "1abcDriveID" {
+		t.Errorf("second.drive_data_ref.drive_file_id: got %v", dref["drive_file_id"])
+	}
+}
+
+// TestSerializeChatAttachments_SkipsEmptyEntries verifies entries with no populated
+// fields are dropped, and a slice that resolves to no entries returns nil.
+func TestSerializeChatAttachments_SkipsEmptyEntries(t *testing.T) {
+	if got := serializeChatAttachments([]*chat.Attachment{{}, nil, {}}); got != nil {
+		t.Errorf("all-empty input: expected nil, got %v", got)
+	}
+
+	atts := []*chat.Attachment{
+		{}, // empty, dropped
+		{ContentName: "kept.pdf"},
+		nil,
+	}
+	got := serializeChatAttachments(atts)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 entry after filtering, got %d (%v)", len(got), got)
+	}
+	if got[0]["content_name"] != "kept.pdf" {
+		t.Errorf("kept entry content_name: got %v", got[0]["content_name"])
+	}
+}
+
+// TestChatFindSpace_MatchesByDisplayName verifies the runner reads the on-disk
+// cache and emits matching spaces by display name (case-insensitive substring).
+func TestChatFindSpace_MatchesByDisplayName(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	cache := &spacecache.CacheData{
+		Spaces: map[string]spacecache.SpaceEntry{
+			"spaces/A": {Type: "SPACE", DisplayName: "Sales Skills", MemberCount: 3},
+			"spaces/B": {Type: "GROUP_CHAT", DisplayName: "Sales lunch crew", MemberCount: 4},
+			"spaces/C": {Type: "SPACE", DisplayName: "Engineering", MemberCount: 12},
+		},
+	}
+	if err := spacecache.Save(spacecache.DefaultPath(), cache); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	cmd := newFindSpaceCmd()
+	cmd.Flags().Set("name", "sales")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	cmd.RunE(cmd, []string{})
+	w.Close()
+	os.Stdout = oldStdout
+
+	output, _ := io.ReadAll(r)
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse output: %v\nraw: %s", err, output)
+	}
+	count, _ := result["count"].(float64)
+	if int(count) != 2 {
+		t.Errorf("expected 2 matches for 'sales', got %v (raw: %s)", count, output)
+	}
+}
+
+// TestChatFindSpace_TypeFilter verifies --type narrows results by space type.
+func TestChatFindSpace_TypeFilter(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	cache := &spacecache.CacheData{
+		Spaces: map[string]spacecache.SpaceEntry{
+			"spaces/A": {Type: "SPACE", DisplayName: "Sales Skills", MemberCount: 3},
+			"spaces/B": {Type: "GROUP_CHAT", DisplayName: "Sales lunch crew", MemberCount: 4},
+		},
+	}
+	if err := spacecache.Save(spacecache.DefaultPath(), cache); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	cmd := newFindSpaceCmd()
+	cmd.Flags().Set("name", "sales")
+	cmd.Flags().Set("type", "SPACE")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	cmd.RunE(cmd, []string{})
+	w.Close()
+	os.Stdout = oldStdout
+
+	output, _ := io.ReadAll(r)
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse output: %v\nraw: %s", err, output)
+	}
+	count, _ := result["count"].(float64)
+	if int(count) != 1 {
+		t.Errorf("expected 1 SPACE match for 'sales', got %v (raw: %s)", count, output)
+	}
+}
+
+// TestChatFindSpace_InvalidType verifies bogus --type emits an error.
+func TestChatFindSpace_InvalidType(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	cmd := newFindSpaceCmd()
+	cmd.Flags().Set("name", "sales")
+	cmd.Flags().Set("type", "BOGUS")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	cmd.RunE(cmd, []string{})
+	w.Close()
+	os.Stdout = oldStdout
+
+	output, _ := io.ReadAll(r)
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse output: %v\nraw: %s", err, output)
+	}
+	if msg, _ := result["error"].(string); msg == "" {
+		t.Errorf("expected error in output, got %v", result)
+	}
+}
+
+// TestChatFindSpace_RefreshTypeScoped drives runChatFindSpace --refresh --type SPACE
+// against a mock spaces.list + members.list. It proves three things end-to-end:
+//   - the refresh path rebuilds the cache from spaces.list rather than relying on
+//     a pre-existing cache file
+//   - --type filters spaces.list scoping (verified via captured Filter param)
+//   - a space whose members.list call fails is still discoverable by display
+//     name through the command path (metadata-only retention)
+func TestChatFindSpace_RefreshTypeScoped(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	var capturedListFilter string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/spaces", func(w http.ResponseWriter, r *http.Request) {
+		capturedListFilter = r.URL.Query().Get("filter")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"spaces": []map[string]interface{}{
+				{"name": "spaces/AAA", "spaceType": "SPACE", "displayName": "Sales Skills"},
+				{"name": "spaces/BBB", "spaceType": "SPACE", "displayName": "Sales lunch crew"},
+			},
+		})
+	})
+	mux.HandleFunc("/v1/spaces/AAA/members", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"memberships": []map[string]interface{}{
+				{"name": "spaces/AAA/members/1", "member": map[string]interface{}{"name": "users/111", "type": "HUMAN"}},
+			},
+		})
+	})
+	mux.HandleFunc("/v1/spaces/BBB/members", func(w http.ResponseWriter, r *http.Request) {
+		// Member listing fails for BBB — must still be present as metadata-only.
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "forbidden"})
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	chatSvc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+	chatServiceForTest = chatSvc
+	peopleServiceForTest = nil // Build's people calls are best-effort and can be nil
+	defer func() {
+		chatServiceForTest = nil
+		peopleServiceForTest = nil
+	}()
+
+	cmd := newFindSpaceCmd()
+	_ = cmd.Flags().Set("name", "sales")
+	_ = cmd.Flags().Set("type", "SPACE")
+	_ = cmd.Flags().Set("refresh", "true")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	if err := cmd.RunE(cmd, []string{}); err != nil {
+		os.Stdout = oldStdout
+		t.Fatalf("runChatFindSpace returned error: %v", err)
+	}
+	w.Close()
+	os.Stdout = oldStdout
+	output, _ := io.ReadAll(r)
+
+	if capturedListFilter != `spaceType = "SPACE"` {
+		t.Errorf("expected spaces.list filter scoped to SPACE, got %q", capturedListFilter)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse stdout: %v\nraw: %s", err, output)
+	}
+	count, _ := result["count"].(float64)
+	if int(count) != 2 {
+		t.Fatalf("expected 2 matches (resolved + metadata-only), got %v\nraw: %s", count, output)
+	}
+	matches, _ := result["matches"].([]interface{})
+	if len(matches) != 2 {
+		t.Fatalf("expected 2 entries in matches array, got %d", len(matches))
+	}
+
+	// Sort is by display_name then space. "Sales Skills" < "Sales lunch crew"
+	// in byte order because 'S' (0x53) < 'l' (0x6c). AAA must come first.
+	first, _ := matches[0].(map[string]interface{})
+	second, _ := matches[1].(map[string]interface{})
+	if first["space"] != "spaces/AAA" {
+		t.Errorf("expected matches[0]=spaces/AAA, got %v", first["space"])
+	}
+	if second["space"] != "spaces/BBB" {
+		t.Errorf("expected matches[1]=spaces/BBB, got %v", second["space"])
+	}
+
+	// Resolved entry should NOT carry members_unresolved.
+	if _, present := first["members_unresolved"]; present {
+		t.Errorf("spaces/AAA should not have members_unresolved set; got %v", first["members_unresolved"])
+	}
+	// Metadata-only entry (BBB) MUST carry members_unresolved=true so callers
+	// can distinguish it from a real zero-member space.
+	if v, _ := second["members_unresolved"].(bool); !v {
+		t.Errorf("spaces/BBB should have members_unresolved=true; got %v", second["members_unresolved"])
+	}
+
+	// Cache file should have been written to the temp HOME.
+	cached, err := spacecache.Load(spacecache.DefaultPath())
+	if err != nil {
+		t.Fatalf("failed to load cache after refresh: %v", err)
+	}
+	if entry, ok := cached.Spaces["spaces/BBB"]; !ok || !entry.MembersUnresolved {
+		t.Errorf("expected spaces/BBB in cache with MembersUnresolved=true; got %+v (ok=%v)", entry, ok)
+	}
+}
+
+// TestChatFindSpace_NoCache verifies the runner errors clearly when no cache exists.
+func TestChatFindSpace_NoCache(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	cmd := newFindSpaceCmd()
+	cmd.Flags().Set("name", "sales")
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	cmd.RunE(cmd, []string{})
+	w.Close()
+	os.Stdout = oldStdout
+
+	output, _ := io.ReadAll(r)
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("failed to parse output: %v\nraw: %s", err, output)
+	}
+	if msg, _ := result["error"].(string); msg == "" {
+		t.Errorf("expected error in output, got %v", result)
 	}
 }
 

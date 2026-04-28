@@ -12,6 +12,10 @@
 **/CLAUDE.md
 !/CLAUDE.md
 
+# AMQ squad coordination state
+.agent-mail/
+.amq-squad/
+
 # OS
 .DS_Store
 

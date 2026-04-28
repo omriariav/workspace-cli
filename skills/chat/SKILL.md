@@ -51,6 +51,7 @@ For initial setup, see the `gws-auth` skill.
 | Create group chat | `gws chat setup-space --type GROUP_CHAT --members "users/1,users/2"` |
 | Build member cache | `gws chat build-cache` |
 | Find group by members | `gws chat find-group --members "user1@example.com,user2@example.com"` |
+| Find space by name | `gws chat find-space --name "sales-skills"` |
 | **Messages** | |
 | Read messages | `gws chat messages <space-id>` |
 | Read recent messages | `gws chat messages <space-id> --order-by "createTime DESC" --max 10` |
@@ -403,6 +404,24 @@ Searches the local space-members cache for spaces where ALL specified emails are
 **Flags:**
 - `--members string` — Comma-separated email addresses to search for (required)
 - `--refresh` — Rebuild cache before searching
+
+### find-space — Find spaces by display name
+
+```bash
+gws chat find-space --name "sales-skills" --refresh
+gws chat find-space --name "team" --type SPACE
+```
+
+Searches the local space cache for spaces whose `display_name` contains the given query (case-insensitive substring match). DMs without a display name are skipped.
+
+**Cache scope matters.** Default `gws chat build-cache` only caches `GROUP_CHAT`. To find `SPACE`-type rooms (most named spaces) or all types, either:
+- prebuild with `gws chat build-cache --type SPACE` (or `--type all`), or
+- pass `--refresh` so this command rebuilds the cache before searching.
+
+**Flags:**
+- `--name string` — Display name substring to search for (case-insensitive, required)
+- `--type string` — Filter by space type: SPACE, GROUP_CHAT, or DIRECT_MESSAGE
+- `--refresh` — Rebuild cache before searching (scoped to `--type` if set, otherwise all types)
 
 ## Output Modes
 

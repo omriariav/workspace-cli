@@ -364,6 +364,7 @@ func init() {
 	calendarCreateCmd.Flags().String("description", "", "Event description")
 	calendarCreateCmd.Flags().String("location", "", "Event location")
 	calendarCreateCmd.Flags().StringSlice("attendees", nil, "Attendee email addresses")
+	calendarCreateCmd.Flags().Bool("add-self", true, "Add the authenticated user as an accepted attendee (use --add-self=false to opt out)")
 	calendarCreateCmd.MarkFlagRequired("title")
 	calendarCreateCmd.MarkFlagRequired("start")
 	calendarCreateCmd.MarkFlagRequired("end")
@@ -611,18 +612,27 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	})
 }
 
+// calendarServiceForTest, when non-nil, replaces the factory-built calendar
+// service in runCalendarCreate. Tests set this to point at httptest endpoints;
+// production code never assigns it so the factory path is taken.
+var calendarServiceForTest *calendar.Service
+
 func runCalendarCreate(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 	ctx := context.Background()
 
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.Calendar()
-	if err != nil {
-		return p.PrintError(err)
+	var svc *calendar.Service
+	if calendarServiceForTest != nil {
+		svc = calendarServiceForTest
+	} else {
+		factory, err := client.NewFactory(ctx)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		svc, err = factory.Calendar()
+		if err != nil {
+			return p.PrintError(err)
+		}
 	}
 
 	title, _ := cmd.Flags().GetString("title")
@@ -632,6 +642,7 @@ func runCalendarCreate(cmd *cobra.Command, args []string) error {
 	description, _ := cmd.Flags().GetString("description")
 	location, _ := cmd.Flags().GetString("location")
 	attendees, _ := cmd.Flags().GetStringSlice("attendees")
+	addSelf, _ := cmd.Flags().GetBool("add-self")
 
 	// Parse times
 	startTime, err := parseTime(startStr)
@@ -667,6 +678,32 @@ func runCalendarCreate(cmd *cobra.Command, args []string) error {
 			eventAttendees[i] = &calendar.EventAttendee{Email: email}
 		}
 		event.Attendees = eventAttendees
+	}
+
+	// Add the authenticated user as an accepted attendee unless --add-self=false.
+	// The Calendar API does not auto-include the organizer in attendees, so downstream
+	// consumers checking attendees[].self/email get a missing entry for events you
+	// created. Mirrors the Calendar UI which always shows the organizer as attending.
+	// Note: attendees[].self is read-only; we set Email + ResponseStatus only and let
+	// the API populate self on the returned event.
+	//
+	// On the default path (user didn't explicitly set --add-self), if the primary
+	// calendar lookup fails we warn to stderr and continue with the original
+	// attendees — event creation must not break because of an opt-in convenience.
+	// If the user explicitly passed --add-self=true, the failure is fatal.
+	if addSelf {
+		selfEmail, lookupErr := getSelfCalendarEmail(svc)
+		if lookupErr != nil {
+			if cmd.Flags().Changed("add-self") {
+				return p.PrintError(fmt.Errorf("failed to resolve self email for --add-self: %w (pass --add-self=false to skip)", lookupErr))
+			}
+			fmt.Fprintf(os.Stderr, "warning: --add-self default could not resolve primary calendar (%v); creating event without self attendee\n", lookupErr)
+		} else if !attendeeListContainsEmail(event.Attendees, selfEmail) {
+			event.Attendees = append(event.Attendees, &calendar.EventAttendee{
+				Email:          selfEmail,
+				ResponseStatus: "accepted",
+			})
+		}
 	}
 
 	created, err := svc.Events.Insert(calendarID, event).Do()
@@ -1940,6 +1977,39 @@ func parseTime(s string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("unrecognized time format: %s (use RFC3339 or 'YYYY-MM-DD HH:MM')", s)
+}
+
+// getSelfCalendarEmail returns the authenticated user's primary calendar address,
+// which is also their account email. Used by --add-self to populate the attendees
+// list with the organizer.
+func getSelfCalendarEmail(svc *calendar.Service) (string, error) {
+	cal, err := svc.Calendars.Get("primary").Do()
+	if err != nil {
+		return "", err
+	}
+	if cal == nil || cal.Id == "" {
+		return "", fmt.Errorf("primary calendar returned empty id")
+	}
+	return cal.Id, nil
+}
+
+// attendeeListContainsEmail reports whether the attendees slice already includes
+// the given email (case-insensitive). Used to avoid duplicating the organizer
+// when the user passed themselves in --attendees explicitly.
+func attendeeListContainsEmail(atts []*calendar.EventAttendee, email string) bool {
+	if email == "" {
+		return false
+	}
+	target := strings.ToLower(email)
+	for _, a := range atts {
+		if a == nil {
+			continue
+		}
+		if strings.ToLower(a.Email) == target {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveIANA returns the IANA timezone name for a time.Time.
