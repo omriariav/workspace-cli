@@ -640,7 +640,7 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 
 	senderCtx := nilSenderContext()
 	if resolveSenders {
-		peopleSvc, _ := factory.People() // best-effort; nil-tolerant inside resolver
+		peopleSvc, _ := factory.PeopleProfile() // best-effort; nil-tolerant inside resolver
 		senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceName)
 	}
 
@@ -914,7 +914,7 @@ func runChatGet(cmd *cobra.Command, args []string) error {
 	}
 	senderCtx := nilSenderContext()
 	if resolveSenders {
-		peopleSvc, _ := factory.People()
+		peopleSvc, _ := factory.PeopleProfile()
 		senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceFromMessageName(msg.Name))
 	}
 	if msg.Sender != nil {
@@ -1717,7 +1717,7 @@ func runChatUnread(cmd *cobra.Command, args []string) error {
 
 	senderCtx := nilSenderContext()
 	if resolveSenders {
-		peopleSvc, _ := factory.People()
+		peopleSvc, _ := factory.PeopleProfile()
 		senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceName)
 	}
 
