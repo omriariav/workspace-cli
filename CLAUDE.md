@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.35.0** - Quiet flag enforced, drive convert, chat unread, chat find-dm email, groups/keep docs, validation fixes.
+**v1.36.0** - Chat attachment metadata in messages output, calendar create self-attendee (default-on, opt-out via --add-self=false), chat find-space by display name with metadata-only retention.
 
 ## Roadmap
 
