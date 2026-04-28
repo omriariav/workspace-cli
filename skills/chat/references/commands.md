@@ -60,8 +60,11 @@ Usage: gws chat messages <space-id> [flags]
 | `--filter` | string | | Filter messages (e.g. `createTime > "2024-01-01T00:00:00Z"`) |
 | `--order-by` | string | | Order messages (e.g. `createTime DESC`) |
 | `--show-deleted` | bool | false | Include deleted messages in results |
+| `--resolve-senders` | bool | false | Resolve sender display names via space membership listing and detect `self` via People API (`people/me`). Adds `sender_type`, `sender_resource`, `sender_display_name`, and `self` fields. |
 
 `--after` and `--before` are convenience flags that translate to filter expressions. They combine with `--filter` using AND.
+
+When `--resolve-senders` is set, each message gets additive `sender_type`, `sender_resource` (canonical `users/{id}`), `sender_display_name` when resolvable, and a `self` boolean when the authenticated user can be confidently identified. The default `sender` field is unchanged. Failures in member listing or self lookup degrade gracefully — messages stay usable.
 
 The space ID format is `spaces/AAAA1234` (get from `gws chat list`).
 
@@ -104,8 +107,12 @@ Usage: gws chat send [flags]
 Retrieves a single message by its resource name.
 
 ```
-Usage: gws chat get <message-name>
+Usage: gws chat get <message-name> [flags]
 ```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--resolve-senders` | bool | false | Same additive sender attribution as `chat messages`. |
 
 ---
 
@@ -391,6 +398,7 @@ Usage: gws chat unread <space> [flags]
 |------|------|---------|----------|-------------|
 | `--max` | int | 25 | No | Maximum number of unread messages |
 | `--mark-read` | bool | false | No | Mark space as read after listing |
+| `--resolve-senders` | bool | false | No | Same additive sender attribution as `chat messages`. |
 
 ### Output Fields
 

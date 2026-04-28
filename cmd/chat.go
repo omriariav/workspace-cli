@@ -638,7 +638,11 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	senderCtx := newSenderContext(ctx, svc, spaceName, resolveSenders)
+	senderCtx := nilSenderContext()
+	if resolveSenders {
+		peopleSvc, _ := factory.People() // best-effort; nil-tolerant inside resolver
+		senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceName)
+	}
 
 	var results []map[string]interface{}
 	var pageToken string
@@ -908,7 +912,11 @@ func runChatGet(cmd *cobra.Command, args []string) error {
 		"text":        msg.Text,
 		"create_time": msg.CreateTime,
 	}
-	senderCtx := newSenderContext(ctx, svc, spaceFromMessageName(msg.Name), resolveSenders)
+	senderCtx := nilSenderContext()
+	if resolveSenders {
+		peopleSvc, _ := factory.People()
+		senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceFromMessageName(msg.Name))
+	}
 	if msg.Sender != nil {
 		senderName := msg.Sender.DisplayName
 		if senderName == "" {
@@ -1707,7 +1715,11 @@ func runChatUnread(cmd *cobra.Command, args []string) error {
 		filter = fmt.Sprintf("createTime > \"%s\"", lastReadTime)
 	}
 
-	senderCtx := newSenderContext(ctx, svc, spaceName, resolveSenders)
+	senderCtx := nilSenderContext()
+	if resolveSenders {
+		peopleSvc, _ := factory.People()
+		senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceName)
+	}
 
 	// List messages after last read time
 	var messages []map[string]interface{}
@@ -2252,57 +2264,55 @@ func runChatFindSpace(cmd *cobra.Command, args []string) error {
 
 // senderContext resolves sender display names and self markers for a single
 // space within one command invocation. Resolution is best-effort: failures
-// degrade to "no resolution" rather than failing the whole command.
+// degrade to "no resolution" rather than failing the whole command. When
+// constructed via nilSenderContext (the default-path object), it makes no
+// API calls and only annotates fields available directly on the message.
 type senderContext struct {
 	space        string
 	selfResource string            // canonical "users/{id}" for the authenticated user, or "".
-	displayNames map[string]string // users/{id} -> display name (only populated when resolveSenders=true).
-	resolved     bool
+	displayNames map[string]string // users/{id} -> display name (only populated when --resolve-senders).
 }
 
-// newSenderContext builds a per-space resolver. It always attempts to detect
-// the authenticated user's resource (so the additive "self" field is correct
-// without requiring --resolve-senders). When resolveSenders is true it also
-// fetches the space membership for display name mapping. Both lookups are
-// best-effort.
-func newSenderContext(ctx context.Context, svc *chat.Service, space string, resolveSenders bool) *senderContext {
-	sc := &senderContext{space: space, displayNames: map[string]string{}}
-	if svc == nil || space == "" {
-		return sc
-	}
+// nilSenderContext returns a no-op resolver suitable for the default path:
+// no API calls, no self detection, no display-name resolution. annotate still
+// adds sender_type and sender_resource purely from the message payload.
+func nilSenderContext() *senderContext {
+	return &senderContext{}
+}
 
-	// Self detection: spaces/{space}/members/me returns the calling user's
-	// membership. Member.Name is the canonical "users/{id}" we compare against
-	// each message's Sender.Name.
-	if me, err := svc.Spaces.Members.Get(space + "/members/me").Context(ctx).Do(); err == nil {
-		if me != nil && me.Member != nil {
-			sc.selfResource = me.Member.Name
+// resolveSendersForSpace builds a fully-populated resolver for one space.
+// Self detection uses the People API people/me (cached implicitly per
+// invocation by the caller), then maps people/{id} to the canonical
+// users/{id} that Chat returns for sender resources. Display names come from
+// listing space membership. Both calls are best-effort: a failure in either
+// one leaves the corresponding fields empty, never aborts the command.
+func resolveSendersForSpace(ctx context.Context, chatSvc *chat.Service, peopleSvc *people.Service, space string) *senderContext {
+	sc := &senderContext{space: space, displayNames: map[string]string{}}
+
+	if peopleSvc != nil {
+		if me, err := peopleSvc.People.Get("people/me").PersonFields("metadata").Context(ctx).Do(); err == nil {
+			if me != nil && strings.HasPrefix(me.ResourceName, "people/") {
+				sc.selfResource = "users/" + strings.TrimPrefix(me.ResourceName, "people/")
+			}
 		}
 	}
 
-	if resolveSenders {
-		sc.populateMembers(ctx, svc)
-		sc.resolved = true
+	if chatSvc == nil || space == "" {
+		return sc
 	}
-	return sc
-}
 
-func (sc *senderContext) populateMembers(ctx context.Context, svc *chat.Service) {
 	pageToken := ""
 	for {
-		call := svc.Spaces.Members.List(sc.space).PageSize(1000).Context(ctx)
+		call := chatSvc.Spaces.Members.List(space).PageSize(1000).Context(ctx)
 		if pageToken != "" {
 			call = call.PageToken(pageToken)
 		}
 		resp, err := call.Do()
 		if err != nil {
-			return // Best-effort: leave unresolved senders as-is.
+			return sc // Best-effort: leave unresolved senders as-is.
 		}
 		for _, m := range resp.Memberships {
-			if m == nil || m.Member == nil {
-				continue
-			}
-			if m.Member.Name == "" {
+			if m == nil || m.Member == nil || m.Member.Name == "" {
 				continue
 			}
 			if m.Member.DisplayName != "" {
@@ -2310,7 +2320,7 @@ func (sc *senderContext) populateMembers(ctx context.Context, svc *chat.Service)
 			}
 		}
 		if resp.NextPageToken == "" {
-			return
+			return sc
 		}
 		pageToken = resp.NextPageToken
 	}

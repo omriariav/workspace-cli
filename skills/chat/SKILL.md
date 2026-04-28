@@ -111,8 +111,11 @@ gws chat messages <space-id> [flags]
 - `--filter string` — Filter messages (e.g. `createTime > "2024-01-01T00:00:00Z"`)
 - `--order-by string` — Order messages (e.g. `createTime DESC`)
 - `--show-deleted` — Include deleted messages in results
+- `--resolve-senders` — Add `sender_display_name` (via space membership listing) and `self` (via People API `people/me`); also adds `sender_type` and `sender_resource` fields. Costs one extra API call per space and one People call per invocation.
 
 `--after` and `--before` are convenience shortcuts for `--filter`. They combine with `--filter` using AND.
+
+The default output keeps the existing `sender` field. With `--resolve-senders`, each message also gets `sender_type`, `sender_resource` (canonical `users/{id}`), `sender_display_name` when resolvable, and a `self` boolean when the authenticated user can be confidently identified. Unresolved senders never fail the command.
 
 ### members — List space members
 
@@ -147,6 +150,9 @@ gws chat get <message-name>
 ```
 
 Retrieves a single message by its resource name (e.g. `spaces/AAAA/messages/msg1`).
+
+**Flags:**
+- `--resolve-senders` — Same additive sender attribution as on `chat messages`.
 
 ### update — Update a message
 
@@ -336,6 +342,7 @@ Lists messages received after the last read time. Combines read-state lookup and
 **Flags:**
 - `--max int` — Maximum number of unread messages (default: 25)
 - `--mark-read` — Mark space as read after listing
+- `--resolve-senders` — Same additive sender attribution as on `chat messages`.
 
 ### attachment — Get attachment metadata
 

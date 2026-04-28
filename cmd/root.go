@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -28,16 +29,17 @@ It provides structured, token-efficient access to Gmail, Calendar, Drive,
 Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Groups, Keep,
 and Custom Search.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		maybeEmitVersionNotice(cmd)
+		emitVersionNotice(cmd, os.Stderr, quiet, os.Getenv("GWS_NO_UPDATE_CHECK") != "")
 	},
 }
 
-// maybeEmitVersionNotice writes a low-noise stderr line when a newer release
-// is available. All errors are swallowed so unrelated commands stay healthy.
-// Suppressed by --quiet, the GWS_NO_UPDATE_CHECK env var, and on the version
-// command itself (which has its own --check path).
-func maybeEmitVersionNotice(cmd *cobra.Command) {
-	if quiet || os.Getenv("GWS_NO_UPDATE_CHECK") != "" {
+// emitVersionNotice writes a low-noise line when a newer release is
+// available. All errors are swallowed so unrelated commands stay healthy.
+// Suppressed by --quiet, by GWS_NO_UPDATE_CHECK (passed in as suppressEnv),
+// and on the version command itself (which has its own --check path) and
+// shell completion subcommands.
+func emitVersionNotice(cmd *cobra.Command, w io.Writer, quietFlag, suppressEnv bool) {
+	if quietFlag || suppressEnv {
 		return
 	}
 	if cmd == nil {
@@ -56,7 +58,7 @@ func maybeEmitVersionNotice(cmd *cobra.Command) {
 		return
 	}
 	if notice := updatecheck.FormatPassiveNotice(res); notice != "" {
-		fmt.Fprint(os.Stderr, notice)
+		fmt.Fprint(w, notice)
 	}
 }
 

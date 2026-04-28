@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/omriariav/workspace-cli/internal/updatecheck"
+	"github.com/spf13/cobra"
 )
 
 func TestVersionCheck_ReportsStale(t *testing.T) {
@@ -127,6 +128,101 @@ func TestVersionCheck_DevBuildSkips(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "skipped") {
 		t.Errorf("expected skip notice, got %q", out)
+	}
+}
+
+func staleCheckerForTest(t *testing.T) (*updatecheck.Checker, func()) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"tag_name": "v9.99.0"})
+	}))
+	checker := updatecheck.New(filepath.Join(t.TempDir(), "v.json"))
+	checker.Endpoint = srv.URL
+	checker.HTTPClient = srv.Client()
+	return checker, srv.Close
+}
+
+func TestEmitVersionNotice_StaleEmits(t *testing.T) {
+	checker, cleanup := staleCheckerForTest(t)
+	defer cleanup()
+
+	prev := testVersionChecker
+	testVersionChecker = checker
+	t.Cleanup(func() { testVersionChecker = prev })
+	prevVersion := Version
+	Version = "1.36.0"
+	t.Cleanup(func() { Version = prevVersion })
+
+	var buf bytes.Buffer
+	dummy := &cobra.Command{Use: "gmail"}
+	rootCmd.AddCommand(dummy)
+	t.Cleanup(func() { rootCmd.RemoveCommand(dummy) })
+
+	emitVersionNotice(dummy, &buf, false, false)
+	if !strings.Contains(buf.String(), "newer version is available") {
+		t.Errorf("expected stale notice, got %q", buf.String())
+	}
+}
+
+func TestEmitVersionNotice_QuietSuppresses(t *testing.T) {
+	checker, cleanup := staleCheckerForTest(t)
+	defer cleanup()
+
+	prev := testVersionChecker
+	testVersionChecker = checker
+	t.Cleanup(func() { testVersionChecker = prev })
+	prevVersion := Version
+	Version = "1.36.0"
+	t.Cleanup(func() { Version = prevVersion })
+
+	var buf bytes.Buffer
+	dummy := &cobra.Command{Use: "gmail"}
+	rootCmd.AddCommand(dummy)
+	t.Cleanup(func() { rootCmd.RemoveCommand(dummy) })
+
+	emitVersionNotice(dummy, &buf, true /*quiet*/, false)
+	if buf.Len() != 0 {
+		t.Errorf("expected --quiet to suppress notice, got %q", buf.String())
+	}
+}
+
+func TestEmitVersionNotice_EnvSuppresses(t *testing.T) {
+	checker, cleanup := staleCheckerForTest(t)
+	defer cleanup()
+
+	prev := testVersionChecker
+	testVersionChecker = checker
+	t.Cleanup(func() { testVersionChecker = prev })
+	prevVersion := Version
+	Version = "1.36.0"
+	t.Cleanup(func() { Version = prevVersion })
+
+	var buf bytes.Buffer
+	dummy := &cobra.Command{Use: "gmail"}
+	rootCmd.AddCommand(dummy)
+	t.Cleanup(func() { rootCmd.RemoveCommand(dummy) })
+
+	emitVersionNotice(dummy, &buf, false, true /*suppressEnv*/)
+	if buf.Len() != 0 {
+		t.Errorf("expected GWS_NO_UPDATE_CHECK to suppress notice, got %q", buf.String())
+	}
+}
+
+func TestEmitVersionNotice_VersionCommandExcluded(t *testing.T) {
+	checker, cleanup := staleCheckerForTest(t)
+	defer cleanup()
+
+	prev := testVersionChecker
+	testVersionChecker = checker
+	t.Cleanup(func() { testVersionChecker = prev })
+	prevVersion := Version
+	Version = "1.36.0"
+	t.Cleanup(func() { Version = prevVersion })
+
+	var buf bytes.Buffer
+	emitVersionNotice(versionCmd, &buf, false, false)
+	if buf.Len() != 0 {
+		t.Errorf("expected version command to be excluded from passive notice, got %q", buf.String())
 	}
 }
 
