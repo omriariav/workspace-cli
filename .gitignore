@@ -1,6 +1,7 @@
 # Binary
 /gws
 /bin/
+/release/
 
 # IDE
 .idea/
