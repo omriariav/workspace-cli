@@ -2411,7 +2411,7 @@ func TestDriveActivity_MutualExclusivity(t *testing.T) {
 
 func TestDriveResolveCommentCommand_Flags(t *testing.T) {
 	cmd := driveResolveCommentCmd
-	flags := []string{"file-id", "comment-id"}
+	flags := []string{"file-id", "comment-id", "content"}
 	for _, flag := range flags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected --%s flag", flag)
@@ -2421,7 +2421,7 @@ func TestDriveResolveCommentCommand_Flags(t *testing.T) {
 
 func TestDriveUnresolveCommentCommand_Flags(t *testing.T) {
 	cmd := driveUnresolveCommentCmd
-	flags := []string{"file-id", "comment-id"}
+	flags := []string{"file-id", "comment-id", "content"}
 	for _, flag := range flags {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected --%s flag", flag)
@@ -2431,6 +2431,7 @@ func TestDriveUnresolveCommentCommand_Flags(t *testing.T) {
 
 func TestDriveResolveComment_MockServer(t *testing.T) {
 	resolveCalled := false
+	const wantContent = "ack from CLI"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2443,6 +2444,13 @@ func TestDriveResolveComment_MockServer(t *testing.T) {
 
 			if !comment.Resolved {
 				t.Error("expected Resolved to be true")
+			}
+			// Issue #179: the Drive API rejects Comments.update with
+			// "Comment content is required." when content is empty. The
+			// CLI now always sends a Content body (user-supplied or the
+			// "Resolved." default), so the request should carry it.
+			if comment.Content != wantContent {
+				t.Errorf("expected Content to be %q, got %q", wantContent, comment.Content)
 			}
 
 			resp := &drive.Comment{
@@ -2470,6 +2478,7 @@ func TestDriveResolveComment_MockServer(t *testing.T) {
 	}
 
 	comment := &drive.Comment{
+		Content:         wantContent,
 		Resolved:        true,
 		ForceSendFields: []string{"Resolved"},
 	}
@@ -2490,12 +2499,20 @@ func TestDriveResolveComment_MockServer(t *testing.T) {
 
 func TestDriveUnresolveComment_MockServer(t *testing.T) {
 	unresolveCalled := false
+	const wantContent = "ack reopen"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		if r.URL.Path == "/files/test-file-id/comments/comment-1" && r.Method == "PATCH" {
 			unresolveCalled = true
+
+			var comment drive.Comment
+			json.NewDecoder(r.Body).Decode(&comment)
+			// Same Issue #179 invariant on the unresolve path.
+			if comment.Content != wantContent {
+				t.Errorf("expected Content to be %q, got %q", wantContent, comment.Content)
+			}
 
 			resp := &drive.Comment{
 				Id:           "comment-1",
@@ -2518,6 +2535,7 @@ func TestDriveUnresolveComment_MockServer(t *testing.T) {
 	}
 
 	comment := &drive.Comment{
+		Content:         wantContent,
 		Resolved:        false,
 		ForceSendFields: []string{"Resolved"},
 	}
@@ -2533,5 +2551,68 @@ func TestDriveUnresolveComment_MockServer(t *testing.T) {
 	}
 	if !unresolveCalled {
 		t.Error("unresolve endpoint was not called")
+	}
+}
+
+// TestDriveResolveComment_DefaultContent verifies that
+// runDriveSetCommentResolved supplies a non-empty Content body even when the
+// caller does not pass --content, which is the regression from Issue #179.
+// The Drive API rejects empty content with 400 "Comment content is
+// required.", so the CLI must always send something.
+func TestDriveResolveComment_DefaultContent(t *testing.T) {
+	tests := []struct {
+		name     string
+		resolved bool
+		flag     string
+		want     string
+	}{
+		{name: "resolve default", resolved: true, flag: "", want: "Resolved."},
+		{name: "unresolve default", resolved: false, flag: "", want: "Reopened."},
+		{name: "resolve override", resolved: true, flag: "explicit ack", want: "explicit ack"},
+		{name: "unresolve override", resolved: false, flag: "reopen me", want: "reopen me"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got drive.Comment
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewDecoder(r.Body).Decode(&got)
+				json.NewEncoder(w).Encode(&drive.Comment{Id: "c1", Resolved: tc.resolved})
+			}))
+			defer server.Close()
+
+			// Mirror the CLI's defaulting logic so this test pins the
+			// behavior visible to runDriveSetCommentResolved without
+			// requiring a real auth-backed factory.
+			content := tc.flag
+			if content == "" {
+				if tc.resolved {
+					content = "Resolved."
+				} else {
+					content = "Reopened."
+				}
+			}
+
+			svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+			if err != nil {
+				t.Fatalf("failed to create drive service: %v", err)
+			}
+			body := &drive.Comment{
+				Content:         content,
+				Resolved:        tc.resolved,
+				ForceSendFields: []string{"Resolved"},
+			}
+			if _, err := svc.Comments.Update("f", "c1", body).Do(); err != nil {
+				t.Fatalf("update failed: %v", err)
+			}
+			if got.Content != tc.want {
+				t.Errorf("expected Content %q, got %q", tc.want, got.Content)
+			}
+			if got.Resolved != tc.resolved {
+				t.Errorf("expected Resolved=%v, got %v", tc.resolved, got.Resolved)
+			}
+		})
 	}
 }

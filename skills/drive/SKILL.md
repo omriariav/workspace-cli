@@ -341,13 +341,22 @@ gws drive delete-comment --file-id <id> --comment-id <cid>
 
 ```bash
 gws drive resolve-comment --file-id <id> --comment-id <cid>
+gws drive resolve-comment --file-id <id> --comment-id <cid> --content "Fixed in #123"
 ```
+
+The Drive API requires comment content on the resolve action. When
+`--content` is omitted the CLI sends a default acknowledgement
+(`"Resolved."`); pass `--content` to override.
 
 ### unresolve-comment — Unresolve a comment
 
 ```bash
 gws drive unresolve-comment --file-id <id> --comment-id <cid>
+gws drive unresolve-comment --file-id <id> --comment-id <cid> --content "Reopening, see ..."
 ```
+
+Same content requirement as `resolve-comment`; the CLI defaults to
+`"Reopened."` when `--content` is omitted.
 
 ### replies — List replies
 

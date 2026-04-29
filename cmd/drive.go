@@ -277,15 +277,19 @@ var driveDeleteCommentCmd = &cobra.Command{
 var driveResolveCommentCmd = &cobra.Command{
 	Use:   "resolve-comment",
 	Short: "Resolve a comment",
-	Long:  "Marks a comment on a Google Drive file as resolved.",
-	RunE:  runDriveResolveComment,
+	Long: "Marks a comment on a Google Drive file as resolved.\n\n" +
+		"The Drive API requires comment content on the resolve action; " +
+		"when --content is omitted a default acknowledgement is sent.",
+	RunE: runDriveResolveComment,
 }
 
 var driveUnresolveCommentCmd = &cobra.Command{
 	Use:   "unresolve-comment",
 	Short: "Unresolve a comment",
-	Long:  "Marks a comment on a Google Drive file as unresolved.",
-	RunE:  runDriveUnresolveComment,
+	Long: "Marks a comment on a Google Drive file as unresolved.\n\n" +
+		"The Drive API requires comment content on the unresolve action; " +
+		"when --content is omitted a default acknowledgement is sent.",
+	RunE: runDriveUnresolveComment,
 }
 
 // --- Files ---
@@ -572,11 +576,13 @@ func init() {
 	// Resolve/Unresolve comment flags
 	driveResolveCommentCmd.Flags().String("file-id", "", "File ID (required)")
 	driveResolveCommentCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveResolveCommentCmd.Flags().String("content", "", "Comment content sent with the resolve action (default \"Resolved.\")")
 	driveResolveCommentCmd.MarkFlagRequired("file-id")
 	driveResolveCommentCmd.MarkFlagRequired("comment-id")
 
 	driveUnresolveCommentCmd.Flags().String("file-id", "", "File ID (required)")
 	driveUnresolveCommentCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveUnresolveCommentCmd.Flags().String("content", "", "Comment content sent with the unresolve action (default \"Reopened.\")")
 	driveUnresolveCommentCmd.MarkFlagRequired("file-id")
 	driveUnresolveCommentCmd.MarkFlagRequired("comment-id")
 
@@ -2144,8 +2150,23 @@ func runDriveSetCommentResolved(cmd *cobra.Command, resolved bool) error {
 
 	fileID, _ := cmd.Flags().GetString("file-id")
 	commentID, _ := cmd.Flags().GetString("comment-id")
+	content, _ := cmd.Flags().GetString("content")
+
+	// The Drive API rejects Comments.update with "Comment content is
+	// required." when no content is supplied, even when the only field
+	// changing is `resolved`. Default to a short acknowledgement so callers
+	// who only care about the resolved state still get a successful round
+	// trip, while still allowing an explicit override.
+	if content == "" {
+		if resolved {
+			content = "Resolved."
+		} else {
+			content = "Reopened."
+		}
+	}
 
 	comment := &drive.Comment{
+		Content:         content,
 		Resolved:        resolved,
 		ForceSendFields: []string{"Resolved"},
 	}
