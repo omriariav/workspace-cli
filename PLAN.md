@@ -1,6 +1,6 @@
 # gws Release Plan
 
-Planning snapshot for the post-v1.37.0 backlog. This file is a proposed sequence, not release authorization. Do not start implementation, merge, tag, publish, or close release-scoped issues from this file alone; wait for explicit user or CTO direction.
+Planning snapshot for the post-v1.38.0 backlog. This file is a proposed sequence, not release authorization. Do not start implementation, merge, tag, publish, or close release-scoped issues from this file alone; wait for explicit user or CTO direction.
 
 ## Release Requirements
 
@@ -12,63 +12,12 @@ Every release-scoped issue must include matching tests and skill/docs updates wh
 
 ## Current Baseline
 
-- Current released version: `v1.37.0`
-- Released on: 2026-04-28
+- Current released version: `v1.38.0`
+- Released on: 2026-04-30
 - Shipped issues:
-  - [#174](https://github.com/omriariav/workspace-cli/issues/174): tell users about newer CLI versions
-  - [#175](https://github.com/omriariav/workspace-cli/issues/175): resolve chat senders and flag self
-
-## v1.38.0 - Bug Fixes And Chat Recap
-
-Recommended next release. Prioritizes currently open bug fixes, then adds a focused Chat recap enhancement that builds on v1.37.0 sender attribution.
-
-### [#179](https://github.com/omriariav/workspace-cli/issues/179): Drive resolve-comment fails
-
-Scope:
-- Fix `gws drive resolve-comment` and `gws drive unresolve-comment`.
-- Use the Drive replies API action path for state transitions: `Replies.Create` with `action: "resolve"` or `action: "reopen"`.
-- Keep optional `--content` support as a closing/reopening note if useful.
-- Avoid overwriting the original comment content while marking a comment resolved or reopened.
-- Update `skills/drive/SKILL.md` for the corrected behavior.
-
-Acceptance:
-- Resolve and unresolve commands succeed against the documented Drive API flow.
-- Tests assert `POST /files/{fileID}/comments/{commentID}/replies` with the expected action.
-- Default behavior remains one-shot for users who only want to change resolved state.
-- Original comment content is not replaced by placeholder text.
-
-### [#181](https://github.com/omriariav/workspace-cli/issues/181): Gmail attachment IDs are not discoverable
-
-Scope:
-- Expose Gmail attachment metadata from message-reading surfaces.
-- Add an `attachments` array to `gws gmail read` and `gws gmail thread` message output.
-- Include filename, MIME type, size, and attachment ID.
-- Update Gmail skill/docs so users can discover an attachment ID and pass it to `gws gmail attachment`.
-
-Acceptance:
-- Messages with attachments expose usable `attachment_id` values in JSON/YAML/text-safe output.
-- Existing message output remains backward-compatible except for additive fields.
-- `gws gmail attachment --message-id <id> --id <attachment-id>` is reachable from CLI output alone.
-- Tests cover single-message and thread output with attachments.
-
-### [#182](https://github.com/omriariav/workspace-cli/issues/182): Chat recent messages across active spaces
-
-Scope:
-- Add `gws chat recent` to recap messages across all spaces active within a time window.
-- Parse `--since` as durations such as `2h`, `12h`, `7d`, or as an RFC3339 timestamp.
-- Use `spaces.list` and `lastActiveTime` as the cheap active-space prefilter.
-- Fetch messages only from active spaces with `createTime > since` and `orderBy=createTime DESC`.
-- Flatten results, sort globally by newest message first, and include space metadata on each message.
-- Include both sent and received messages by default; support optional `--exclude-self`.
-- Reuse existing `--resolve-senders` behavior for sender names and self detection.
-
-Acceptance:
-- `gws chat recent --since 2h` returns recent messages from spaces active in the last two hours.
-- Spaces outside the time window are not queried for messages.
-- Output includes `since`, `spaces_scanned`, `active_spaces`, `count`, and message rows with space metadata.
-- `--max`, `--max-per-space`, and `--max-spaces` provide safety caps.
-- `--exclude-self` omits authenticated-user messages when self detection is available.
-- Tests cover duration parsing, active-space filtering, per-space message filtering, sorting, caps, and self exclusion.
+  - [#179](https://github.com/omriariav/workspace-cli/issues/179): Drive `resolve-comment` / `unresolve-comment` now use `Replies.Create` with action=resolve|reopen
+  - [#181](https://github.com/omriariav/workspace-cli/issues/181): Gmail `read` / `thread` surface `attachments[]` with `attachment_id`
+  - [#182](https://github.com/omriariav/workspace-cli/issues/182): new `gws chat recent --since <window>` recap across active spaces
 
 ## v1.39.0 - Homebrew Distribution
 

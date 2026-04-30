@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.37.0** - `gws version --check` plus passive stale-version notice (24h cache, --quiet/GWS_NO_UPDATE_CHECK suppression), and Chat sender attribution: additive sender_type/sender_resource/sender_display_name in default output, with opt-in `--resolve-senders` on chat messages/get/unread to fill missing display names and add a self marker.
+**v1.38.0** - Drive `resolve-comment` / `unresolve-comment` now use `Replies.Create` with `action=resolve|reopen` (preserves the original comment; optional `--content` for a closing/reopening note). Gmail `read` and `thread` expose an `attachments` array with `filename`, `mime_type`, `size`, `attachment_id`, and `part_id` so callers can chain into `gws gmail attachment`. New `gws chat recent --since <2h|7d|RFC3339>` recaps messages across active spaces using `lastActiveTime` as a prefilter, with `--max`, `--max-per-space`, `--max-spaces`, `--resolve-senders`, and `--exclude-self`.
 
 ## Roadmap
 
