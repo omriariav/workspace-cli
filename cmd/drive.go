@@ -277,15 +277,19 @@ var driveDeleteCommentCmd = &cobra.Command{
 var driveResolveCommentCmd = &cobra.Command{
 	Use:   "resolve-comment",
 	Short: "Resolve a comment",
-	Long:  "Marks a comment on a Google Drive file as resolved.",
-	RunE:  runDriveResolveComment,
+	Long: "Marks a comment on a Google Drive file as resolved by posting a reply " +
+		"with action=resolve. Optional --content attaches a closing note; the " +
+		"original comment content is never modified.",
+	RunE: runDriveResolveComment,
 }
 
 var driveUnresolveCommentCmd = &cobra.Command{
 	Use:   "unresolve-comment",
 	Short: "Unresolve a comment",
-	Long:  "Marks a comment on a Google Drive file as unresolved.",
-	RunE:  runDriveUnresolveComment,
+	Long: "Reopens a previously resolved comment by posting a reply with " +
+		"action=reopen. Optional --content attaches a reopening note; the " +
+		"original comment content is never modified.",
+	RunE: runDriveUnresolveComment,
 }
 
 // --- Files ---
@@ -572,11 +576,13 @@ func init() {
 	// Resolve/Unresolve comment flags
 	driveResolveCommentCmd.Flags().String("file-id", "", "File ID (required)")
 	driveResolveCommentCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveResolveCommentCmd.Flags().String("content", "", "Optional closing note attached to the resolve reply")
 	driveResolveCommentCmd.MarkFlagRequired("file-id")
 	driveResolveCommentCmd.MarkFlagRequired("comment-id")
 
 	driveUnresolveCommentCmd.Flags().String("file-id", "", "File ID (required)")
 	driveUnresolveCommentCmd.Flags().String("comment-id", "", "Comment ID (required)")
+	driveUnresolveCommentCmd.Flags().String("content", "", "Optional reopening note attached to the reopen reply")
 	driveUnresolveCommentCmd.MarkFlagRequired("file-id")
 	driveUnresolveCommentCmd.MarkFlagRequired("comment-id")
 
@@ -2144,43 +2150,45 @@ func runDriveSetCommentResolved(cmd *cobra.Command, resolved bool) error {
 
 	fileID, _ := cmd.Flags().GetString("file-id")
 	commentID, _ := cmd.Flags().GetString("comment-id")
+	content, _ := cmd.Flags().GetString("content")
 
-	comment := &drive.Comment{
-		Resolved:        resolved,
-		ForceSendFields: []string{"Resolved"},
-	}
-
-	updated, err := svc.Comments.Update(fileID, commentID, comment).
-		Fields("id,content,resolved,modifiedTime,author(displayName,emailAddress)").
-		Do()
-	if err != nil {
-		action := "resolve"
-		if !resolved {
-			action = "unresolve"
-		}
-		return p.PrintError(fmt.Errorf("failed to %s comment: %w", action, err))
-	}
-
+	action := "resolve"
 	status := "resolved"
 	if !resolved {
+		action = "reopen"
 		status = "unresolved"
 	}
 
+	reply := &drive.Reply{
+		Action:  action,
+		Content: content,
+	}
+
+	created, err := svc.Replies.Create(fileID, commentID, reply).
+		Fields("id,action,content,createdTime,author(displayName,emailAddress)").
+		Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to %s comment: %w", action, err))
+	}
+
 	result := map[string]interface{}{
-		"status":   status,
-		"id":       updated.Id,
-		"resolved": updated.Resolved,
+		"status":     status,
+		"file_id":    fileID,
+		"comment_id": commentID,
+		"reply_id":   created.Id,
+		"action":     created.Action,
+		"resolved":   resolved,
 	}
-	if updated.Content != "" {
-		result["content"] = updated.Content
+	if created.Content != "" {
+		result["content"] = created.Content
 	}
-	if updated.ModifiedTime != "" {
-		result["modified"] = updated.ModifiedTime
+	if created.CreatedTime != "" {
+		result["created"] = created.CreatedTime
 	}
-	if updated.Author != nil {
+	if created.Author != nil {
 		result["author"] = map[string]interface{}{
-			"name":  updated.Author.DisplayName,
-			"email": updated.Author.EmailAddress,
+			"name":  created.Author.DisplayName,
+			"email": created.Author.EmailAddress,
 		}
 	}
 

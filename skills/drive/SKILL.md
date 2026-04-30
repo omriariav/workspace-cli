@@ -339,14 +339,23 @@ gws drive delete-comment --file-id <id> --comment-id <cid>
 
 ### resolve-comment — Resolve a comment
 
+Posts a reply with `action=resolve` (the documented Drive API path for state
+transitions). The original comment content is never modified. Pass an
+optional `--content` to attach a closing note.
+
 ```bash
 gws drive resolve-comment --file-id <id> --comment-id <cid>
+gws drive resolve-comment --file-id <id> --comment-id <cid> --content "fixed in #1234"
 ```
 
-### unresolve-comment — Unresolve a comment
+### unresolve-comment — Reopen a resolved comment
+
+Posts a reply with `action=reopen`. The original comment content is never
+modified. Pass an optional `--content` to attach a reopening note.
 
 ```bash
 gws drive unresolve-comment --file-id <id> --comment-id <cid>
+gws drive unresolve-comment --file-id <id> --comment-id <cid> --content "still broken on safari"
 ```
 
 ### replies — List replies
