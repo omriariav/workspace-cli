@@ -1,53 +1,76 @@
 # gws Release Plan
 
-Planning snapshot for the post-v1.36.0 backlog. This file is a proposed sequence, not release authorization. Do not start implementation, merge, tag, publish, or close release-scoped issues from this file alone; wait for explicit user or CTO direction.
+Planning snapshot for the post-v1.37.0 backlog. This file is a proposed sequence, not release authorization. Do not start implementation, merge, tag, publish, or close release-scoped issues from this file alone; wait for explicit user or CTO direction.
+
+## Release Requirements
+
+Every release-scoped issue must include matching tests and skill/docs updates when applicable, even if the GitHub issue text does not explicitly mention them.
+
+- Tests should cover the changed command behavior, request construction, output shape, and important error paths.
+- Skills and command references should be updated for any new flag, command, output field, workflow, or behavioral caveat.
+- If no skill/docs change is needed, the PR should say why in its testing or implementation notes.
 
 ## Current Baseline
 
-- Current released version: `v1.36.0`
+- Current released version: `v1.37.0`
 - Released on: 2026-04-28
 - Shipped issues:
-  - [#170](https://github.com/omriariav/workspace-cli/issues/170): `chat find-space --name` via the local space cache
-  - [#171](https://github.com/omriariav/workspace-cli/issues/171): chat attachment metadata in message output
-  - [#176](https://github.com/omriariav/workspace-cli/issues/176): calendar create adds the authenticated user as an accepted attendee by default
+  - [#174](https://github.com/omriariav/workspace-cli/issues/174): tell users about newer CLI versions
+  - [#175](https://github.com/omriariav/workspace-cli/issues/175): resolve chat senders and flag self
 
-## v1.37.0 - Update Notice And Chat Attribution
+## v1.38.0 - Bug Fixes And Chat Recap
 
-Recommended next release. Small enough for one PR, with two user-facing quality-of-life fixes.
+Recommended next release. Prioritizes currently open bug fixes, then adds a focused Chat recap enhancement that builds on v1.37.0 sender attribution.
 
-### [#174](https://github.com/omriariav/workspace-cli/issues/174): Tell users about newer CLI versions
-
-Scope:
-- Add a version freshness check against GitHub releases.
-- Prefer a manual command path such as `gws version --check`, plus a low-noise passive notice when the installed version is stale.
-- Cache the latest-version result so normal CLI usage does not call the network on every invocation.
-- Print passive notices to stderr and respect script-friendly modes such as `--quiet`.
-- Treat network failures as non-fatal for normal commands.
-
-Acceptance:
-- Current version reports no update available.
-- Older version reports the latest release and a clear upgrade hint.
-- `--quiet` suppresses passive notices.
-- Network failure does not break unrelated commands.
-- Unit tests cover version comparison, cache behavior, quiet suppression, and failure handling.
-
-### [#175](https://github.com/omriariav/workspace-cli/issues/175): Resolve chat senders and flag self
+### [#179](https://github.com/omriariav/workspace-cli/issues/179): Drive resolve-comment fails
 
 Scope:
-- Improve sender attribution on chat message surfaces where sender data appears.
-- Add a `self` marker when the sender can be identified as the authenticated user.
-- Add display-name resolution behind an explicit flag, likely `--resolve-senders`, to avoid surprise API cost.
-- Apply consistently to `chat messages`, `chat get`, and `chat unread` where those outputs include message sender data.
-- Resolve sender display names once per space per invocation and expose unresolved senders predictably.
+- Fix `gws drive resolve-comment` and `gws drive unresolve-comment`.
+- Use the Drive replies API action path for state transitions: `Replies.Create` with `action: "resolve"` or `action: "reopen"`.
+- Keep optional `--content` support as a closing/reopening note if useful.
+- Avoid overwriting the original comment content while marking a comment resolved or reopened.
+- Update `skills/drive/SKILL.md` for the corrected behavior.
 
 Acceptance:
-- Default output remains fast and backward-compatible except for additive fields.
-- `--resolve-senders` adds display names for resolvable members.
-- Self messages are marked consistently.
-- Unresolvable senders do not fail the whole command.
-- Tests cover resolved, unresolved, self, and non-self senders.
+- Resolve and unresolve commands succeed against the documented Drive API flow.
+- Tests assert `POST /files/{fileID}/comments/{commentID}/replies` with the expected action.
+- Default behavior remains one-shot for users who only want to change resolved state.
+- Original comment content is not replaced by placeholder text.
 
-## v1.38.0 - Homebrew Distribution
+### [#181](https://github.com/omriariav/workspace-cli/issues/181): Gmail attachment IDs are not discoverable
+
+Scope:
+- Expose Gmail attachment metadata from message-reading surfaces.
+- Add an `attachments` array to `gws gmail read` and `gws gmail thread` message output.
+- Include filename, MIME type, size, and attachment ID.
+- Update Gmail skill/docs so users can discover an attachment ID and pass it to `gws gmail attachment`.
+
+Acceptance:
+- Messages with attachments expose usable `attachment_id` values in JSON/YAML/text-safe output.
+- Existing message output remains backward-compatible except for additive fields.
+- `gws gmail attachment --message-id <id> --id <attachment-id>` is reachable from CLI output alone.
+- Tests cover single-message and thread output with attachments.
+
+### [#182](https://github.com/omriariav/workspace-cli/issues/182): Chat recent messages across active spaces
+
+Scope:
+- Add `gws chat recent` to recap messages across all spaces active within a time window.
+- Parse `--since` as durations such as `2h`, `12h`, `7d`, or as an RFC3339 timestamp.
+- Use `spaces.list` and `lastActiveTime` as the cheap active-space prefilter.
+- Fetch messages only from active spaces with `createTime > since` and `orderBy=createTime DESC`.
+- Flatten results, sort globally by newest message first, and include space metadata on each message.
+- Include both sent and received messages by default; support optional `--exclude-self`.
+- Reuse existing `--resolve-senders` behavior for sender names and self detection.
+
+Acceptance:
+- `gws chat recent --since 2h` returns recent messages from spaces active in the last two hours.
+- Spaces outside the time window are not queried for messages.
+- Output includes `since`, `spaces_scanned`, `active_spaces`, `count`, and message rows with space metadata.
+- `--max`, `--max-per-space`, and `--max-spaces` provide safety caps.
+- `--exclude-self` omits authenticated-user messages when self detection is available.
+- Tests cover duration parsing, active-space filtering, per-space message filtering, sorting, caps, and self exclusion.
+
+## v1.39.0 - Homebrew Distribution
 
 ### [#115](https://github.com/omriariav/workspace-cli/issues/115): Homebrew distribution
 
@@ -63,7 +86,7 @@ Acceptance:
 - Formula points at published release assets and verifies checksums.
 - Release process clearly states how the formula is updated.
 
-## v1.39.0 - OS Keychain Token Storage
+## v1.40.0 - OS Keychain Token Storage
 
 ### [#112](https://github.com/omriariav/workspace-cli/issues/112): OS keychain token storage
 
@@ -77,21 +100,21 @@ Acceptance:
 - Keychain storage can be enabled and verified.
 - Failure modes fall back or report clear remediation.
 
-## v1.40.0 - Multi-Account Contexts
+## v1.41.0 - Multi-Account Contexts
 
 ### [#113](https://github.com/omriariav/workspace-cli/issues/113): Multi-account support with context switching
 
 Scope:
 - Add named auth contexts for multiple Google accounts.
 - Support context selection by command, config, or environment variable.
-- Keep context-aware token/config storage compatible with the v1.39 token-store decision.
+- Keep context-aware token/config storage compatible with the v1.40 token-store decision.
 
 Acceptance:
 - Users can add, list, use, and remove contexts.
 - Commands run against the selected context.
 - Existing single-account config remains the default path.
 
-## v1.41.0 - Gmail Settings API
+## v1.42.0 - Gmail Settings API
 
 ### [#104](https://github.com/omriariav/workspace-cli/issues/104): Gmail settings API
 
@@ -104,7 +127,7 @@ Acceptance:
 - Required scopes are documented and covered by auth validation.
 - Tests cover request construction and output shape.
 
-## v1.42.0 - Service Account Support
+## v1.43.0 - Service Account Support
 
 ### [#116](https://github.com/omriariav/workspace-cli/issues/116): Service account support with domain-wide delegation
 
@@ -118,7 +141,7 @@ Acceptance:
 - Commands can run with the delegated subject where APIs support it.
 - Errors explain missing delegation, scopes, or admin setup.
 
-## v1.43.0 - Output Filtering
+## v1.44.0 - Output Filtering
 
 ### [#117](https://github.com/omriariav/workspace-cli/issues/117): jq / Go template output filtering
 
@@ -132,7 +155,7 @@ Acceptance:
 - Template output is deterministic and documented.
 - Tests cover success and invalid-filter paths.
 
-## v1.44.0 - Cross-Service Batch Operations
+## v1.45.0 - Cross-Service Batch Operations
 
 ### [#123](https://github.com/omriariav/workspace-cli/issues/123): Cross-service batch operations
 
@@ -146,7 +169,7 @@ Acceptance:
 - Destructive paths support dry-run or explicit confirmation.
 - Partial failures are reported in structured output.
 
-## v1.45.0 - Apps Script
+## v1.46.0 - Apps Script
 
 ### [#122](https://github.com/omriariav/workspace-cli/issues/122): Google Apps Script - list, get, run
 
@@ -158,7 +181,7 @@ Acceptance:
 - New service follows existing command, client, scope, and test patterns.
 - API enablement or permission errors are understandable.
 
-## v1.46.0 - Classroom
+## v1.47.0 - Classroom
 
 ### [#121](https://github.com/omriariav/workspace-cli/issues/121): Google Classroom - courses, assignments, submissions
 
@@ -170,7 +193,7 @@ Acceptance:
 - New service follows existing command, client, scope, and test patterns.
 - Outputs are useful for agents and scripts.
 
-## v1.47.0 - Extension System
+## v1.48.0 - Extension System
 
 ### [#118](https://github.com/omriariav/workspace-cli/issues/118): Extension / plugin system
 
