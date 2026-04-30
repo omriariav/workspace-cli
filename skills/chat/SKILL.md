@@ -57,6 +57,8 @@ For initial setup, see the `gws-auth` skill.
 | Read recent messages | `gws chat messages <space-id> --order-by "createTime DESC" --max 10` |
 | Messages after a date | `gws chat messages <space-id> --after "2026-02-17T00:00:00Z"` |
 | Messages in a range | `gws chat messages <space-id> --after "2026-02-17T00:00:00Z" --before "2026-02-20T00:00:00Z"` |
+| Recap recent messages | `gws chat recent --since 2h` |
+| Recap last 7 days | `gws chat recent --since 7d --max 1000` |
 | Send a message | `gws chat send --space <space-id> --text "Hello"` |
 | Get a single message | `gws chat get <message-name>` |
 | Update a message | `gws chat update <message-name> --text "New text"` |
@@ -114,6 +116,53 @@ gws chat messages <space-id> [flags]
 - `--resolve-senders` — Make extra API calls to fill missing `sender_display_name` (via space membership listing) and add a `self` boolean (via People API `people/me`). One extra Chat call per space plus one People call per invocation.
 
 `--after` and `--before` are convenience shortcuts for `--filter`. They combine with `--filter` using AND.
+
+### recent — Recap recent messages across active spaces
+
+```bash
+gws chat recent --since <window> [flags]
+```
+
+Recaps Chat messages across every space active within `--since`, without iterating message history for inactive spaces. Uses `spaces.list` `lastActiveTime` as the cheap prefilter, then queries `spaces.messages.list` per active space with `createTime > since` and `orderBy=createTime DESC`. Results are flattened and sorted globally by newest first. Includes both sent and received messages by default.
+
+**Flags:**
+- `--since string` — Time window: a Go duration (`2h`, `12h`, `7d`) or RFC3339 timestamp (`2026-04-30T09:00:00Z`). Default `2h`.
+- `--max int` — Total message cap (default 500, `0` = all)
+- `--max-per-space int` — Per-space cap (default 100, `0` = all)
+- `--max-spaces int` — Active-space cap after sorting by `lastActiveTime` DESC (default `0` = all)
+- `--resolve-senders` — Fill `sender_display_name` (one extra membership-list call per active space) and add `self` via People API
+- `--exclude-self` — Omit messages sent by the authenticated user (best-effort self detection via People API)
+
+**Output:**
+```json
+{
+  "since": "2026-04-30T09:00:00Z",
+  "spaces_scanned": 123,
+  "active_spaces": 8,
+  "count": 42,
+  "messages": [
+    {
+      "space": "spaces/AAAA",
+      "space_display_name": "Team Chat",
+      "space_type": "SPACE",
+      "space_last_active_time": "2026-04-30T10:58:00Z",
+      "name": "spaces/AAAA/messages/msg1",
+      "text": "...",
+      "create_time": "2026-04-30T10:57:00Z",
+      "sender": "Alice",
+      "sender_resource": "users/123"
+    }
+  ]
+}
+```
+
+**Examples:**
+```bash
+gws chat recent --since 2h
+gws chat recent --since 12h --resolve-senders --exclude-self
+gws chat recent --since 7d --max 1000 --max-per-space 200
+gws chat recent --since 2026-04-30T09:00:00Z
+```
 
 Sender attribution fields:
 - `sender` — existing display-name-or-resource string. Always present when the message has a sender.

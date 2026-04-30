@@ -45,6 +45,26 @@ var chatMessagesCmd = &cobra.Command{
 	RunE:  runChatMessages,
 }
 
+var chatRecentCmd = &cobra.Command{
+	Use:   "recent",
+	Short: "Recap recent messages across active spaces",
+	Long: `Lists messages across all spaces active within --since.
+
+Uses spaces.list lastActiveTime as a cheap prefilter, then queries
+messages.list per active space with createTime > since (orderBy
+createTime DESC). Results are flattened and sorted globally by newest
+first.
+
+--since accepts a Go duration ("2h", "12h", "7d") or an RFC3339
+timestamp ("2026-04-30T09:00:00Z").
+
+Examples:
+  gws chat recent --since 2h
+  gws chat recent --since 7d --max 1000
+  gws chat recent --since 12h --resolve-senders --exclude-self`,
+	RunE: runChatRecent,
+}
+
 var chatMembersCmd = &cobra.Command{
 	Use:   "members <space-id>",
 	Short: "List members of a space",
@@ -326,6 +346,7 @@ func init() {
 	rootCmd.AddCommand(chatCmd)
 	chatCmd.AddCommand(chatListCmd)
 	chatCmd.AddCommand(chatMessagesCmd)
+	chatCmd.AddCommand(chatRecentCmd)
 	chatCmd.AddCommand(chatSendCmd)
 	chatCmd.AddCommand(chatMembersCmd)
 	chatCmd.AddCommand(chatGetCmd)
@@ -377,6 +398,14 @@ func init() {
 	chatMessagesCmd.Flags().String("after", "", "Show messages after this time (RFC3339, e.g. 2026-02-17T00:00:00Z)")
 	chatMessagesCmd.Flags().String("before", "", "Show messages before this time (RFC3339, e.g. 2026-02-20T00:00:00Z)")
 	chatMessagesCmd.Flags().Bool("resolve-senders", false, "Resolve sender display names by listing the space membership (one extra API call per space)")
+
+	// Recent flags
+	chatRecentCmd.Flags().String("since", "2h", "Time window: duration (e.g. 2h, 12h, 7d) or RFC3339 timestamp")
+	chatRecentCmd.Flags().Int64("max", 500, "Maximum total messages to return (0 = all)")
+	chatRecentCmd.Flags().Int64("max-per-space", 100, "Maximum messages per active space (0 = all)")
+	chatRecentCmd.Flags().Int64("max-spaces", 0, "Maximum active spaces to query, after sorting by lastActiveTime DESC (0 = all)")
+	chatRecentCmd.Flags().Bool("resolve-senders", false, "Resolve sender display names by listing each active space's membership (one extra API call per space)")
+	chatRecentCmd.Flags().Bool("exclude-self", false, "Omit messages sent by the authenticated user (requires self detection)")
 
 	// Send flags
 	chatSendCmd.Flags().String("space", "", "Space ID or name (required)")
@@ -718,6 +747,246 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 	return p.Print(map[string]interface{}{
 		"messages": results,
 		"count":    len(results),
+	})
+}
+
+// parseSinceWindow parses --since as either a Go duration ("2h", "12h",
+// "7d") or an RFC3339 timestamp ("2026-04-30T09:00:00Z"). Negative or
+// zero durations are rejected. Days are accepted via the "d" suffix
+// because time.ParseDuration does not.
+func parseSinceWindow(value string, now time.Time) (time.Time, error) {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return time.Time{}, fmt.Errorf("--since is required")
+	}
+
+	// "Nd" → N*24h, since time.ParseDuration only knows up to "h".
+	if strings.HasSuffix(v, "d") {
+		base := strings.TrimSuffix(v, "d")
+		if base != "" {
+			if dur, err := time.ParseDuration(base + "h"); err == nil {
+				if dur <= 0 {
+					return time.Time{}, fmt.Errorf("--since must be a positive duration, got %q", value)
+				}
+				return now.Add(-dur * 24), nil
+			}
+		}
+	}
+
+	if dur, err := time.ParseDuration(v); err == nil {
+		if dur <= 0 {
+			return time.Time{}, fmt.Errorf("--since must be a positive duration, got %q", value)
+		}
+		return now.Add(-dur), nil
+	}
+
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return t, nil
+	}
+
+	return time.Time{}, fmt.Errorf("--since must be a duration (e.g. 2h, 12h, 7d) or RFC3339 timestamp, got %q", value)
+}
+
+// detectSelfResource returns the canonical "users/{id}" for the
+// authenticated user, or "" when detection fails. Best-effort.
+func detectSelfResource(ctx context.Context, peopleSvc *people.Service) string {
+	if peopleSvc == nil {
+		return ""
+	}
+	me, err := peopleSvc.People.Get("people/me").PersonFields("metadata").Context(ctx).Do()
+	if err != nil || me == nil {
+		return ""
+	}
+	if !strings.HasPrefix(me.ResourceName, "people/") {
+		return ""
+	}
+	return "users/" + strings.TrimPrefix(me.ResourceName, "people/")
+}
+
+func runChatRecent(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Chat()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	since, _ := cmd.Flags().GetString("since")
+	maxResults, _ := cmd.Flags().GetInt64("max")
+	maxPerSpace, _ := cmd.Flags().GetInt64("max-per-space")
+	maxSpaces, _ := cmd.Flags().GetInt64("max-spaces")
+	resolveSenders, _ := cmd.Flags().GetBool("resolve-senders")
+	excludeSelf, _ := cmd.Flags().GetBool("exclude-self")
+
+	sinceTime, err := parseSinceWindow(since, time.Now())
+	if err != nil {
+		return p.PrintError(err)
+	}
+	sinceRFC := sinceTime.UTC().Format(time.RFC3339)
+
+	// Self detection — needed for --exclude-self regardless of --resolve-senders.
+	var selfResource string
+	if excludeSelf || resolveSenders {
+		peopleSvc, _ := factory.PeopleProfile()
+		selfResource = detectSelfResource(ctx, peopleSvc)
+	}
+
+	// Step 1: list all spaces and keep the ones active within the window.
+	type activeSpace struct {
+		space      *chat.Space
+		activeTime time.Time
+	}
+	var (
+		active        []activeSpace
+		spacesScanned int
+		pageToken     string
+	)
+	for {
+		call := svc.Spaces.List().PageSize(1000).Context(ctx)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+		resp, err := call.Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to list spaces: %w", err))
+		}
+		for _, s := range resp.Spaces {
+			if s == nil {
+				continue
+			}
+			spacesScanned++
+			if s.LastActiveTime == "" {
+				continue
+			}
+			lat, err := time.Parse(time.RFC3339, s.LastActiveTime)
+			if err != nil {
+				continue
+			}
+			if lat.Before(sinceTime) {
+				continue
+			}
+			active = append(active, activeSpace{space: s, activeTime: lat})
+		}
+		if resp.NextPageToken == "" {
+			break
+		}
+		pageToken = resp.NextPageToken
+	}
+
+	// Sort active spaces by lastActiveTime DESC and apply --max-spaces.
+	sort.Slice(active, func(i, j int) bool {
+		return active[i].activeTime.After(active[j].activeTime)
+	})
+	if maxSpaces > 0 && int64(len(active)) > maxSpaces {
+		active = active[:maxSpaces]
+	}
+
+	// Step 2: per active space, fetch messages with createTime > since.
+	var messages []map[string]interface{}
+	for _, as := range active {
+		spaceName := as.space.Name
+
+		senderCtx := nilSenderContext()
+		if resolveSenders {
+			peopleSvc, _ := factory.PeopleProfile()
+			senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceName)
+		}
+
+		filter := fmt.Sprintf(`createTime > "%s"`, sinceRFC)
+		var spaceCount int64
+		var msgPageToken string
+		for {
+			pageSize := int64(1000)
+			if maxPerSpace > 0 {
+				remaining := maxPerSpace - spaceCount
+				if remaining <= 0 {
+					break
+				}
+				if remaining < pageSize {
+					pageSize = remaining
+				}
+			}
+
+			call := svc.Spaces.Messages.List(spaceName).
+				PageSize(pageSize).
+				Filter(filter).
+				OrderBy("createTime DESC").
+				Context(ctx)
+			if msgPageToken != "" {
+				call = call.PageToken(msgPageToken)
+			}
+			resp, err := call.Do()
+			if err != nil {
+				return p.PrintError(fmt.Errorf("failed to list messages in %s: %w", spaceName, err))
+			}
+
+			for _, msg := range resp.Messages {
+				if maxPerSpace > 0 && spaceCount >= maxPerSpace {
+					break
+				}
+				if excludeSelf && selfResource != "" && msg.Sender != nil && msg.Sender.Name == selfResource {
+					continue
+				}
+				row := map[string]interface{}{
+					"space":                  as.space.Name,
+					"space_display_name":     as.space.DisplayName,
+					"space_type":             as.space.SpaceType,
+					"space_last_active_time": as.space.LastActiveTime,
+					"name":                   msg.Name,
+					"text":                   msg.Text,
+					"create_time":            msg.CreateTime,
+				}
+				if msg.Sender != nil {
+					senderName := msg.Sender.DisplayName
+					if senderName == "" {
+						if resolved, ok := senderCtx.displayNames[msg.Sender.Name]; ok && resolved != "" {
+							senderName = resolved
+						} else {
+							senderName = msg.Sender.Name
+						}
+					}
+					row["sender"] = senderName
+				}
+				senderCtx.annotate(msg, row)
+				if msg.Thread != nil {
+					row["thread"] = msg.Thread.Name
+				}
+				if atts := serializeChatAttachments(msg.Attachment); atts != nil {
+					row["attachment"] = atts
+				}
+				messages = append(messages, row)
+				spaceCount++
+			}
+
+			if resp.NextPageToken == "" || (maxPerSpace > 0 && spaceCount >= maxPerSpace) {
+				break
+			}
+			msgPageToken = resp.NextPageToken
+		}
+	}
+
+	// Step 3: global sort by create_time DESC and apply --max.
+	sort.SliceStable(messages, func(i, j int) bool {
+		ai, _ := messages[i]["create_time"].(string)
+		aj, _ := messages[j]["create_time"].(string)
+		return ai > aj // RFC3339 strings sort lexicographically by time.
+	})
+	if maxResults > 0 && int64(len(messages)) > maxResults {
+		messages = messages[:maxResults]
+	}
+
+	return p.Print(map[string]interface{}{
+		"since":          sinceRFC,
+		"spaces_scanned": spacesScanned,
+		"active_spaces":  len(active),
+		"count":          len(messages),
+		"messages":       messages,
 	})
 }
 

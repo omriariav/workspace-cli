@@ -91,6 +91,33 @@ Usage: gws chat members <space-id> [flags]
 
 ---
 
+## gws chat recent
+
+Recaps Chat messages across every space active within a time window. Uses `spaces.list` `lastActiveTime` as a prefilter, then queries `spaces.messages.list` per active space with `createTime > since` and `orderBy=createTime DESC`. Output is flattened and globally sorted newest-first.
+
+```
+Usage: gws chat recent [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--since` | string | `2h` | Time window: Go duration (`2h`, `12h`, `7d`) or RFC3339 timestamp |
+| `--max` | int | 500 | Maximum total messages (0 = all) |
+| `--max-per-space` | int | 100 | Maximum messages per active space (0 = all) |
+| `--max-spaces` | int | 0 | Cap on active spaces after sorting by `lastActiveTime` DESC (0 = all) |
+| `--resolve-senders` | bool | false | Resolve sender display names (one extra membership-list call per active space) and detect `self` |
+| `--exclude-self` | bool | false | Omit authenticated-user messages (best-effort, requires self detection) |
+
+### Output Fields (JSON)
+
+- `since` — Resolved RFC3339 cutoff
+- `spaces_scanned` — Total spaces returned by `spaces.list`
+- `active_spaces` — Spaces matching `lastActiveTime >= since` (after `--max-spaces` cap)
+- `count` — Number of messages in the response (after `--max` cap)
+- `messages[]` — Each entry: `space`, `space_display_name`, `space_type`, `space_last_active_time`, `name`, `text`, `create_time`, `sender`, plus `sender_type`/`sender_resource`/`sender_display_name`/`self` when available
+
+---
+
 ## gws chat send
 
 Sends a text message to a Chat space.

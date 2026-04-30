@@ -518,6 +518,7 @@ func TestChatCommands(t *testing.T) {
 	}{
 		{"list"},
 		{"messages"},
+		{"recent"},
 		{"send"},
 		{"members"},
 		{"get"},
