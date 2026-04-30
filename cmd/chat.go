@@ -803,19 +803,21 @@ func detectSelfResource(ctx context.Context, peopleSvc *people.Service) string {
 	return "users/" + strings.TrimPrefix(me.ResourceName, "people/")
 }
 
+func chatRecentCreateTime(row map[string]interface{}) time.Time {
+	raw, _ := row["create_time"].(string)
+	if raw == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
 func runChatRecent(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 	ctx := context.Background()
-
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.Chat()
-	if err != nil {
-		return p.PrintError(err)
-	}
 
 	since, _ := cmd.Flags().GetString("since")
 	maxResults, _ := cmd.Flags().GetInt64("max")
@@ -824,16 +826,40 @@ func runChatRecent(cmd *cobra.Command, args []string) error {
 	resolveSenders, _ := cmd.Flags().GetBool("resolve-senders")
 	excludeSelf, _ := cmd.Flags().GetBool("exclude-self")
 
-	sinceTime, err := parseSinceWindow(since, time.Now())
+	now := time.Now()
+	if chatRecentNowForTest != nil {
+		now = chatRecentNowForTest()
+	}
+	sinceTime, err := parseSinceWindow(since, now)
 	if err != nil {
 		return p.PrintError(err)
 	}
 	sinceRFC := sinceTime.UTC().Format(time.RFC3339)
 
+	var (
+		svc       *chat.Service
+		peopleSvc *people.Service
+	)
+	if chatServiceForTest != nil {
+		svc = chatServiceForTest
+		peopleSvc = peopleServiceForTest
+	} else {
+		factory, err := client.NewFactory(ctx)
+		if err != nil {
+			return p.PrintError(err)
+		}
+		svc, err = factory.Chat()
+		if err != nil {
+			return p.PrintError(err)
+		}
+		if excludeSelf || resolveSenders {
+			peopleSvc, _ = factory.PeopleProfile()
+		}
+	}
+
 	// Self detection — needed for --exclude-self regardless of --resolve-senders.
 	var selfResource string
 	if excludeSelf || resolveSenders {
-		peopleSvc, _ := factory.PeopleProfile()
 		selfResource = detectSelfResource(ctx, peopleSvc)
 	}
 
@@ -894,7 +920,6 @@ func runChatRecent(cmd *cobra.Command, args []string) error {
 
 		senderCtx := nilSenderContext()
 		if resolveSenders {
-			peopleSvc, _ := factory.PeopleProfile()
 			senderCtx = resolveSendersForSpace(ctx, svc, peopleSvc, spaceName)
 		}
 
@@ -973,9 +998,7 @@ func runChatRecent(cmd *cobra.Command, args []string) error {
 
 	// Step 3: global sort by create_time DESC and apply --max.
 	sort.SliceStable(messages, func(i, j int) bool {
-		ai, _ := messages[i]["create_time"].(string)
-		aj, _ := messages[j]["create_time"].(string)
-		return ai > aj // RFC3339 strings sort lexicographically by time.
+		return chatRecentCreateTime(messages[i]).After(chatRecentCreateTime(messages[j]))
 	})
 	if maxResults > 0 && int64(len(messages)) > maxResults {
 		messages = messages[:maxResults]
@@ -2410,12 +2433,13 @@ func runChatFindGroup(cmd *cobra.Command, args []string) error {
 }
 
 // chatServiceForTest and peopleServiceForTest, when non-nil, replace the
-// factory-built services in runChatFindSpace's --refresh path. Tests set these
-// to point at httptest endpoints; production paths leave both nil so the
-// factory is used.
+// factory-built services in testable Chat command paths. Tests set these to
+// point at httptest endpoints; production paths leave both nil so the factory
+// is used.
 var (
 	chatServiceForTest   *chat.Service
 	peopleServiceForTest *people.Service
+	chatRecentNowForTest func() time.Time
 )
 
 func runChatFindSpace(cmd *cobra.Command, args []string) error {

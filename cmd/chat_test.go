@@ -3164,6 +3164,21 @@ func newFindSpaceCmd() *cobra.Command {
 	return cmd
 }
 
+func newChatRecentCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "recent",
+		Short: "Recap recent messages across active spaces",
+		RunE:  runChatRecent,
+	}
+	cmd.Flags().String("since", "2h", "Time window: duration (e.g. 2h, 12h, 7d) or RFC3339 timestamp")
+	cmd.Flags().Int64("max", 500, "Maximum total messages to return (0 = all)")
+	cmd.Flags().Int64("max-per-space", 100, "Maximum messages per active space (0 = all)")
+	cmd.Flags().Int64("max-spaces", 0, "Maximum active spaces to query, after sorting by lastActiveTime DESC (0 = all)")
+	cmd.Flags().Bool("resolve-senders", false, "Resolve sender display names by listing each active space's membership (one extra API call per space)")
+	cmd.Flags().Bool("exclude-self", false, "Omit messages sent by the authenticated user (requires self detection)")
+	return cmd
+}
+
 func TestChatFindGroup_CommandE2E(t *testing.T) {
 	// Use temp HOME so DefaultPath() resolves to our temp dir
 	tmpHome := t.TempDir()
@@ -3739,10 +3754,7 @@ func TestChatRecentCommand_Flags(t *testing.T) {
 	}
 }
 
-// TestChatRecent_FiltersInactiveSpaces drives the same SDK calls runChatRecent
-// makes — Spaces.List, then Spaces.Messages.List with a createTime filter and
-// orderBy=createTime DESC — to lock that wire contract.
-func TestChatRecent_FiltersInactiveSpaces(t *testing.T) {
+func TestChatRecent_CommandPathFiltersSortsAndCaps(t *testing.T) {
 	now := mustParseTime(t, "2026-04-30T12:00:00Z")
 	since := now.Add(-2 * time.Hour) // 10:00 cutoff
 	sinceRFC := since.UTC().Format(time.RFC3339)
@@ -3762,19 +3774,19 @@ func TestChatRecent_FiltersInactiveSpaces(t *testing.T) {
 					{
 						"name":           "spaces/HOT",
 						"displayName":    "Hot Space",
-						"type":           "SPACE",
+						"spaceType":      "SPACE",
 						"lastActiveTime": now.Add(-5 * time.Minute).UTC().Format(time.RFC3339),
 					},
 					{
 						"name":           "spaces/COLD",
 						"displayName":    "Cold Space",
-						"type":           "SPACE",
+						"spaceType":      "SPACE",
 						"lastActiveTime": now.Add(-48 * time.Hour).UTC().Format(time.RFC3339),
 					},
 					{
 						"name":           "spaces/WARM",
 						"displayName":    "Warm Space",
-						"type":           "SPACE",
+						"spaceType":      "SPACE",
 						"lastActiveTime": now.Add(-90 * time.Minute).UTC().Format(time.RFC3339),
 					},
 				},
@@ -3787,16 +3799,38 @@ func TestChatRecent_FiltersInactiveSpaces(t *testing.T) {
 			messagesQueriedFor = append(messagesQueriedFor, spaceID)
 			capturedFilters = append(capturedFilters, r.URL.Query().Get("filter"))
 			capturedOrderBy = append(capturedOrderBy, r.URL.Query().Get("orderBy"))
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"messages": []map[string]interface{}{
+			var messages []map[string]interface{}
+			switch spaceID {
+			case "HOT":
+				messages = []map[string]interface{}{
 					{
-						"name":       "spaces/" + spaceID + "/messages/m1",
-						"text":       "hi from " + spaceID,
-						"createTime": now.Add(-30 * time.Minute).UTC().Format(time.RFC3339),
+						"name":       "spaces/HOT/messages/fractional",
+						"text":       "fractional newer than exact second",
+						"createTime": "2026-04-30T11:00:00.900Z",
 						"sender":     map[string]interface{}{"name": "users/123", "type": "HUMAN"},
 					},
-				},
-			})
+					{
+						"name":       "spaces/HOT/messages/exact",
+						"text":       "exact second",
+						"createTime": "2026-04-30T11:00:00Z",
+						"sender":     map[string]interface{}{"name": "users/123", "type": "HUMAN"},
+					},
+				}
+			case "WARM":
+				messages = []map[string]interface{}{
+					{
+						"name":       "spaces/WARM/messages/newest",
+						"text":       "newest",
+						"createTime": "2026-04-30T11:45:00Z",
+						"sender":     map[string]interface{}{"name": "users/456", "type": "HUMAN"},
+					},
+				}
+			default:
+				t.Logf("unexpected messages request for %s", spaceID)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"messages": messages})
 			return
 		}
 
@@ -3810,43 +3844,81 @@ func TestChatRecent_FiltersInactiveSpaces(t *testing.T) {
 		t.Fatalf("failed to create chat service: %v", err)
 	}
 
-	resp, err := svc.Spaces.List().Do()
+	oldChatSvc := chatServiceForTest
+	oldPeopleSvc := peopleServiceForTest
+	oldNow := chatRecentNowForTest
+	chatServiceForTest = svc
+	peopleServiceForTest = nil
+	chatRecentNowForTest = func() time.Time { return now }
+	defer func() {
+		chatServiceForTest = oldChatSvc
+		peopleServiceForTest = oldPeopleSvc
+		chatRecentNowForTest = oldNow
+	}()
+
+	originalStdout := os.Stdout
+	reader, writer, err := os.Pipe()
 	if err != nil {
-		t.Fatalf("failed to list spaces: %v", err)
+		t.Fatalf("failed to create stdout pipe: %v", err)
+	}
+	os.Stdout = writer
+	defer func() {
+		os.Stdout = originalStdout
+	}()
+
+	cmd := newChatRecentCmd()
+	cmd.SetArgs([]string{"--since", "2h", "--max", "2"})
+	runErr := cmd.Execute()
+	if closeErr := writer.Close(); closeErr != nil {
+		t.Fatalf("failed to close stdout writer: %v", closeErr)
+	}
+	os.Stdout = originalStdout
+	out, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("failed to read stdout: %v", err)
+	}
+	if closeErr := reader.Close(); closeErr != nil {
+		t.Fatalf("failed to close stdout reader: %v", closeErr)
+	}
+	if runErr != nil {
+		t.Fatalf("chat recent returned error: %v\noutput:\n%s", runErr, out)
 	}
 
-	type activeSpace struct {
-		space      *chat.Space
-		activeTime time.Time
+	var result struct {
+		Since         string                   `json:"since"`
+		SpacesScanned int                      `json:"spaces_scanned"`
+		ActiveSpaces  int                      `json:"active_spaces"`
+		Count         int                      `json:"count"`
+		Messages      []map[string]interface{} `json:"messages"`
 	}
-	var active []activeSpace
-	for _, s := range resp.Spaces {
-		if s.LastActiveTime == "" {
-			continue
-		}
-		lat, err := time.Parse(time.RFC3339, s.LastActiveTime)
-		if err != nil {
-			continue
-		}
-		if lat.Before(since) {
-			continue
-		}
-		active = append(active, activeSpace{space: s, activeTime: lat})
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("failed to decode output: %v\noutput:\n%s", err, out)
 	}
 
-	if len(active) != 2 {
-		t.Fatalf("expected 2 active spaces (HOT and WARM), got %d", len(active))
+	if result.Since != sinceRFC {
+		t.Errorf("since = %q, want %q", result.Since, sinceRFC)
+	}
+	if result.SpacesScanned != 3 {
+		t.Errorf("spaces_scanned = %d, want 3", result.SpacesScanned)
+	}
+	if result.ActiveSpaces != 2 {
+		t.Errorf("active_spaces = %d, want 2", result.ActiveSpaces)
+	}
+	if result.Count != 2 || len(result.Messages) != 2 {
+		t.Fatalf("count/messages = %d/%d, want 2/2; output: %s", result.Count, len(result.Messages), out)
 	}
 
-	for _, as := range active {
-		filter := fmt.Sprintf(`createTime > "%s"`, sinceRFC)
-		_, err := svc.Spaces.Messages.List(as.space.Name).
-			Filter(filter).
-			OrderBy("createTime DESC").
-			Do()
-		if err != nil {
-			t.Fatalf("failed to list messages in %s: %v", as.space.Name, err)
+	wantNames := []string{"spaces/WARM/messages/newest", "spaces/HOT/messages/fractional"}
+	for i, want := range wantNames {
+		if got := result.Messages[i]["name"]; got != want {
+			t.Errorf("message %d name = %v, want %s", i, got, want)
 		}
+	}
+	if got := result.Messages[0]["space_display_name"]; got != "Warm Space" {
+		t.Errorf("first message space_display_name = %v, want Warm Space", got)
+	}
+	if got := result.Messages[0]["space_type"]; got != "SPACE" {
+		t.Errorf("first message space_type = %v, want SPACE", got)
 	}
 
 	for _, q := range messagesQueriedFor {
@@ -3873,19 +3945,17 @@ func TestChatRecent_FiltersInactiveSpaces(t *testing.T) {
 
 func TestChatRecent_GlobalSortAndCap(t *testing.T) {
 	rows := []map[string]interface{}{
-		{"create_time": "2026-04-30T11:00:00Z", "name": "msg-a"},
-		{"create_time": "2026-04-30T11:30:00Z", "name": "msg-b"},
-		{"create_time": "2026-04-30T11:15:00Z", "name": "msg-c"},
-		{"create_time": "2026-04-30T11:45:00Z", "name": "msg-d"},
+		{"create_time": "2026-04-30T11:00:00Z", "name": "msg-exact"},
+		{"create_time": "2026-04-30T11:00:00.900Z", "name": "msg-fractional"},
+		{"create_time": "2026-04-30T11:15:00Z", "name": "msg-mid"},
+		{"create_time": "2026-04-30T11:45:00Z", "name": "msg-newest"},
 	}
 
 	sort.SliceStable(rows, func(i, j int) bool {
-		ai, _ := rows[i]["create_time"].(string)
-		aj, _ := rows[j]["create_time"].(string)
-		return ai > aj
+		return chatRecentCreateTime(rows[i]).After(chatRecentCreateTime(rows[j]))
 	})
 
-	wantOrder := []string{"msg-d", "msg-b", "msg-c", "msg-a"}
+	wantOrder := []string{"msg-newest", "msg-mid", "msg-fractional", "msg-exact"}
 	for i, w := range wantOrder {
 		if got := rows[i]["name"]; got != w {
 			t.Errorf("position %d: got %v, want %s", i, got, w)
@@ -3896,7 +3966,7 @@ func TestChatRecent_GlobalSortAndCap(t *testing.T) {
 	if int64(len(rows)) > maxResults {
 		rows = rows[:maxResults]
 	}
-	if len(rows) != 2 || rows[0]["name"] != "msg-d" || rows[1]["name"] != "msg-b" {
+	if len(rows) != 2 || rows[0]["name"] != "msg-newest" || rows[1]["name"] != "msg-mid" {
 		t.Errorf("after cap: %+v", rows)
 	}
 }

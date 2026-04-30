@@ -348,6 +348,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | Command | Description |
 |---------|-------------|
 | `gws chat list` | List spaces (`--filter`, `--page-size`) |
+| `gws chat recent` | Recap messages across active spaces (`--since`, `--max`, `--max-per-space`, `--max-spaces`) |
 | `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`, `--after`, `--before`, `--resolve-senders`) |
 | `gws chat members <space>` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`) |
 | `gws chat send` | Send message (`--space`, `--text`) |
