@@ -2782,3 +2782,117 @@ func TestBuildMIMEMessage(t *testing.T) {
 		}
 	})
 }
+
+// --- Issue #181: attachment metadata discoverability ---
+
+func TestExtractAttachments_FlatPayload(t *testing.T) {
+	payload := &gmail.MessagePart{
+		MimeType: "multipart/mixed",
+		Parts: []*gmail.MessagePart{
+			{
+				PartId:   "0",
+				MimeType: "text/plain",
+				Body:     &gmail.MessagePartBody{Data: "aGVsbG8="},
+			},
+			{
+				PartId:   "1",
+				MimeType: "application/pdf",
+				Filename: "resume.pdf",
+				Body: &gmail.MessagePartBody{
+					AttachmentId: "ATT_PDF_1",
+					Size:         12345,
+				},
+			},
+			{
+				PartId:   "2",
+				MimeType: "image/png",
+				Filename: "logo.png",
+				Body: &gmail.MessagePartBody{
+					AttachmentId: "ATT_PNG_2",
+					Size:         678,
+				},
+			},
+		},
+	}
+
+	got := extractAttachments(payload)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 attachments, got %d", len(got))
+	}
+	if got[0]["filename"] != "resume.pdf" || got[0]["attachment_id"] != "ATT_PDF_1" {
+		t.Errorf("first attachment wrong: %+v", got[0])
+	}
+	if got[0]["mime_type"] != "application/pdf" {
+		t.Errorf("mime_type = %v, want application/pdf", got[0]["mime_type"])
+	}
+	if got[0]["size"] != int64(12345) {
+		t.Errorf("size = %v (%T), want int64(12345)", got[0]["size"], got[0]["size"])
+	}
+	if got[1]["filename"] != "logo.png" || got[1]["attachment_id"] != "ATT_PNG_2" {
+		t.Errorf("second attachment wrong: %+v", got[1])
+	}
+}
+
+func TestExtractAttachments_NestedMultipart(t *testing.T) {
+	payload := &gmail.MessagePart{
+		MimeType: "multipart/mixed",
+		Parts: []*gmail.MessagePart{
+			{
+				MimeType: "multipart/alternative",
+				Parts: []*gmail.MessagePart{
+					{MimeType: "text/plain", Body: &gmail.MessagePartBody{Data: "aGk="}},
+					{MimeType: "text/html", Body: &gmail.MessagePartBody{Data: "PGk+"}},
+				},
+			},
+			{
+				MimeType: "application/pdf",
+				Filename: "contract.pdf",
+				Body:     &gmail.MessagePartBody{AttachmentId: "ATT_DEEP", Size: 999},
+			},
+		},
+	}
+
+	got := extractAttachments(payload)
+	if len(got) != 1 || got[0]["attachment_id"] != "ATT_DEEP" {
+		t.Fatalf("expected one nested attachment with id ATT_DEEP, got %+v", got)
+	}
+}
+
+func TestExtractAttachments_NoAttachments(t *testing.T) {
+	payload := &gmail.MessagePart{
+		MimeType: "text/plain",
+		Body:     &gmail.MessagePartBody{Data: "aGVsbG8="},
+	}
+	if got := extractAttachments(payload); len(got) != 0 {
+		t.Errorf("expected no attachments, got %+v", got)
+	}
+	// Nil-safe.
+	if got := extractAttachments(nil); got != nil {
+		t.Errorf("expected nil for nil payload, got %+v", got)
+	}
+}
+
+func TestExtractAttachments_SkipsPartsWithoutAttachmentID(t *testing.T) {
+	// A text/plain body part has data but no AttachmentId — must not be
+	// reported as an attachment. Same for an inline part with a filename
+	// but no AttachmentId (the only handle gws gmail attachment can use).
+	payload := &gmail.MessagePart{
+		MimeType: "multipart/mixed",
+		Parts: []*gmail.MessagePart{
+			{
+				PartId:   "0",
+				MimeType: "text/plain",
+				Body:     &gmail.MessagePartBody{Data: "aGVsbG8="},
+			},
+			{
+				PartId:   "1",
+				MimeType: "image/png",
+				Filename: "inline.png",
+				Body:     &gmail.MessagePartBody{Data: "ZGF0YQ=="},
+			},
+		},
+	}
+	if got := extractAttachments(payload); len(got) != 0 {
+		t.Errorf("expected no attachments, got %+v", got)
+	}
+}

@@ -80,6 +80,12 @@ No additional flags. Use the `message_id` from `gws gmail list` output.
 - `headers` — Object with `subject`, `from`, `to`, `date`, `cc`, `bcc`
 - `body` — Message body text
 - `labels` — Applied label IDs
+- `attachments` — Array (omitted when empty). Each entry:
+  - `filename` — Attachment file name
+  - `mime_type` — MIME type
+  - `size` — Size in bytes
+  - `attachment_id` — Pass to `gws gmail attachment --id <id>`
+  - `part_id` — Gmail part identifier
 
 ---
 
@@ -102,6 +108,7 @@ No additional flags. Use the `thread_id` from `gws gmail list` output.
   - `headers` — Object with `subject`, `from`, `to`, `date`, `cc`, `bcc`
   - `body` — Message body text
   - `labels` — Applied label IDs
+  - `attachments` — Array (omitted when empty); same shape as `gws gmail read`
 
 ---
 
@@ -580,7 +587,7 @@ Usage: gws gmail attachment [flags]
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
 | `--message-id` | string | | Yes | Message ID |
-| `--id` | string | | Yes | Attachment ID |
+| `--id` | string | | Yes | Attachment ID (from the `attachments` array on `gws gmail read` / `gws gmail thread`) |
 | `--output` | string | | Yes | Output file path |
 
 ### Output Fields (JSON)

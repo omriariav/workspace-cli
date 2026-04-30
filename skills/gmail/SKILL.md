@@ -104,7 +104,7 @@ gws gmail list --query "label:work" --all
 gws gmail thread <thread-id>
 ```
 
-Reads and displays all messages in a Gmail thread (conversation). Use the `thread_id` from `gws gmail list` output. Returns all messages with headers, body, and labels.
+Reads and displays all messages in a Gmail thread (conversation). Use the `thread_id` from `gws gmail list` output. Returns all messages with headers, body, labels, and `attachments` (when present) — each entry exposes `filename`, `mime_type`, `size`, `attachment_id`, and `part_id`.
 
 ### read — Read a message
 
@@ -112,7 +112,12 @@ Reads and displays all messages in a Gmail thread (conversation). Use the `threa
 gws gmail read <message-id>
 ```
 
-Reads and displays the content of a specific email message. Use the `message_id` from `gws gmail list` output.
+Reads and displays the content of a specific email message. Use the `message_id` from `gws gmail list` output. When the message has attachments, the response includes an `attachments` array. Each entry has `filename`, `mime_type`, `size`, `attachment_id`, and `part_id`; pass `attachment_id` to `gws gmail attachment --id <id>` to download.
+
+```bash
+ATT_ID=$(gws gmail read <msg-id> --format json | jq -r '.attachments[0].attachment_id')
+gws gmail attachment --message-id <msg-id> --id "$ATT_ID" --output file.pdf
+```
 
 ### send — Send an email
 
@@ -455,9 +460,15 @@ gws gmail attachment --message-id <msg-id> --id <attachment-id> --output <file-p
 - `--id string` — Attachment ID (required)
 - `--output string` — Output file path (required)
 
+Discover the `--id` value from the `attachments` array on `gws gmail read` or `gws gmail thread` output. Each entry includes `filename`, `mime_type`, `size`, `attachment_id`, and `part_id`.
+
 **Examples:**
 ```bash
 gws gmail attachment --message-id 18abc123 --id ANGjdJ9x --output report.pdf
+
+# End-to-end: discover the attachment ID and download it.
+ATT_ID=$(gws gmail read 18abc123 --format json | jq -r '.attachments[0].attachment_id')
+gws gmail attachment --message-id 18abc123 --id "$ATT_ID" --output report.pdf
 ```
 
 ## Tips for AI Agents

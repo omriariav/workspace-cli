@@ -634,6 +634,12 @@ func runGmailRead(cmd *cobra.Command, args []string) error {
 	// Labels
 	result["labels"] = msg.LabelIds
 
+	// Attachments — surface attachment_id so callers can chain to
+	// `gws gmail attachment --message-id <id> --id <attachment-id>`.
+	if atts := extractAttachments(msg.Payload); len(atts) > 0 {
+		result["attachments"] = atts
+	}
+
 	return p.Print(result)
 }
 
@@ -1149,6 +1155,11 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 		// Labels
 		msgInfo["labels"] = msg.LabelIds
 
+		// Attachments
+		if atts := extractAttachments(msg.Payload); len(atts) > 0 {
+			msgInfo["attachments"] = atts
+		}
+
 		messages = append(messages, msgInfo)
 	}
 
@@ -1568,6 +1579,38 @@ func emailMatchesSelf(addr string, myEmail string) bool {
 		}
 	}
 	return addr == myEmail
+}
+
+// extractAttachments walks a message payload and returns metadata for every
+// part that carries a Gmail attachment ID. Inline parts that are also
+// presented as downloadable attachments (image references, calendar
+// invites, etc.) are included so callers can pass `attachment_id` to
+// `gws gmail attachment` without needing the web UI.
+func extractAttachments(payload *gmail.MessagePart) []map[string]interface{} {
+	if payload == nil {
+		return nil
+	}
+	var out []map[string]interface{}
+	var walk func(part *gmail.MessagePart)
+	walk = func(part *gmail.MessagePart) {
+		if part == nil {
+			return
+		}
+		if part.Body != nil && part.Body.AttachmentId != "" && part.Filename != "" {
+			out = append(out, map[string]interface{}{
+				"filename":      part.Filename,
+				"mime_type":     part.MimeType,
+				"size":          part.Body.Size,
+				"attachment_id": part.Body.AttachmentId,
+				"part_id":       part.PartId,
+			})
+		}
+		for _, child := range part.Parts {
+			walk(child)
+		}
+	}
+	walk(payload)
+	return out
 }
 
 // extractBody extracts the plain text body from a message payload.
