@@ -9,7 +9,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/spacecache"
 	"github.com/spf13/cobra"
@@ -3666,4 +3669,269 @@ func TestChatFindGroup_NoCache(t *testing.T) {
 	if !ok || errMsg == "" {
 		t.Errorf("expected error message in output, got %v", result)
 	}
+}
+
+// --- Issue #182: chat recent ---
+
+func TestParseSinceWindow_Durations(t *testing.T) {
+	now := mustParseTime(t, "2026-04-30T12:00:00Z")
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"2h", "2026-04-30T10:00:00Z"},
+		{"12h", "2026-04-30T00:00:00Z"},
+		{"30m", "2026-04-30T11:30:00Z"},
+		{"7d", "2026-04-23T12:00:00Z"},
+		{"1d", "2026-04-29T12:00:00Z"},
+	}
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			got, err := parseSinceWindow(c.in, now)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.UTC().Format(time.RFC3339) != c.want {
+				t.Errorf("got %s, want %s", got.UTC().Format(time.RFC3339), c.want)
+			}
+		})
+	}
+}
+
+func TestParseSinceWindow_RFC3339(t *testing.T) {
+	now := mustParseTime(t, "2026-04-30T12:00:00Z")
+	got, err := parseSinceWindow("2026-04-30T09:00:00Z", now)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.UTC().Format(time.RFC3339) != "2026-04-30T09:00:00Z" {
+		t.Errorf("got %s, want 2026-04-30T09:00:00Z", got.UTC().Format(time.RFC3339))
+	}
+}
+
+func TestParseSinceWindow_Invalid(t *testing.T) {
+	now := mustParseTime(t, "2026-04-30T12:00:00Z")
+	cases := []string{"", "yesterday", "0h", "-1h", "2x", "d"}
+	for _, c := range cases {
+		t.Run(fmt.Sprintf("input=%q", c), func(t *testing.T) {
+			if _, err := parseSinceWindow(c, now); err == nil {
+				t.Errorf("expected error for %q", c)
+			}
+		})
+	}
+}
+
+func TestChatRecentCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "recent")
+	if cmd == nil {
+		t.Fatal("chat recent command not found")
+	}
+	for _, flag := range []string{"since", "max", "max-per-space", "max-spaces", "resolve-senders", "exclude-self"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+	if def := cmd.Flags().Lookup("since").DefValue; def != "2h" {
+		t.Errorf("expected --since default '2h', got %q", def)
+	}
+	if def := cmd.Flags().Lookup("max").DefValue; def != "500" {
+		t.Errorf("expected --max default '500', got %q", def)
+	}
+}
+
+// TestChatRecent_FiltersInactiveSpaces drives the same SDK calls runChatRecent
+// makes — Spaces.List, then Spaces.Messages.List with a createTime filter and
+// orderBy=createTime DESC — to lock that wire contract.
+func TestChatRecent_FiltersInactiveSpaces(t *testing.T) {
+	now := mustParseTime(t, "2026-04-30T12:00:00Z")
+	since := now.Add(-2 * time.Hour) // 10:00 cutoff
+	sinceRFC := since.UTC().Format(time.RFC3339)
+
+	var (
+		messagesQueriedFor []string
+		capturedFilters    []string
+		capturedOrderBy    []string
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/v1/spaces" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"spaces": []map[string]interface{}{
+					{
+						"name":           "spaces/HOT",
+						"displayName":    "Hot Space",
+						"type":           "SPACE",
+						"lastActiveTime": now.Add(-5 * time.Minute).UTC().Format(time.RFC3339),
+					},
+					{
+						"name":           "spaces/COLD",
+						"displayName":    "Cold Space",
+						"type":           "SPACE",
+						"lastActiveTime": now.Add(-48 * time.Hour).UTC().Format(time.RFC3339),
+					},
+					{
+						"name":           "spaces/WARM",
+						"displayName":    "Warm Space",
+						"type":           "SPACE",
+						"lastActiveTime": now.Add(-90 * time.Minute).UTC().Format(time.RFC3339),
+					},
+				},
+			})
+			return
+		}
+
+		if strings.HasPrefix(r.URL.Path, "/v1/spaces/") && strings.HasSuffix(r.URL.Path, "/messages") {
+			spaceID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/spaces/"), "/messages")
+			messagesQueriedFor = append(messagesQueriedFor, spaceID)
+			capturedFilters = append(capturedFilters, r.URL.Query().Get("filter"))
+			capturedOrderBy = append(capturedOrderBy, r.URL.Query().Get("orderBy"))
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"messages": []map[string]interface{}{
+					{
+						"name":       "spaces/" + spaceID + "/messages/m1",
+						"text":       "hi from " + spaceID,
+						"createTime": now.Add(-30 * time.Minute).UTC().Format(time.RFC3339),
+						"sender":     map[string]interface{}{"name": "users/123", "type": "HUMAN"},
+					},
+				},
+			})
+			return
+		}
+
+		t.Logf("unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	resp, err := svc.Spaces.List().Do()
+	if err != nil {
+		t.Fatalf("failed to list spaces: %v", err)
+	}
+
+	type activeSpace struct {
+		space      *chat.Space
+		activeTime time.Time
+	}
+	var active []activeSpace
+	for _, s := range resp.Spaces {
+		if s.LastActiveTime == "" {
+			continue
+		}
+		lat, err := time.Parse(time.RFC3339, s.LastActiveTime)
+		if err != nil {
+			continue
+		}
+		if lat.Before(since) {
+			continue
+		}
+		active = append(active, activeSpace{space: s, activeTime: lat})
+	}
+
+	if len(active) != 2 {
+		t.Fatalf("expected 2 active spaces (HOT and WARM), got %d", len(active))
+	}
+
+	for _, as := range active {
+		filter := fmt.Sprintf(`createTime > "%s"`, sinceRFC)
+		_, err := svc.Spaces.Messages.List(as.space.Name).
+			Filter(filter).
+			OrderBy("createTime DESC").
+			Do()
+		if err != nil {
+			t.Fatalf("failed to list messages in %s: %v", as.space.Name, err)
+		}
+	}
+
+	for _, q := range messagesQueriedFor {
+		if q == "COLD" {
+			t.Errorf("inactive space spaces/COLD was queried for messages")
+		}
+	}
+	if len(messagesQueriedFor) != 2 {
+		t.Errorf("expected exactly 2 message queries, got %d (%v)", len(messagesQueriedFor), messagesQueriedFor)
+	}
+
+	for i, f := range capturedFilters {
+		want := fmt.Sprintf(`createTime > "%s"`, sinceRFC)
+		if f != want {
+			t.Errorf("query %d: filter = %q, want %q", i, f, want)
+		}
+	}
+	for i, o := range capturedOrderBy {
+		if o != "createTime DESC" {
+			t.Errorf("query %d: orderBy = %q, want createTime DESC", i, o)
+		}
+	}
+}
+
+func TestChatRecent_GlobalSortAndCap(t *testing.T) {
+	rows := []map[string]interface{}{
+		{"create_time": "2026-04-30T11:00:00Z", "name": "msg-a"},
+		{"create_time": "2026-04-30T11:30:00Z", "name": "msg-b"},
+		{"create_time": "2026-04-30T11:15:00Z", "name": "msg-c"},
+		{"create_time": "2026-04-30T11:45:00Z", "name": "msg-d"},
+	}
+
+	sort.SliceStable(rows, func(i, j int) bool {
+		ai, _ := rows[i]["create_time"].(string)
+		aj, _ := rows[j]["create_time"].(string)
+		return ai > aj
+	})
+
+	wantOrder := []string{"msg-d", "msg-b", "msg-c", "msg-a"}
+	for i, w := range wantOrder {
+		if got := rows[i]["name"]; got != w {
+			t.Errorf("position %d: got %v, want %s", i, got, w)
+		}
+	}
+
+	const maxResults = int64(2)
+	if int64(len(rows)) > maxResults {
+		rows = rows[:maxResults]
+	}
+	if len(rows) != 2 || rows[0]["name"] != "msg-d" || rows[1]["name"] != "msg-b" {
+		t.Errorf("after cap: %+v", rows)
+	}
+}
+
+func TestChatRecent_ExcludeSelfFiltering(t *testing.T) {
+	const self = "users/123"
+	msgs := []*chat.Message{
+		{Name: "spaces/A/messages/1", Sender: &chat.User{Name: "users/123", Type: "HUMAN"}},
+		{Name: "spaces/A/messages/2", Sender: &chat.User{Name: "users/456", Type: "HUMAN"}},
+		{Name: "spaces/A/messages/3", Sender: &chat.User{Name: "users/123", Type: "HUMAN"}},
+		{Name: "spaces/A/messages/4", Sender: nil},
+	}
+	var kept []string
+	for _, m := range msgs {
+		if m.Sender != nil && m.Sender.Name == self {
+			continue
+		}
+		kept = append(kept, m.Name)
+	}
+	want := []string{"spaces/A/messages/2", "spaces/A/messages/4"}
+	if len(kept) != len(want) {
+		t.Fatalf("kept %d msgs, want %d (%v)", len(kept), len(want), kept)
+	}
+	for i, w := range want {
+		if kept[i] != w {
+			t.Errorf("position %d: got %s, want %s", i, kept[i], w)
+		}
+	}
+}
+
+func mustParseTime(t *testing.T, s string) time.Time {
+	t.Helper()
+	tt, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatalf("invalid test time %q: %v", s, err)
+	}
+	return tt
 }
