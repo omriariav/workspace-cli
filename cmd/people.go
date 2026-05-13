@@ -13,6 +13,7 @@ import (
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/spf13/cobra"
+	people "google.golang.org/api/people/v1"
 )
 
 var peopleCmd = &cobra.Command{
@@ -59,7 +60,13 @@ func runPeopleGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	return runPeopleGetWithSvc(cmd, svc, args)
+}
 
+// runPeopleGetWithSvc is the testable inner half of runPeopleGet — takes
+// an injected *people.Service so the runner can be exercised against an
+// httptest backend without needing real OAuth.
+func runPeopleGetWithSvc(cmd *cobra.Command, svc *people.Service, args []string) error {
 	params, perr := parseParams(cmd)
 	if perr != nil {
 		return perr

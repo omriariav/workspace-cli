@@ -389,49 +389,117 @@ func TestChatMembersRaw_AllIgnoresDefaultMaxCap(t *testing.T) {
 
 // --- people get ----------------------------------------------------------
 
-func TestPeopleGetRaw_HonorsParamsResourceNameAndPersonFields(t *testing.T) {
-	var path string
-	var query url.Values
+// peopleGetTestServer is shared scaffolding for the runner tests.
+func peopleGetTestServer(t *testing.T, capture func(path string, q url.Values)) (*people.Service, func()) {
+	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path = r.URL.Path
-		query = r.URL.Query()
+		if capture != nil {
+			capture(r.URL.Path, r.URL.Query())
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(&people.Person{
 			ResourceName: "people/me",
 			Etag:         "etag-1",
 			EmailAddresses: []*people.EmailAddress{
-				{Value: "me@example.com"},
+				{Value: "me@example.com", Type: "work"},
 			},
+			Names: []*people.Name{{DisplayName: "Test User"}},
 		})
 	}))
-	defer server.Close()
-
 	svc, err := people.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
 	if err != nil {
+		server.Close()
 		t.Fatal(err)
 	}
+	return svc, server.Close
+}
 
-	// Drive through the People.Get call to verify the API parameter
-	// shape (this mirrors what runPeopleGet builds via params).
-	person, err := svc.People.Get("people/me").PersonFields("emailAddresses").Do()
+func newPeopleGetCmd(t *testing.T, flags map[string]string) *cobra.Command {
+	t.Helper()
+	c := &cobra.Command{Use: "get"}
+	addRawParamsFlags(c)
+	c.Flags().String("person-fields", "", "")
+	for k, v := range flags {
+		if err := c.Flags().Set(k, v); err != nil {
+			t.Fatalf("set %s=%s: %v", k, v, err)
+		}
+	}
+	return c
+}
+
+func TestRunPeopleGet_ParamsOverrideArgsAndSendsPersonFields(t *testing.T) {
+	var gotPath string
+	var gotQuery url.Values
+	svc, cleanup := peopleGetTestServer(t, func(p string, q url.Values) {
+		gotPath = p
+		gotQuery = q
+	})
+	defer cleanup()
+
+	cmd := newPeopleGetCmd(t, map[string]string{
+		"raw":    "true",
+		"params": `{"resourceName":"people/me","personFields":"emailAddresses"}`,
+	})
+	out, err := captureStdout(t, func() error {
+		// Positional arg is wrong on purpose — --params must win.
+		return runPeopleGetWithSvc(cmd, svc, []string{"people/ignored"})
+	})
 	if err != nil {
-		t.Fatalf("people get: %v", err)
+		t.Fatalf("runner err: %v", err)
 	}
-	if person.ResourceName != "people/me" {
-		t.Errorf("expected resourceName=people/me, got %q", person.ResourceName)
+	if !strings.HasSuffix(gotPath, "/people/me") {
+		t.Errorf("expected /people/me from --params, got %q", gotPath)
 	}
-	if !strings.HasSuffix(path, "/people/me") {
-		t.Errorf("expected path to end in /people/me, got %q", path)
-	}
-	if got := query.Get("personFields"); got != "emailAddresses" {
-		t.Errorf("expected personFields=emailAddresses, got %q", got)
-	}
-	// Sanity-check the raw shape via printRaw.
-	out, err := captureStdout(t, func() error { return printRaw(person) })
-	if err != nil {
-		t.Fatal(err)
+	if pf := gotQuery.Get("personFields"); pf != "emailAddresses" {
+		t.Errorf("expected personFields=emailAddresses, got %q", pf)
 	}
 	if !strings.Contains(out, `"resourceName"`) || !strings.Contains(out, `"emailAddresses"`) {
 		t.Errorf("expected raw People shape, got %s", out)
+	}
+	// Default ergonomic shape should not appear under --raw.
+	if strings.Contains(out, `"emails"`) {
+		t.Errorf("raw mode should not emit formatted 'emails', got %s", out)
+	}
+}
+
+func TestRunPeopleGet_PersonFieldsFlagFallback(t *testing.T) {
+	var gotQuery url.Values
+	svc, cleanup := peopleGetTestServer(t, func(_ string, q url.Values) {
+		gotQuery = q
+	})
+	defer cleanup()
+
+	cmd := newPeopleGetCmd(t, map[string]string{
+		"person-fields": "names,emailAddresses",
+	})
+	_, err := captureStdout(t, func() error {
+		return runPeopleGetWithSvc(cmd, svc, []string{"people/me"})
+	})
+	if err != nil {
+		t.Fatalf("runner err: %v", err)
+	}
+	if pf := gotQuery.Get("personFields"); pf != "names,emailAddresses" {
+		t.Errorf("expected personFields from --person-fields flag, got %q", pf)
+	}
+}
+
+func TestRunPeopleGet_MissingResourceNameErrors(t *testing.T) {
+	svc, cleanup := peopleGetTestServer(t, nil)
+	defer cleanup()
+
+	cmd := newPeopleGetCmd(t, nil)
+	err := runPeopleGetWithSvc(cmd, svc, nil)
+	if err == nil {
+		t.Fatal("expected error when resourceName missing")
+	}
+	if !strings.Contains(err.Error(), "resourceName is required") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestParseParams_RejectsTrailingJunk(t *testing.T) {
+	c := newFlagCmd(`{"pageSize":50} garbage`, false)
+	if _, err := parseParams(c); err == nil {
+		t.Fatal("expected error for trailing junk after JSON")
 	}
 }

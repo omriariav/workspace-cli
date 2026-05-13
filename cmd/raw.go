@@ -62,6 +62,11 @@ func parseParams(cmd *cobra.Command) (map[string]interface{}, error) {
 	if err := dec.Decode(&m); err != nil {
 		return nil, fmt.Errorf("--params: invalid JSON: %w", err)
 	}
+	// Reject trailing junk after the object so scripts don't silently
+	// drop a typo'd second value.
+	if dec.More() {
+		return nil, fmt.Errorf("--params: unexpected trailing data after JSON object")
+	}
 	return m, nil
 }
 
