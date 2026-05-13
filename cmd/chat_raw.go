@@ -10,11 +10,9 @@ package cmd
 // is concatenated across pages and nextPageToken is dropped.
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
-	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/chat/v1"
 )
@@ -294,9 +292,6 @@ func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, 
 		}
 	}
 
-	ctx := context.Background()
-	_ = ctx // reserved for future use with .Pages()
-
 	var aggregated *chat.ListMembershipsResponse
 	for {
 		call := svc.Spaces.Members.List(spaceName).PageSize(pageSize)
@@ -347,16 +342,4 @@ func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, 
 		aggregated.NextPageToken = ""
 	}
 	return printRaw(aggregated)
-}
-
-// chatRawServiceFromCmd is a small helper used by the existing runners to
-// construct a chat client for the raw paths without changing their
-// signatures.
-func chatRawServiceFromCmd() (*chat.Service, error) {
-	ctx := context.Background()
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return factory.Chat()
 }
