@@ -94,9 +94,14 @@ func init() {
 	addRawParamsFlags(chatListCmd)
 	addRawParamsFlags(chatMessagesCmd)
 	addRawParamsFlags(chatMembersCmd)
-	chatListCmd.Flags().Bool("all", false, "Fetch all matching results across pages (raw mode aggregates list field)")
-	chatMessagesCmd.Flags().Bool("all", false, "Fetch all matching results across pages (raw mode aggregates list field)")
-	chatMembersCmd.Flags().Bool("all", false, "Fetch all matching results across pages (raw mode aggregates list field)")
+	// --all is wired here for symmetry with the new list commands, but
+	// the ergonomic chat messages/members runners do not honor it
+	// (their default ergonomic shape is per-space and intentionally
+	// bounded). Help text reflects that it only takes effect under
+	// --raw on these commands.
+	chatListCmd.Flags().Bool("all", false, "Fetch all matching results across pages (raw mode aggregates list field; ergonomic mode already returns all when --max=0)")
+	chatMessagesCmd.Flags().Bool("all", false, "Raw mode only: fetch all matching pages and concatenate (no effect without --raw)")
+	chatMembersCmd.Flags().Bool("all", false, "Raw mode only: fetch all matching pages and concatenate (no effect without --raw)")
 }
 
 // runChatListRaw implements `gws chat spaces list --raw` (and `gws chat list --raw`).

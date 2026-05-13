@@ -35,11 +35,13 @@ var contactsSearchCmd = &cobra.Command{
 }
 
 var contactsGetCmd = &cobra.Command{
-	Use:   "get <resource-name>",
+	Use:   "get [resource-name]",
 	Short: "Get contact details",
-	Long:  "Gets detailed information about a specific contact by resource name (e.g., people/c1234567890).",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runContactsGet,
+	Long: `Gets detailed information about a specific contact by resource name (e.g., people/c1234567890).
+
+Either pass <resource-name> as a positional argument or set "resourceName" via --params.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runContactsGet,
 }
 
 var contactsCreateCmd = &cobra.Command{
@@ -300,7 +302,10 @@ func runContactsGet(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	resourceName := args[0]
+	resourceName := ""
+	if len(args) > 0 {
+		resourceName = args[0]
+	}
 	pf := personFields
 
 	params, perr := parseParams(cmd)
@@ -312,6 +317,9 @@ func runContactsGet(cmd *cobra.Command, args []string) error {
 	}
 	if v, ok := paramString(params, "personFields"); ok && v != "" {
 		pf = v
+	}
+	if resourceName == "" {
+		return p.PrintError(fmt.Errorf("contacts get: resource-name is required (positional arg or --params resourceName)"))
 	}
 
 	call := svc.People.Get(resourceName).PersonFields(pf)

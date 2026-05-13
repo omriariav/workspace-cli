@@ -131,12 +131,12 @@ gws contacts search "Jane Smith" --format json | jq -r '.contacts[0].resource_na
 Gets detailed information about a specific contact by resource name.
 
 ```
-Usage: gws contacts get <resource-name>
+Usage: gws contacts get [resource-name] [flags]
 ```
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `resource-name` | string | Yes | Resource identifier (e.g., `people/c1234567890`) |
+| `resource-name` | string | One of | Resource identifier (e.g., `people/c1234567890`). Required unless supplied via `--params resourceName`. |
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|

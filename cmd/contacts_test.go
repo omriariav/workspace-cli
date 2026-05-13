@@ -19,7 +19,7 @@ func TestContactsCommands(t *testing.T) {
 	}{
 		{"list", "list"},
 		{"search", "search <query>"},
-		{"get", "get <resource-name>"},
+		{"get", "get [resource-name]"},
 		{"create", "create"},
 		{"delete", "delete <resource-name>"},
 		{"update", "update <resource-name>"},
