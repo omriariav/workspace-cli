@@ -477,7 +477,7 @@ Several list/get commands accept two extra flags for scripting:
   equivalent CLI flags (params win).
 
 Under `--all`, raw mode concatenates the top-level list field across pages
-(messages / spaces / members) and drops `nextPageToken` from the final
+(`messages` / `spaces` / `memberships`) and drops `nextPageToken` from the final
 output.
 
 Supported in this release:

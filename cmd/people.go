@@ -52,6 +52,22 @@ func init() {
 
 func runPeopleGet(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
+
+	// Pre-validate that we have a resourceName from positional or
+	// --params before touching auth. Surfaces input errors immediately
+	// instead of after OAuth/config failures.
+	params, perr := parseParams(cmd)
+	if perr != nil {
+		return p.PrintError(perr)
+	}
+	hasResource := len(args) > 0 && args[0] != ""
+	if v, ok := paramString(params, "resourceName"); ok && v != "" {
+		hasResource = true
+	}
+	if !hasResource {
+		return p.PrintError(errors.New("people get: resourceName is required (positional arg or --params resourceName)"))
+	}
+
 	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {

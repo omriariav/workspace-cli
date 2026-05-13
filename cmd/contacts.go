@@ -290,18 +290,9 @@ func runContactsSearch(cmd *cobra.Command, args []string) error {
 
 func runContactsGet(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.People()
-	if err != nil {
-		return p.PrintError(err)
-	}
-
+	// Resolve resource name from positional + --params before touching auth
+	// so input errors surface ahead of OAuth/config errors.
 	resourceName := ""
 	if len(args) > 0 {
 		resourceName = args[0]
@@ -320,6 +311,17 @@ func runContactsGet(cmd *cobra.Command, args []string) error {
 	}
 	if resourceName == "" {
 		return p.PrintError(fmt.Errorf("contacts get: resource-name is required (positional arg or --params resourceName)"))
+	}
+
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.People()
+	if err != nil {
+		return p.PrintError(err)
 	}
 
 	call := svc.People.Get(resourceName).PersonFields(pf)

@@ -1262,8 +1262,25 @@ func runGmailTrash(cmd *cobra.Command, args []string) error {
 
 func runGmailThread(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	// Resolve thread id from positional + --params before touching auth
+	// so input errors surface ahead of OAuth/config errors.
+	threadID := ""
+	if len(args) > 0 {
+		threadID = args[0]
+	}
+	params, perr := parseParams(cmd)
+	if perr != nil {
+		return p.PrintError(perr)
+	}
+	if v, ok := paramString(params, "id"); ok && v != "" {
+		threadID = v
+	}
+	if threadID == "" {
+		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)"))
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -1274,18 +1291,10 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	threadID := ""
-	if len(args) > 0 {
-		threadID = args[0]
-	}
-
 	if isRaw(cmd) {
-		// runGmailThreadRaw applies --params id; final emptiness is
-		// validated inside the raw runner.
+		// runGmailThreadRaw also parses --params; threadID is already
+		// resolved, so the runner's own params check is a no-op pass-through.
 		return runGmailThreadRaw(cmd, svc, threadID)
-	}
-	if threadID == "" {
-		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required"))
 	}
 
 	thread, err := svc.Users.Threads.Get("me", threadID).Format("full").Do()
