@@ -158,15 +158,18 @@ Examples:
 }
 
 var gmailThreadCmd = &cobra.Command{
-	Use:   "thread <thread-id>",
+	Use:   "thread [thread-id]",
 	Short: "Read a full thread",
 	Long: `Reads and displays all messages in a Gmail thread (conversation).
 
 Use the thread_id from "gws gmail list" to view the full conversation.
+The thread id is required; pass it as a positional argument or supply it
+via --params (e.g. '{"id":"18abc"}') when using --raw.
 
 Examples:
-  gws gmail thread 18abc123`,
-	Args: cobra.ExactArgs(1),
+  gws gmail thread 18abc123
+  gws gmail thread --raw --params '{"id":"18abc123","format":"metadata"}'`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runGmailThread,
 }
 
@@ -1266,10 +1269,18 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	threadID := args[0]
+	threadID := ""
+	if len(args) > 0 {
+		threadID = args[0]
+	}
 
 	if isRaw(cmd) {
+		// runGmailThreadRaw applies --params id; final emptiness is
+		// validated inside the raw runner.
 		return runGmailThreadRaw(cmd, svc, threadID)
+	}
+	if threadID == "" {
+		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required"))
 	}
 
 	thread, err := svc.Users.Threads.Get("me", threadID).Format("full").Do()
@@ -1328,6 +1339,9 @@ func runGmailThreadRaw(cmd *cobra.Command, svc *gmail.Service, threadID string) 
 	// --params overrides: id (resource path), format, metadataHeaders.
 	if v, ok := paramString(params, "id"); ok && v != "" {
 		threadID = v
+	}
+	if threadID == "" {
+		return fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)")
 	}
 	format := "full"
 	if v, ok := paramString(params, "format"); ok && v != "" {

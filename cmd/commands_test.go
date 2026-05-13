@@ -124,7 +124,7 @@ func TestGmailCommands(t *testing.T) {
 		{"archive", "archive <message-id>", true},
 		{"trash", "trash <message-id>", true},
 		{"archive-thread", "archive-thread <thread-id>", true},
-		{"thread", "thread <thread-id>", true},
+		{"thread", "thread [thread-id]", true},
 		{"event-id", "event-id <message-id>", true},
 		{"reply", "reply <message-id>", true},
 		{"forward", "forward <message-id>", true},

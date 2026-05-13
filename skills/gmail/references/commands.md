@@ -96,7 +96,7 @@ No additional flags. Use the `message_id` from `gws gmail list` output.
 Reads and displays all messages in a Gmail thread (conversation).
 
 ```
-Usage: gws gmail thread <thread-id>
+Usage: gws gmail thread [thread-id]
 ```
 
 Use the `thread_id` from `gws gmail list` output.
