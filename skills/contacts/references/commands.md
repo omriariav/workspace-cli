@@ -138,16 +138,41 @@ Usage: gws contacts get <resource-name>
 |----------|------|----------|-------------|
 | `resource-name` | string | Yes | Resource identifier (e.g., `people/c1234567890`) |
 
-No additional flags.
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--raw` | bool | false | Emit unmodified `people.get` response JSON |
+| `--params` | string | | JSON object mapped to `people.get` request parameters (`resourceName`, `personFields`, `sources`). Overrides equivalent CLI flags. |
 
 ### Output Fields (JSON)
 
-Returns a single contact object with:
+Default ergonomic output is a single contact object with:
 - `resource_name` — Resource identifier
 - `name` — Contact's display name
 - `emails` — Array of email addresses (if available)
 - `phones` — Array of phone numbers (if available)
 - `organization` — Object with `name` and `title` (if available)
+
+Under `--raw` the response shape matches Google's `people.get` reference exactly (`resourceName`, `etag`, `names[]`, `emailAddresses[]`, etc.).
+
+---
+
+## gws people get
+
+Programmatic People.Get wrapper. Designed for scripting; pass `resourceName` and `personFields` directly as the API expects.
+
+```
+Usage: gws people get [resource-name] [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--person-fields` | string | (legacy default) | Comma-separated personFields mask (overridden by `--params personFields`) |
+| `--raw` | bool | false | Emit unmodified `people.get` response JSON |
+| `--params` | string | | JSON object mapped to `people.get` request parameters (`resourceName`, `personFields`, `sources`, `requestMask.includeField`). Overrides equivalent CLI flags. |
+
+```
+gws people get --params '{"resourceName":"people/me","personFields":"emailAddresses"}' --raw
+```
 
 ### Resource Name Format
 

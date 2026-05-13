@@ -94,9 +94,9 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 
 | Command | Description |
 |---------|-------------|
-| `gws gmail list` | List threads with `thread_id` and `message_id` (`--max`, `--query`, `--all`, `--include-labels`) |
+| `gws gmail list` | List threads with `thread_id` and `message_id` (`--max`, `--query`, `--all`, `--include-labels`, `--raw`, `--params`). Under `--raw` switches to `users.messages.list` shape. |
 | `gws gmail read <id>` | Read message body and headers |
-| `gws gmail thread <id>` | Read full thread conversation |
+| `gws gmail thread <id>` | Read full thread conversation (`--raw`, `--params`) |
 | `gws gmail send` | Send email (`--to`, `--subject`, `--body`, `--cc`, `--bcc`, `--thread-id`, `--reply-to-message-id`, `--attachment`) |
 | `gws gmail reply <id>` | Reply to message (`--body`, `--cc`, `--bcc`, `--all`) |
 | `gws gmail forward <id>` | Forward message (`--to`, `--body`, `--cc`, `--bcc`) |
@@ -347,10 +347,13 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 
 | Command | Description |
 |---------|-------------|
-| `gws chat list` | List spaces (`--filter`, `--page-size`) |
+| `gws chat list` | List spaces (`--filter`, `--page-size`, `--raw`, `--params`) |
+| `gws chat spaces list` | List spaces (API-shape friendly path; same as `chat list` with `--raw` / `--params` documented examples) |
 | `gws chat recent` | Recap messages across active spaces (`--since`, `--max`, `--max-per-space`, `--max-spaces`) |
-| `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`, `--after`, `--before`, `--resolve-senders`) |
-| `gws chat members <space>` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`) |
+| `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`, `--after`, `--before`, `--resolve-senders`, `--raw`, `--params`) |
+| `gws chat messages list` | List messages by `parent` via `--params` (programmatic path) |
+| `gws chat members <space>` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`, `--raw`, `--params`) |
+| `gws chat members list` | List members by `parent` via `--params` (programmatic path) |
 | `gws chat send` | Send message (`--space`, `--text`) |
 | `gws chat get <message>` | Get a single message (`--resolve-senders`) |
 | `gws chat update <message>` | Update message text (`--text`) |
@@ -397,9 +400,15 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 |---------|-------------|
 | `gws contacts list` | List contacts (`--max`) |
 | `gws contacts search <query>` | Search contacts by name/email/phone |
-| `gws contacts get <resource-name>` | Get contact details |
+| `gws contacts get <resource-name>` | Get contact details (`--raw`, `--params`) |
 | `gws contacts create` | Create contact (`--name`, `--email`, `--phone`) |
 | `gws contacts delete <resource-name>` | Delete a contact |
+
+### People (programmatic People API)
+
+| Command | Description |
+|---------|-------------|
+| `gws people get [resource-name]` | Direct People.Get wrapper for programmatic use (`--raw`, `--params`, `--person-fields`). Use `--params '{"resourceName":"people/me","personFields":"emailAddresses"}'`. |
 
 ### Groups
 

@@ -66,8 +66,13 @@ func parseParams(cmd *cobra.Command) (map[string]interface{}, error) {
 }
 
 // printRaw marshals v to stdout using SDK JSON tags directly so the output
-// preserves the Google API shape.
+// preserves the Google API shape. Honors the global --quiet flag: when
+// quiet is set, output is suppressed (matching GetPrinter's NullPrinter
+// contract so scripts can run raw commands quietly for side effects).
 func printRaw(v interface{}) error {
+	if quiet {
+		return nil
+	}
 	return writeRaw(os.Stdout, v)
 }
 

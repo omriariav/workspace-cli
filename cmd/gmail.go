@@ -609,25 +609,45 @@ func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxRe
 		return perr
 	}
 
-	// --params overrides flag-derived values (documented precedence: params win).
+	// --params overrides flag-derived values (documented precedence:
+	// params win). `maxResults` in --params maps directly to the Google
+	// API's per-page parameter (this is what the API reference calls
+	// "maxResults"). The CLI `--max` flag is a separate total-results
+	// cap applied to the aggregated response.
 	if v, ok := paramString(params, "q"); ok {
 		query = v
-	}
-	if v, ok := paramInt64(params, "maxResults"); ok {
-		maxResults = v
 	}
 	pageToken, _ := paramString(params, "pageToken")
 	includeSpamTrash, includeSpamTrashSet := paramBool(params, "includeSpamTrash")
 	labelIds, labelIdsSet := paramStringSlice(params, "labelIds")
 
 	const apiMaxPerPage int64 = 500
+	paramPageSize, paramPageSizeSet := paramInt64(params, "maxResults")
+
+	// --all means "fetch every page": ignore --max (a 10-default would
+	// silently cap an --all run otherwise).
+	if fetchAll {
+		maxResults = 0
+	}
 
 	var aggregated *gmail.ListMessagesResponse
 	pageNum := 1
 
 	for {
-		perPage := apiMaxPerPage
-		if !fetchAll && maxResults > 0 {
+		// Determine page size for this request: --params maxResults
+		// wins if set, otherwise size by remaining budget capped at the
+		// API max.
+		var perPage int64
+		switch {
+		case paramPageSizeSet && paramPageSize > 0:
+			perPage = paramPageSize
+			if perPage > apiMaxPerPage {
+				perPage = apiMaxPerPage
+			}
+		default:
+			perPage = apiMaxPerPage
+		}
+		if maxResults > 0 {
 			collected := int64(0)
 			if aggregated != nil {
 				collected = int64(len(aggregated.Messages))
@@ -636,7 +656,7 @@ func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxRe
 			if remaining <= 0 {
 				break
 			}
-			if remaining < perPage {
+			if !paramPageSizeSet && remaining < perPage {
 				perPage = remaining
 			}
 		}
@@ -675,12 +695,12 @@ func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxRe
 		if resp.NextPageToken == "" {
 			break
 		}
-		if !fetchAll && int64(len(aggregated.Messages)) >= maxResults {
+		if maxResults > 0 && int64(len(aggregated.Messages)) >= maxResults {
 			break
 		}
-
-		// In single-page mode (no --all, no --params pageToken), stop after one page.
-		if !fetchAll && maxResults <= apiMaxPerPage {
+		// Single-page mode: stop after the first page unless --all asks
+		// us to keep paging.
+		if !fetchAll {
 			break
 		}
 
@@ -691,7 +711,7 @@ func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxRe
 	if aggregated == nil {
 		aggregated = &gmail.ListMessagesResponse{}
 	}
-	if !fetchAll && maxResults > 0 && int64(len(aggregated.Messages)) > maxResults {
+	if maxResults > 0 && int64(len(aggregated.Messages)) > maxResults {
 		aggregated.Messages = aggregated.Messages[:maxResults]
 	}
 	if fetchAll {

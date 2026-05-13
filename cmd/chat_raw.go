@@ -114,6 +114,12 @@ func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSi
 	}
 	pageToken, _ := paramString(params, "pageToken")
 
+	// --all means "fetch every page". --max (0 already means unlimited
+	// for spaces, but guard for symmetry with the other raw runners).
+	if fetchAll {
+		maxResults = 0
+	}
+
 	if pageSize <= 0 {
 		pageSize = 100
 	}
@@ -196,6 +202,13 @@ func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string,
 		showDeleted = v
 	}
 	pageToken, _ := paramString(params, "pageToken")
+
+	// --all means "fetch every page". The CLI's --max default (25) must
+	// not silently cap an --all run; callers who want a cap should drop
+	// --all and pass --max explicitly.
+	if fetchAll {
+		maxResults = 0
+	}
 
 	var aggregated *chat.ListMessagesResponse
 	for {
@@ -284,6 +297,12 @@ func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, 
 		showInvited = v
 	}
 	pageToken, _ := paramString(params, "pageToken")
+
+	// --all means "fetch every page". The CLI's --max default (100) must
+	// not silently cap an --all run.
+	if fetchAll {
+		maxResults = 0
+	}
 
 	if pageSize <= 0 {
 		pageSize = maxResults
