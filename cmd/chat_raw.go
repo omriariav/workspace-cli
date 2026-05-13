@@ -106,9 +106,10 @@ func init() {
 
 // runChatListRaw implements `gws chat spaces list --raw` (and `gws chat list --raw`).
 func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSize, maxResults int64, fetchAll, maxExplicit bool) error {
+	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return perr
+		return p.PrintError(perr)
 	}
 
 	if v, ok := paramString(params, "filter"); ok {
@@ -152,7 +153,7 @@ func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSi
 
 		resp, err := call.Do()
 		if err != nil {
-			return fmt.Errorf("failed to list spaces: %w", err)
+			return p.PrintError(fmt.Errorf("failed to list spaces: %w", err))
 		}
 
 		if aggregated == nil {
@@ -193,16 +194,17 @@ func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSi
 
 // runChatMessagesRaw implements `gws chat messages list --raw`.
 func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, maxResults int64, filter, orderBy string, showDeleted, fetchAll, maxExplicit bool) error {
+	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return perr
+		return p.PrintError(perr)
 	}
 
 	if v, ok := paramString(params, "parent"); ok && v != "" {
 		spaceName = v
 	}
 	if spaceName == "" {
-		return errors.New("chat messages list: a space name is required (positional arg or --params parent)")
+		return p.PrintError(errors.New("chat messages list: a space name is required (positional arg or --params parent)"))
 	}
 	pageSize := int64(0)
 	if v, ok := paramInt64(params, "pageSize"); ok {
@@ -263,7 +265,7 @@ func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string,
 
 		resp, err := call.Do()
 		if err != nil {
-			return fmt.Errorf("failed to list messages: %w", err)
+			return p.PrintError(fmt.Errorf("failed to list messages: %w", err))
 		}
 
 		if aggregated == nil {
@@ -299,16 +301,17 @@ func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string,
 
 // runChatMembersRaw implements `gws chat members list --raw`.
 func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, maxResults int64, filter string, showGroups, showInvited, fetchAll, maxExplicit bool) error {
+	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return perr
+		return p.PrintError(perr)
 	}
 
 	if v, ok := paramString(params, "parent"); ok && v != "" {
 		spaceName = v
 	}
 	if spaceName == "" {
-		return errors.New("chat members list: a space name is required (positional arg or --params parent)")
+		return p.PrintError(errors.New("chat members list: a space name is required (positional arg or --params parent)"))
 	}
 	pageSize := int64(0)
 	if v, ok := paramInt64(params, "pageSize"); ok {
@@ -363,7 +366,7 @@ func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, 
 
 		resp, err := call.Do()
 		if err != nil {
-			return fmt.Errorf("failed to list members: %w", err)
+			return p.PrintError(fmt.Errorf("failed to list members: %w", err))
 		}
 
 		if aggregated == nil {

@@ -611,9 +611,10 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 // field across pages and drops nextPageToken; the final shape is
 // {"messages":[...], "resultSizeEstimate":N}.
 func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxResults int64, fetchAll, maxExplicit bool) error {
+	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return perr
+		return p.PrintError(perr)
 	}
 	// Raw mode preserves the API response verbatim. The CLI's --max
 	// default would otherwise slice a verbatim page, breaking the
@@ -694,7 +695,7 @@ func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxRe
 
 		resp, err := call.Do()
 		if err != nil {
-			return fmt.Errorf("failed to list messages: %w", err)
+			return p.PrintError(fmt.Errorf("failed to list messages: %w", err))
 		}
 
 		if aggregated == nil {
@@ -1335,9 +1336,10 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 // body data in `payload.body.data` / `parts[*].body.data`, plus
 // `internalDate`, `labelIds`, `snippet`, etc.
 func runGmailThreadRaw(cmd *cobra.Command, svc *gmail.Service, threadID string) error {
+	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return perr
+		return p.PrintError(perr)
 	}
 
 	// --params overrides: id (resource path), format, metadataHeaders.
@@ -1345,7 +1347,7 @@ func runGmailThreadRaw(cmd *cobra.Command, svc *gmail.Service, threadID string) 
 		threadID = v
 	}
 	if threadID == "" {
-		return fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)")
+		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)"))
 	}
 	format := "full"
 	if v, ok := paramString(params, "format"); ok && v != "" {
@@ -1360,7 +1362,7 @@ func runGmailThreadRaw(cmd *cobra.Command, svc *gmail.Service, threadID string) 
 
 	thread, err := call.Do()
 	if err != nil {
-		return fmt.Errorf("failed to get thread: %w", err)
+		return p.PrintError(fmt.Errorf("failed to get thread: %w", err))
 	}
 	return printRaw(thread)
 }

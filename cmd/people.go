@@ -51,14 +51,15 @@ func init() {
 }
 
 func runPeopleGet(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
 	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
-		return err
+		return p.PrintError(err)
 	}
 	svc, err := factory.People()
 	if err != nil {
-		return err
+		return p.PrintError(err)
 	}
 	return runPeopleGetWithSvc(cmd, svc, args)
 }
@@ -67,9 +68,10 @@ func runPeopleGet(cmd *cobra.Command, args []string) error {
 // an injected *people.Service so the runner can be exercised against an
 // httptest backend without needing real OAuth.
 func runPeopleGetWithSvc(cmd *cobra.Command, svc *people.Service, args []string) error {
+	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return perr
+		return p.PrintError(perr)
 	}
 
 	resourceName := ""
@@ -80,7 +82,7 @@ func runPeopleGetWithSvc(cmd *cobra.Command, svc *people.Service, args []string)
 		resourceName = v
 	}
 	if resourceName == "" {
-		return errors.New("people get: resourceName is required (positional arg or --params resourceName)")
+		return p.PrintError(errors.New("people get: resourceName is required (positional arg or --params resourceName)"))
 	}
 
 	pf, _ := cmd.Flags().GetString("person-fields")
@@ -101,11 +103,11 @@ func runPeopleGetWithSvc(cmd *cobra.Command, svc *people.Service, args []string)
 
 	person, err := call.Do()
 	if err != nil {
-		return fmt.Errorf("failed to get person: %w", err)
+		return p.PrintError(fmt.Errorf("failed to get person: %w", err))
 	}
 
 	if isRaw(cmd) {
 		return printRaw(person)
 	}
-	return GetPrinter().Print(formatPerson(person))
+	return p.Print(formatPerson(person))
 }

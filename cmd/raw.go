@@ -17,6 +17,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -63,8 +64,10 @@ func parseParams(cmd *cobra.Command) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("--params: invalid JSON: %w", err)
 	}
 	// Reject trailing junk after the object so scripts don't silently
-	// drop a typo'd second value.
-	if dec.More() {
+	// drop a typo'd second value. A second Decode must return io.EOF;
+	// anything else (another token, syntax error) is junk.
+	var extra interface{}
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("--params: unexpected trailing data after JSON object")
 	}
 	return m, nil

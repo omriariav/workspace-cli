@@ -488,12 +488,14 @@ func TestRunPeopleGet_MissingResourceNameErrors(t *testing.T) {
 	defer cleanup()
 
 	cmd := newPeopleGetCmd(t, nil)
-	err := runPeopleGetWithSvc(cmd, svc, nil)
-	if err == nil {
-		t.Fatal("expected error when resourceName missing")
-	}
-	if !strings.Contains(err.Error(), "resourceName is required") {
-		t.Errorf("unexpected error message: %v", err)
+	// Per the printer-error convention, the runner emits a structured
+	// error object via the printer and returns the printer's nil. The
+	// error message must show up on stdout.
+	out, _ := captureStdout(t, func() error {
+		return runPeopleGetWithSvc(cmd, svc, nil)
+	})
+	if !strings.Contains(out, "resourceName is required") {
+		t.Errorf("expected structured error JSON on stdout, got %q", out)
 	}
 }
 
