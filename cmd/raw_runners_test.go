@@ -108,7 +108,7 @@ func TestGmailListRaw_AllAggregatesAndDropsToken(t *testing.T) {
 	})
 
 	out, err := captureStdout(t, func() error {
-		return runGmailListRaw(cmd, svc, "ignored-by-params", 0, true) // fetchAll=true
+		return runGmailListRaw(cmd, svc, "ignored-by-params", 0, true, false) // fetchAll=true
 	})
 	if err != nil {
 		t.Fatalf("runner err: %v", err)
@@ -158,7 +158,7 @@ func TestGmailListRaw_QuietSuppressesOutput(t *testing.T) {
 
 	cmd := makeCmd(t, map[string]string{"raw": "true"})
 	out, err := captureStdout(t, func() error {
-		return runGmailListRaw(cmd, svc, "", 10, false)
+		return runGmailListRaw(cmd, svc, "", 10, false, true)
 	})
 	if err != nil {
 		t.Fatalf("runner err: %v", err)
@@ -262,7 +262,7 @@ func TestChatListRaw_AllAggregatesAndParamsOverride(t *testing.T) {
 	})
 	out, err := captureStdout(t, func() error {
 		// flag-derived filter is "OTHER" — --params must override.
-		return runChatListRaw(cmd, svc, "OTHER", 100, 0, true)
+		return runChatListRaw(cmd, svc, "OTHER", 100, 0, true, false)
 	})
 	if err != nil {
 		t.Fatalf("runner err: %v", err)
@@ -325,7 +325,7 @@ func TestChatMessagesRaw_AllIgnoresDefaultMaxCap(t *testing.T) {
 	cmd := makeCmd(t, map[string]string{"raw": "true"})
 	// maxResults=25 simulates the default flag value; fetchAll=true.
 	out, err := captureStdout(t, func() error {
-		return runChatMessagesRaw(cmd, svc, "spaces/AAA", 25, "", "", false, true)
+		return runChatMessagesRaw(cmd, svc, "spaces/AAA", 25, "", "", false, true, false)
 	})
 	if err != nil {
 		t.Fatalf("runner err: %v", err)
@@ -373,7 +373,7 @@ func TestChatMembersRaw_AllIgnoresDefaultMaxCap(t *testing.T) {
 
 	cmd := makeCmd(t, map[string]string{"raw": "true"})
 	out, err := captureStdout(t, func() error {
-		return runChatMembersRaw(cmd, svc, "spaces/AAA", 100, "", false, false, true)
+		return runChatMembersRaw(cmd, svc, "spaces/AAA", 100, "", false, false, true, false)
 	})
 	if err != nil {
 		t.Fatalf("runner err: %v", err)

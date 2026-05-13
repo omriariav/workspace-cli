@@ -478,7 +478,11 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 	includeLabels, _ := cmd.Flags().GetBool("include-labels")
 
 	if isRaw(cmd) {
-		return runGmailListRaw(cmd, svc, query, maxResults, fetchAll)
+		// In raw mode `--max` only caps the response when the user
+		// explicitly set it; otherwise we leave the API response
+		// verbatim (the --raw contract is "no modifications").
+		maxExplicit := cmd.Flags().Changed("max")
+		return runGmailListRaw(cmd, svc, query, maxResults, fetchAll, maxExplicit)
 	}
 
 	// Gmail API has a hard limit of 500 results per request
@@ -603,10 +607,16 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 // emits the SDK response struct as JSON. --all aggregates the `messages`
 // field across pages and drops nextPageToken; the final shape is
 // {"messages":[...], "resultSizeEstimate":N}.
-func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxResults int64, fetchAll bool) error {
+func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxResults int64, fetchAll, maxExplicit bool) error {
 	params, perr := parseParams(cmd)
 	if perr != nil {
 		return perr
+	}
+	// Raw mode preserves the API response verbatim. The CLI's --max
+	// default would otherwise slice a verbatim page, breaking the
+	// --raw contract. Only honor --max when the caller set it.
+	if !maxExplicit {
+		maxResults = 0
 	}
 
 	// --params overrides flag-derived values (documented precedence:

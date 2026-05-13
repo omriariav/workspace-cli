@@ -100,7 +100,7 @@ func init() {
 }
 
 // runChatListRaw implements `gws chat spaces list --raw` (and `gws chat list --raw`).
-func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSize, maxResults int64, fetchAll bool) error {
+func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSize, maxResults int64, fetchAll, maxExplicit bool) error {
 	params, perr := parseParams(cmd)
 	if perr != nil {
 		return perr
@@ -114,8 +114,12 @@ func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSi
 	}
 	pageToken, _ := paramString(params, "pageToken")
 
-	// --all means "fetch every page". --max (0 already means unlimited
-	// for spaces, but guard for symmetry with the other raw runners).
+	// Raw mode is verbatim: only honor --max when the caller set it.
+	if !maxExplicit {
+		maxResults = 0
+	}
+	// --all means "fetch every page" — drop --max even if it was set
+	// (already 0 from above for the default case).
 	if fetchAll {
 		maxResults = 0
 	}
@@ -176,7 +180,7 @@ func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSi
 }
 
 // runChatMessagesRaw implements `gws chat messages list --raw`.
-func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, maxResults int64, filter, orderBy string, showDeleted, fetchAll bool) error {
+func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, maxResults int64, filter, orderBy string, showDeleted, fetchAll, maxExplicit bool) error {
 	params, perr := parseParams(cmd)
 	if perr != nil {
 		return perr
@@ -203,10 +207,9 @@ func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string,
 	}
 	pageToken, _ := paramString(params, "pageToken")
 
-	// --all means "fetch every page". The CLI's --max default (25) must
-	// not silently cap an --all run; callers who want a cap should drop
-	// --all and pass --max explicitly.
-	if fetchAll {
+	// Raw mode is verbatim: drop the CLI default --max unless the
+	// caller explicitly set it. --all also disables --max for symmetry.
+	if !maxExplicit || fetchAll {
 		maxResults = 0
 	}
 
@@ -271,7 +274,7 @@ func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string,
 }
 
 // runChatMembersRaw implements `gws chat members list --raw`.
-func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, maxResults int64, filter string, showGroups, showInvited, fetchAll bool) error {
+func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, maxResults int64, filter string, showGroups, showInvited, fetchAll, maxExplicit bool) error {
 	params, perr := parseParams(cmd)
 	if perr != nil {
 		return perr
@@ -298,9 +301,9 @@ func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, 
 	}
 	pageToken, _ := paramString(params, "pageToken")
 
-	// --all means "fetch every page". The CLI's --max default (100) must
-	// not silently cap an --all run.
-	if fetchAll {
+	// Raw mode is verbatim: drop the CLI default --max unless the
+	// caller explicitly set it. --all also disables --max.
+	if !maxExplicit || fetchAll {
 		maxResults = 0
 	}
 

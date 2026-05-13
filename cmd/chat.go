@@ -587,7 +587,7 @@ func runChatList(cmd *cobra.Command, args []string) error {
 	}
 
 	if isRaw(cmd) {
-		return runChatListRaw(cmd, svc, filter, pageSize, maxResults, fetchAll)
+		return runChatListRaw(cmd, svc, filter, pageSize, maxResults, fetchAll, cmd.Flags().Changed("max"))
 	}
 
 	var results []map[string]interface{}
@@ -660,14 +660,9 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 		fetchAll, _ = cmd.Flags().GetBool("all")
 	}
 
-	if isRaw(cmd) {
-		return runChatMessagesRaw(cmd, svc, spaceName, maxResults, filter, orderBy, showDeleted, fetchAll)
-	}
-	if spaceName == "" {
-		return p.PrintError(errors.New("chat messages: a space id is required"))
-	}
-
-	// Build filter from --after/--before flags, combining with --filter
+	// Fold --after/--before into the filter expression up-front so the
+	// raw path sees the same query the ergonomic path does. (Before this
+	// move, --after/--before were silently dropped under --raw.)
 	var filterParts []string
 	if after != "" {
 		filterParts = append(filterParts, fmt.Sprintf(`createTime > "%s"`, after))
@@ -680,6 +675,13 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 	}
 	if len(filterParts) > 0 {
 		filter = strings.Join(filterParts, " AND ")
+	}
+
+	if isRaw(cmd) {
+		return runChatMessagesRaw(cmd, svc, spaceName, maxResults, filter, orderBy, showDeleted, fetchAll, cmd.Flags().Changed("max"))
+	}
+	if spaceName == "" {
+		return p.PrintError(errors.New("chat messages: a space id is required"))
 	}
 
 	if maxResults <= 0 {
@@ -1063,7 +1065,7 @@ func runChatMembers(cmd *cobra.Command, args []string) error {
 	}
 
 	if isRaw(cmd) {
-		return runChatMembersRaw(cmd, svc, spaceName, maxResults, filter, showGroups, showInvited, fetchAll)
+		return runChatMembersRaw(cmd, svc, spaceName, maxResults, filter, showGroups, showInvited, fetchAll, cmd.Flags().Changed("max"))
 	}
 	if spaceName == "" {
 		return p.PrintError(errors.New("chat members: a space id is required"))
