@@ -93,7 +93,7 @@ func TestChatListCommand_Help(t *testing.T) {
 
 func TestChatMessagesCommand_Help(t *testing.T) {
 	cmd := chatMessagesCmd
-	if cmd.Use != "messages <space-id>" {
+	if cmd.Use != "messages [space-id]" {
 		t.Errorf("unexpected Use: %s", cmd.Use)
 	}
 	if cmd.Args == nil {

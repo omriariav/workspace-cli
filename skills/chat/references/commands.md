@@ -65,7 +65,7 @@ gws chat spaces list --params '{"pageSize":50,"filter":"spaceType = \"DIRECT_MES
 Lists recent messages in a Chat space. Supports filtering, ordering, pagination, and showing deleted messages.
 
 ```
-Usage: gws chat messages <space-id> [flags]
+Usage: gws chat messages [space-id] [flags]
 ```
 
 | Flag | Type | Default | Description |
@@ -106,7 +106,7 @@ The space ID format is `spaces/AAAA1234` (get from `gws chat list`).
 Lists all members of a Chat space with display names and emails (auto-resolved via People API, cached locally).
 
 ```
-Usage: gws chat members <space-id> [flags]
+Usage: gws chat members [space-id] [flags]
 ```
 
 | Flag | Type | Default | Description |

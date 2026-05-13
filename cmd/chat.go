@@ -38,11 +38,14 @@ var chatListCmd = &cobra.Command{
 }
 
 var chatMessagesCmd = &cobra.Command{
-	Use:   "messages <space-id>",
+	Use:   "messages [space-id]",
 	Short: "List messages in a space",
-	Long:  "Lists recent messages in a Chat space.",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runChatMessages,
+	Long: `Lists recent messages in a Chat space.
+
+The space id is required; pass it as a positional argument or supply it
+via --params (e.g. '{"parent":"spaces/AAA"}') when using --raw.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runChatMessages,
 }
 
 var chatRecentCmd = &cobra.Command{
@@ -66,11 +69,14 @@ Examples:
 }
 
 var chatMembersCmd = &cobra.Command{
-	Use:   "members <space-id>",
+	Use:   "members [space-id]",
 	Short: "List members of a space",
-	Long:  "Lists all members (users and bots) in a Chat space with display names.",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runChatMembers,
+	Long: `Lists all members (users and bots) in a Chat space with display names.
+
+The space id is required; pass it as a positional argument or supply it
+via --params (e.g. '{"parent":"spaces/AAA"}') when using --raw.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runChatMembers,
 }
 
 var chatSendCmd = &cobra.Command{

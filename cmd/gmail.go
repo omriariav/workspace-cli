@@ -669,7 +669,11 @@ func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxRe
 			if remaining <= 0 {
 				break
 			}
-			if !paramPageSizeSet && remaining < perPage {
+			// Clamp every request to the remaining --max budget, even
+			// when --params maxResults asks for more. Otherwise the
+			// server's nextPageToken points past the slice we return,
+			// and clients continuing pagination skip items 6-N.
+			if remaining < perPage {
 				perPage = remaining
 			}
 		}
