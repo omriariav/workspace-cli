@@ -132,6 +132,13 @@ func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSi
 	if pageSize <= 0 {
 		pageSize = 100
 	}
+	// If the caller capped results, ask the server for at most that many
+	// per page. Otherwise the server's nextPageToken points past the
+	// full page (e.g. item 100) and clients that continue pagination
+	// would skip the items we silently sliced off.
+	if maxResults > 0 && !fetchAll && pageSize > maxResults {
+		pageSize = maxResults
+	}
 
 	var aggregated *chat.ListSpacesResponse
 	for {
@@ -227,6 +234,18 @@ func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string,
 				thisPage = 1000
 			}
 		}
+		// Clamp page size to the remaining budget so the server's
+		// nextPageToken stays aligned with the items we hand back.
+		if maxResults > 0 && !fetchAll {
+			collected := int64(0)
+			if aggregated != nil {
+				collected = int64(len(aggregated.Messages))
+			}
+			remaining := maxResults - collected
+			if remaining > 0 && thisPage > remaining {
+				thisPage = remaining
+			}
+		}
 
 		call := svc.Spaces.Messages.List(spaceName).PageSize(thisPage)
 		if filter != "" {
@@ -310,6 +329,13 @@ func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, 
 	// caller explicitly set it. --all also disables --max.
 	if !maxExplicit || fetchAll {
 		maxResults = 0
+	}
+
+	// Clamp page size so the server's nextPageToken aligns with the
+	// items we return — otherwise clients continuing pagination skip
+	// items we sliced off locally.
+	if maxResults > 0 && !fetchAll && (pageSize <= 0 || pageSize > maxResults) {
+		pageSize = maxResults
 	}
 
 	if pageSize <= 0 {

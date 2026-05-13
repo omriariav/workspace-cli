@@ -503,3 +503,50 @@ func TestParseParams_RejectsTrailingJunk(t *testing.T) {
 		t.Fatal("expected error for trailing junk after JSON")
 	}
 }
+
+// TestChatListRaw_ClampsPageSizeToMax verifies that --max smaller than the
+// default pageSize makes the runner request just --max items per page,
+// so the server's nextPageToken stays aligned with the items we return.
+func TestChatListRaw_ClampsPageSizeToMax(t *testing.T) {
+	var seenPageSize string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPageSize = r.URL.Query().Get("pageSize")
+		w.Header().Set("Content-Type", "application/json")
+		// Honor the requested pageSize: return exactly 5 items and a
+		// next-page token positioned correctly for the next page.
+		_ = json.NewEncoder(w).Encode(&chat.ListSpacesResponse{
+			Spaces: []*chat.Space{
+				{Name: "spaces/A"}, {Name: "spaces/B"}, {Name: "spaces/C"},
+				{Name: "spaces/D"}, {Name: "spaces/E"},
+			},
+			NextPageToken: "page-2-after-5",
+		})
+	}))
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := makeCmd(t, map[string]string{"raw": "true"})
+	out, err := captureStdout(t, func() error {
+		// pageSize=100 default, max=5 explicit, !fetchAll → clamp to 5.
+		return runChatListRaw(cmd, svc, "", 100, 5, false, true)
+	})
+	if err != nil {
+		t.Fatalf("runner err: %v", err)
+	}
+	if seenPageSize != "5" {
+		t.Errorf("expected request pageSize=5 (clamped to --max), got %q", seenPageSize)
+	}
+	var got chat.ListSpacesResponse
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Spaces) != 5 {
+		t.Errorf("expected 5 spaces returned, got %d", len(got.Spaces))
+	}
+	if got.NextPageToken != "page-2-after-5" {
+		t.Errorf("expected verbatim nextPageToken positioned after item 5, got %q", got.NextPageToken)
+	}
+}
