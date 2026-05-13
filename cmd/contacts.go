@@ -301,12 +301,31 @@ func runContactsGet(cmd *cobra.Command, args []string) error {
 	}
 
 	resourceName := args[0]
+	pf := personFields
 
-	person, err := svc.People.Get(resourceName).
-		PersonFields(personFields).
-		Do()
+	params, perr := parseParams(cmd)
+	if perr != nil {
+		return p.PrintError(perr)
+	}
+	if v, ok := paramString(params, "resourceName"); ok && v != "" {
+		resourceName = v
+	}
+	if v, ok := paramString(params, "personFields"); ok && v != "" {
+		pf = v
+	}
+
+	call := svc.People.Get(resourceName).PersonFields(pf)
+	if sources, ok := paramStringSlice(params, "sources"); ok && len(sources) > 0 {
+		call = call.Sources(sources...)
+	}
+
+	person, err := call.Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to get contact: %w", err))
+	}
+
+	if isRaw(cmd) {
+		return printRaw(person)
 	}
 
 	return p.Print(formatPerson(person))

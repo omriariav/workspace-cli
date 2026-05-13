@@ -550,6 +550,7 @@ func TestChatCommands(t *testing.T) {
 		{"build-cache"},
 		{"find-group"},
 		{"find-space"},
+		{"spaces"},
 	}
 
 	for _, tt := range tests {
@@ -559,6 +560,35 @@ func TestChatCommands(t *testing.T) {
 				t.Fatalf("command '%s' not found", tt.name)
 			}
 		})
+	}
+
+	// Noun-verb API-shape paths added for --raw/--params support.
+	if findSubcommand(chatSpacesCmd, "list") == nil {
+		t.Fatal("expected 'chat spaces list'")
+	}
+	if findSubcommand(chatMessagesCmd, "list") == nil {
+		t.Fatal("expected 'chat messages list'")
+	}
+	if findSubcommand(chatMembersCmd, "list") == nil {
+		t.Fatal("expected 'chat members list'")
+	}
+}
+
+// TestPeopleCommand verifies the gws people get command surface used by
+// the programmatic --raw/--params path (#188).
+func TestPeopleCommand(t *testing.T) {
+	if peopleCmd == nil {
+		t.Fatal("people command not registered")
+	}
+	get := findSubcommand(peopleCmd, "get")
+	if get == nil {
+		t.Fatal("people get not registered")
+	}
+	if get.Flags().Lookup("raw") == nil {
+		t.Error("people get missing --raw flag")
+	}
+	if get.Flags().Lookup("params") == nil {
+		t.Error("people get missing --params flag")
 	}
 }
 

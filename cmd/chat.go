@@ -581,6 +581,14 @@ func runChatList(cmd *cobra.Command, args []string) error {
 	filter, _ := cmd.Flags().GetString("filter")
 	pageSize, _ := cmd.Flags().GetInt64("page-size")
 	maxResults, _ := cmd.Flags().GetInt64("max")
+	fetchAll := false
+	if f := cmd.Flags().Lookup("all"); f != nil {
+		fetchAll, _ = cmd.Flags().GetBool("all")
+	}
+
+	if isRaw(cmd) {
+		return runChatListRaw(cmd, svc, filter, pageSize, maxResults, fetchAll)
+	}
 
 	var results []map[string]interface{}
 	var pageToken string
@@ -636,7 +644,10 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	spaceName := ensureSpaceName(args[0])
+	spaceName := ""
+	if len(args) > 0 {
+		spaceName = ensureSpaceName(args[0])
+	}
 	maxResults, _ := cmd.Flags().GetInt64("max")
 	filter, _ := cmd.Flags().GetString("filter")
 	orderBy, _ := cmd.Flags().GetString("order-by")
@@ -644,6 +655,17 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 	after, _ := cmd.Flags().GetString("after")
 	before, _ := cmd.Flags().GetString("before")
 	resolveSenders, _ := cmd.Flags().GetBool("resolve-senders")
+	fetchAll := false
+	if f := cmd.Flags().Lookup("all"); f != nil {
+		fetchAll, _ = cmd.Flags().GetBool("all")
+	}
+
+	if isRaw(cmd) {
+		return runChatMessagesRaw(cmd, svc, spaceName, maxResults, filter, orderBy, showDeleted, fetchAll)
+	}
+	if spaceName == "" {
+		return p.PrintError(errors.New("chat messages: a space id is required"))
+	}
 
 	// Build filter from --after/--before flags, combining with --filter
 	var filterParts []string
@@ -1027,11 +1049,25 @@ func runChatMembers(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	spaceName := ensureSpaceName(args[0])
+	spaceName := ""
+	if len(args) > 0 {
+		spaceName = ensureSpaceName(args[0])
+	}
 	maxResults, _ := cmd.Flags().GetInt64("max")
 	filter, _ := cmd.Flags().GetString("filter")
 	showGroups, _ := cmd.Flags().GetBool("show-groups")
 	showInvited, _ := cmd.Flags().GetBool("show-invited")
+	fetchAll := false
+	if f := cmd.Flags().Lookup("all"); f != nil {
+		fetchAll, _ = cmd.Flags().GetBool("all")
+	}
+
+	if isRaw(cmd) {
+		return runChatMembersRaw(cmd, svc, spaceName, maxResults, filter, showGroups, showInvited, fetchAll)
+	}
+	if spaceName == "" {
+		return p.PrintError(errors.New("chat members: a space id is required"))
+	}
 
 	// Page size per request (Google caps at 100)
 	pageSize := maxResults

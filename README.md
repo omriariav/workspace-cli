@@ -456,6 +456,42 @@ $ gws calendar events --days 1
 }
 ```
 
+### Programmatic mode: `--raw` and `--params`
+
+Several list/get commands accept two extra flags for scripting:
+
+- `--raw` emits the unmodified Google API response JSON (no field renaming,
+  no base64 decoding, no header collapsing). Default ergonomic output is
+  untouched when the flag is not set.
+- `--params <json>` accepts a JSON object whose keys map directly to the
+  underlying API request parameters. Keys supplied here **override** the
+  equivalent CLI flags (params win).
+
+Under `--all`, raw mode concatenates the top-level list field across pages
+(messages / spaces / members) and drops `nextPageToken` from the final
+output.
+
+Supported in this release:
+
+| Command | Wraps |
+|---|---|
+| `gmail list` | `users.messages.list` (under `--raw`) |
+| `gmail thread <id>` | `users.threads.get` |
+| `chat spaces list` | `spaces.list` |
+| `chat members list` | `spaces.members.list` |
+| `chat messages list` | `spaces.messages.list` |
+| `people get` | `people.get` |
+
+Examples:
+
+```bash
+gws gmail list --query "in:sent" --max 5 --raw
+gws gmail thread 18abc --raw
+gws chat spaces list --params '{"pageSize":50}' --all --raw
+gws chat messages list --params '{"parent":"spaces/AAA","pageSize":50,"filter":"createTime > \"2025-01-01T00:00:00Z\""}' --all --raw
+gws people get --params '{"resourceName":"people/me","personFields":"emailAddresses"}' --raw
+```
+
 ## Development
 
 ### Project Layout
