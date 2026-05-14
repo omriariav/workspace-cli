@@ -10,7 +10,6 @@ package cmd
 // is concatenated across pages and nextPageToken is dropped.
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -109,7 +108,7 @@ func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSi
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	if v, ok := paramString(params, "filter"); ok {
@@ -197,14 +196,14 @@ func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string,
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	if v, ok := paramString(params, "parent"); ok && v != "" {
 		spaceName = v
 	}
 	if spaceName == "" {
-		return p.PrintError(errors.New("chat messages list: a space name is required (positional arg or --params parent)"))
+		return usageErrorf("chat messages list: a space name is required (positional arg or --params parent)")
 	}
 	pageSize := int64(0)
 	if v, ok := paramInt64(params, "pageSize"); ok {
@@ -304,14 +303,14 @@ func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, 
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	if v, ok := paramString(params, "parent"); ok && v != "" {
 		spaceName = v
 	}
 	if spaceName == "" {
-		return p.PrintError(errors.New("chat members list: a space name is required (positional arg or --params parent)"))
+		return usageErrorf("chat members list: a space name is required (positional arg or --params parent)")
 	}
 	pageSize := int64(0)
 	if v, ok := paramInt64(params, "pageSize"); ok {

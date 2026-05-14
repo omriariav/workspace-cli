@@ -66,7 +66,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	clientSecret := config.GetClientSecret()
 
 	if clientID == "" || clientSecret == "" {
-		return p.PrintError(fmt.Errorf("missing credentials: set GWS_CLIENT_ID and GWS_CLIENT_SECRET environment variables, or use --client-id and --client-secret flags"))
+		return usageErrorf("missing credentials: set GWS_CLIENT_ID and GWS_CLIENT_SECRET environment variables, or use --client-id and --client-secret flags")
 	}
 
 	// Determine scopes and services based on --services flag, config, or all
@@ -74,9 +74,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	// Validate service names — fail fast on unknown services
 	if unknown := auth.ValidateServices(grantedServices); len(unknown) > 0 {
-		return p.PrintError(fmt.Errorf("unknown service(s): %s\nValid services: %s",
+		return usageErrorf("unknown service(s): %s\nValid services: %s",
 			strings.Join(unknown, ", "),
-			strings.Join(auth.ValidServiceNames(), ", ")))
+			strings.Join(auth.ValidServiceNames(), ", "))
 	}
 
 	client := auth.NewOAuthClient(clientID, clientSecret, scopes)

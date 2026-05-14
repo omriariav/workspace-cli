@@ -47,8 +47,10 @@ func TestNullPrinter_PrintError(t *testing.T) {
 	p := NewNullPrinter()
 
 	err := errors.New("test error")
-	if printErr := p.PrintError(err); printErr != nil {
-		t.Errorf("unexpected error: %v", printErr)
+	printErr := p.PrintError(err)
+	var printed *AlreadyPrintedError
+	if !errors.As(printErr, &printed) {
+		t.Errorf("expected AlreadyPrintedError, got %T: %v", printErr, printErr)
 	}
 }
 
@@ -59,7 +61,8 @@ func TestNullPrinter_ImplementsPrinter(t *testing.T) {
 
 func TestNullPrinter_SuppressesOutput(t *testing.T) {
 	null := NewNullPrinter()
-	jsonPrinter := NewJSONPrinter(&bytes.Buffer{})
+	var errBuf bytes.Buffer
+	jsonPrinter := NewJSONPrinter(&bytes.Buffer{}, &errBuf)
 
 	data := map[string]interface{}{
 		"thread_id": "abc-123",
@@ -80,11 +83,13 @@ func TestNullPrinter_SuppressesOutput(t *testing.T) {
 
 	for _, v := range types {
 		if err, ok := v.(error); ok {
-			if printErr := null.PrintError(err); printErr != nil {
-				t.Errorf("NullPrinter.PrintError failed for %T: %v", v, printErr)
+			// PrintError now returns AlreadyPrintedError (non-nil) — that's intentional.
+			var printed *AlreadyPrintedError
+			if printErr := null.PrintError(err); !errors.As(printErr, &printed) {
+				t.Errorf("NullPrinter.PrintError: expected AlreadyPrintedError for %T, got %T", v, printErr)
 			}
-			if printErr := jsonPrinter.PrintError(err); printErr != nil {
-				t.Errorf("JSONPrinter.PrintError failed for %T: %v", v, printErr)
+			if printErr := jsonPrinter.PrintError(err); !errors.As(printErr, &printed) {
+				t.Errorf("JSONPrinter.PrintError: expected AlreadyPrintedError for %T, got %T", v, printErr)
 			}
 		} else {
 			if err := null.Print(v); err != nil {
@@ -109,8 +114,10 @@ func TestNullPrinter_HandlesLargeData(t *testing.T) {
 	if err := p.Print(largeData); err != nil {
 		t.Errorf("unexpected error with large data: %v", err)
 	}
-	if err := p.PrintError(errors.New("big error")); err != nil {
-		t.Errorf("unexpected error with PrintError: %v", err)
+	printErr := p.PrintError(errors.New("big error"))
+	var printed *AlreadyPrintedError
+	if !errors.As(printErr, &printed) {
+		t.Errorf("expected AlreadyPrintedError, got %T", printErr)
 	}
 }
 
@@ -125,7 +132,7 @@ func TestNew_YAML(t *testing.T) {
 
 func TestYAMLPrinter_Print_Map(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewYAMLPrinter(&buf)
+	p := NewYAMLPrinter(&buf, &bytes.Buffer{})
 
 	data := map[string]interface{}{
 		"name":  "test",
@@ -147,7 +154,7 @@ func TestYAMLPrinter_Print_Map(t *testing.T) {
 
 func TestYAMLPrinter_Print_Slice(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewYAMLPrinter(&buf)
+	p := NewYAMLPrinter(&buf, &bytes.Buffer{})
 
 	data := []string{"a", "b", "c"}
 
@@ -166,7 +173,7 @@ func TestYAMLPrinter_Print_Slice(t *testing.T) {
 
 func TestYAMLPrinter_Print_Nested(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewYAMLPrinter(&buf)
+	p := NewYAMLPrinter(&buf, &bytes.Buffer{})
 
 	data := map[string]interface{}{
 		"user": map[string]interface{}{
@@ -190,22 +197,28 @@ func TestYAMLPrinter_Print_Nested(t *testing.T) {
 }
 
 func TestYAMLPrinter_PrintError(t *testing.T) {
-	var buf bytes.Buffer
-	p := NewYAMLPrinter(&buf)
+	var buf, errBuf bytes.Buffer
+	p := NewYAMLPrinter(&buf, &errBuf)
 
 	err := errors.New("something went wrong")
-	if printErr := p.PrintError(err); printErr != nil {
-		t.Fatalf("unexpected error: %v", printErr)
+	printErr := p.PrintError(err)
+	var printed *AlreadyPrintedError
+	if !errors.As(printErr, &printed) {
+		t.Fatalf("expected AlreadyPrintedError, got %T", printErr)
 	}
 
-	output := buf.String()
+	// Error goes to errW (stderr), not w (stdout)
+	if buf.Len() > 0 {
+		t.Errorf("expected stdout empty on error, got: %s", buf.String())
+	}
+	output := errBuf.String()
 	if !strings.Contains(output, "error: something went wrong") {
-		t.Errorf("expected error message in output: %s", output)
+		t.Errorf("expected error message on stderr: %s", output)
 	}
 }
 
 func TestYAMLPrinter_ImplementsPrinter(t *testing.T) {
-	var p Printer = NewYAMLPrinter(&bytes.Buffer{})
+	var p Printer = NewYAMLPrinter(&bytes.Buffer{}, &bytes.Buffer{})
 	_ = p // Verify interface compliance
 }
 
@@ -221,7 +234,7 @@ func TestNew_UnknownFormat(t *testing.T) {
 
 func TestJSONPrinter_Print_Map(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewJSONPrinter(&buf)
+	p := NewJSONPrinter(&buf, &bytes.Buffer{})
 
 	data := map[string]interface{}{
 		"name":  "test",
@@ -243,7 +256,7 @@ func TestJSONPrinter_Print_Map(t *testing.T) {
 
 func TestJSONPrinter_Print_Slice(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewJSONPrinter(&buf)
+	p := NewJSONPrinter(&buf, &bytes.Buffer{})
 
 	data := []string{"a", "b", "c"}
 
@@ -259,7 +272,7 @@ func TestJSONPrinter_Print_Slice(t *testing.T) {
 
 func TestJSONPrinter_Print_Nested(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewJSONPrinter(&buf)
+	p := NewJSONPrinter(&buf, &bytes.Buffer{})
 
 	data := map[string]interface{}{
 		"user": map[string]interface{}{
@@ -280,23 +293,29 @@ func TestJSONPrinter_Print_Nested(t *testing.T) {
 }
 
 func TestJSONPrinter_PrintError(t *testing.T) {
-	var buf bytes.Buffer
-	p := NewJSONPrinter(&buf)
+	var buf, errBuf bytes.Buffer
+	p := NewJSONPrinter(&buf, &errBuf)
 
 	err := errors.New("something went wrong")
-	if printErr := p.PrintError(err); printErr != nil {
-		t.Fatalf("unexpected error: %v", printErr)
+	printErr := p.PrintError(err)
+	var printed *AlreadyPrintedError
+	if !errors.As(printErr, &printed) {
+		t.Fatalf("expected AlreadyPrintedError, got %T", printErr)
 	}
 
-	output := buf.String()
+	// Error goes to errW (stderr), not w (stdout)
+	if buf.Len() > 0 {
+		t.Errorf("expected stdout empty on error, got: %s", buf.String())
+	}
+	output := errBuf.String()
 	if !strings.Contains(output, `"error": "something went wrong"`) {
-		t.Errorf("expected error message in output: %s", output)
+		t.Errorf("expected error message on stderr: %s", output)
 	}
 }
 
 func TestJSONPrinter_Indentation(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewJSONPrinter(&buf)
+	p := NewJSONPrinter(&buf, &bytes.Buffer{})
 
 	data := map[string]interface{}{"key": "value"}
 	if err := p.Print(data); err != nil {
@@ -312,7 +331,7 @@ func TestJSONPrinter_Indentation(t *testing.T) {
 
 func TestTextPrinter_Print_Map(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewTextPrinter(&buf)
+	p := NewTextPrinter(&buf, &bytes.Buffer{})
 
 	data := map[string]interface{}{
 		"name":  "test",
@@ -337,7 +356,7 @@ func TestTextPrinter_Print_Map(t *testing.T) {
 
 func TestTextPrinter_Print_Map_SortedKeys(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewTextPrinter(&buf)
+	p := NewTextPrinter(&buf, &bytes.Buffer{})
 
 	data := map[string]interface{}{
 		"zebra": 1,
@@ -362,7 +381,7 @@ func TestTextPrinter_Print_Map_SortedKeys(t *testing.T) {
 
 func TestTextPrinter_Print_Slice(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewTextPrinter(&buf)
+	p := NewTextPrinter(&buf, &bytes.Buffer{})
 
 	data := []interface{}{
 		map[string]interface{}{"id": 1, "name": "first"},
@@ -387,7 +406,7 @@ func TestTextPrinter_Print_Slice(t *testing.T) {
 
 func TestTextPrinter_Print_Table(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewTextPrinter(&buf)
+	p := NewTextPrinter(&buf, &bytes.Buffer{})
 
 	data := []map[string]interface{}{
 		{"id": "1", "name": "Alice"},
@@ -415,7 +434,7 @@ func TestTextPrinter_Print_Table(t *testing.T) {
 
 func TestTextPrinter_Print_EmptyTable(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewTextPrinter(&buf)
+	p := NewTextPrinter(&buf, &bytes.Buffer{})
 
 	data := []map[string]interface{}{}
 
@@ -431,7 +450,7 @@ func TestTextPrinter_Print_EmptyTable(t *testing.T) {
 
 func TestTextPrinter_Print_SimpleValue(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewTextPrinter(&buf)
+	p := NewTextPrinter(&buf, &bytes.Buffer{})
 
 	if err := p.Print("hello world"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -444,23 +463,29 @@ func TestTextPrinter_Print_SimpleValue(t *testing.T) {
 }
 
 func TestTextPrinter_PrintError(t *testing.T) {
-	var buf bytes.Buffer
-	p := NewTextPrinter(&buf)
+	var buf, errBuf bytes.Buffer
+	p := NewTextPrinter(&buf, &errBuf)
 
 	err := errors.New("something went wrong")
-	if printErr := p.PrintError(err); printErr != nil {
-		t.Fatalf("unexpected error: %v", printErr)
+	printErr := p.PrintError(err)
+	var printed *AlreadyPrintedError
+	if !errors.As(printErr, &printed) {
+		t.Fatalf("expected AlreadyPrintedError, got %T", printErr)
 	}
 
-	output := buf.String()
+	// Error goes to errW, not w
+	if buf.Len() > 0 {
+		t.Errorf("expected stdout empty on error, got: %s", buf.String())
+	}
+	output := errBuf.String()
 	if !strings.Contains(output, "Error: something went wrong") {
-		t.Errorf("expected error message in output: %s", output)
+		t.Errorf("expected error message on stderr: %s", output)
 	}
 }
 
 func TestTextPrinter_Print_SliceOfStrings(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewTextPrinter(&buf)
+	p := NewTextPrinter(&buf, &bytes.Buffer{})
 
 	// Test with a simple slice (not interface{})
 	data := []interface{}{"one", "two", "three"}
@@ -475,9 +500,36 @@ func TestTextPrinter_Print_SliceOfStrings(t *testing.T) {
 	}
 }
 
+// failingWriter always returns an error on Write; used to verify that
+// PrintError surfaces encode failures via errors.Join.
+type failingWriter struct{ err error }
+
+func (f *failingWriter) Write(p []byte) (int, error) { return 0, f.err }
+
+func TestJSONPrinter_PrintError_JoinsEncodeFailure(t *testing.T) {
+	var ok bytes.Buffer
+	fw := &failingWriter{err: errors.New("disk full")}
+	p := NewJSONPrinter(&ok, fw)
+
+	printErr := p.PrintError(errors.New("api boom"))
+
+	// AlreadyPrintedError must still be present for callers that key on it.
+	var printed *AlreadyPrintedError
+	if !errors.As(printErr, &printed) {
+		t.Fatalf("expected AlreadyPrintedError in chain, got %T", printErr)
+	}
+	if !strings.Contains(printed.Err.Error(), "api boom") {
+		t.Errorf("expected original error preserved, got %v", printed.Err)
+	}
+	// And the underlying write failure must be inspectable.
+	if !strings.Contains(printErr.Error(), "disk full") {
+		t.Errorf("expected encode failure joined into chain, got %q", printErr.Error())
+	}
+}
+
 func TestTextPrinter_Print_ReflectSlice(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewTextPrinter(&buf)
+	p := NewTextPrinter(&buf, &bytes.Buffer{})
 
 	// Using a concrete slice type to trigger reflection path
 	type item struct {

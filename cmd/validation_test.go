@@ -8,36 +8,50 @@ import (
 	"testing"
 )
 
-// captureOutput captures stdout during a function call and returns the output.
+// captureOutput captures stderr during a function call and returns the output.
+// (PrintError writes structured errors to stderr per #190.)
 func captureOutput(t *testing.T, fn func()) string {
 	t.Helper()
-	old := os.Stdout
+	old := os.Stderr
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("failed to create pipe: %v", err)
 	}
-	os.Stdout = w
+	os.Stderr = w
 
 	fn()
 
 	w.Close()
-	os.Stdout = old
+	os.Stderr = old
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	return buf.String()
 }
 
-// extractError parses JSON output and returns the "error" field if present.
+// extractError returns the error message from either format the CLI may
+// produce on stderr:
+//   - structured JSON: {"error": "..."} (runtime/API failures)
+//   - plain text:      "Error: ..."     (CLI usage errors)
+//
+// Returns "" if no recognizable error shape is found.
 func extractError(output string) string {
-	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &result); err != nil {
+	trim := strings.TrimSpace(output)
+	if trim == "" {
 		return ""
 	}
-	if errMsg, ok := result["error"].(string); ok {
-		return errMsg
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(trim), &result); err == nil {
+		if errMsg, ok := result["error"].(string); ok {
+			return errMsg
+		}
 	}
-	return ""
+	for _, line := range strings.Split(trim, "\n") {
+		if strings.HasPrefix(line, "Error: ") {
+			return strings.TrimPrefix(line, "Error: ")
+		}
+	}
+	return trim
 }
 
 // --- Forms validation tests ---

@@ -8,7 +8,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/omriariav/workspace-cli/internal/client"
@@ -58,14 +57,14 @@ func runPeopleGet(cmd *cobra.Command, args []string) error {
 	// instead of after OAuth/config failures.
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 	hasResource := len(args) > 0 && args[0] != ""
 	if v, ok := paramString(params, "resourceName"); ok && v != "" {
 		hasResource = true
 	}
 	if !hasResource {
-		return p.PrintError(errors.New("people get: resourceName is required (positional arg or --params resourceName)"))
+		return usageErrorf("people get: resourceName is required (positional arg or --params resourceName)")
 	}
 
 	ctx := context.Background()
@@ -87,7 +86,7 @@ func runPeopleGetWithSvc(cmd *cobra.Command, svc *people.Service, args []string)
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	resourceName := ""
@@ -98,7 +97,7 @@ func runPeopleGetWithSvc(cmd *cobra.Command, svc *people.Service, args []string)
 		resourceName = v
 	}
 	if resourceName == "" {
-		return p.PrintError(errors.New("people get: resourceName is required (positional arg or --params resourceName)"))
+		return usageErrorf("people get: resourceName is required (positional arg or --params resourceName)")
 	}
 
 	pf, _ := cmd.Flags().GetString("person-fields")

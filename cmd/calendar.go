@@ -525,17 +525,6 @@ func runCalendarList(cmd *cobra.Command, args []string) error {
 
 func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
-
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.Calendar()
-	if err != nil {
-		return p.PrintError(err)
-	}
 
 	days, _ := cmd.Flags().GetInt("days")
 	fromStr, _ := cmd.Flags().GetString("from")
@@ -548,6 +537,8 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	timezone, _ := cmd.Flags().GetString("timezone")
 	updatedMin, _ := cmd.Flags().GetString("updated-min")
 
+	// Pure input validation before auth — invalid CLI input must surface
+	// as ExitUsage, not as an auth failure.
 	start := time.Now()
 	if fromStr != "" {
 		if t, err := time.Parse(time.RFC3339, fromStr); err == nil {
@@ -555,9 +546,26 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 		} else if t, err := time.ParseInLocation("2006-01-02", fromStr, time.Local); err == nil {
 			start = t
 		} else {
-			return p.PrintError(fmt.Errorf("invalid --from date %q: use YYYY-MM-DD or RFC3339 format", fromStr))
+			return usageErrorf("invalid --from date %q: use YYYY-MM-DD or RFC3339 format", fromStr)
 		}
 	}
+	if updatedMin != "" {
+		if _, err := time.Parse(time.RFC3339, updatedMin); err != nil {
+			return usageErrorf("invalid --updated-min %q: use RFC3339 format", updatedMin)
+		}
+	}
+
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Calendar()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	timeMin := start.Format(time.RFC3339)
 	timeMax := start.AddDate(0, 0, days).Format(time.RFC3339)
 
@@ -578,9 +586,7 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 		call = call.TimeZone(timezone)
 	}
 	if updatedMin != "" {
-		if _, err := time.Parse(time.RFC3339, updatedMin); err != nil {
-			return p.PrintError(fmt.Errorf("invalid --updated-min %q: use RFC3339 format", updatedMin))
-		}
+		// Already validated above.
 		call = call.UpdatedMin(updatedMin)
 	}
 
@@ -732,7 +738,7 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if !hasChanges {
-		return p.PrintError(fmt.Errorf("at least one update flag is required (--title, --start, --end, --description, --location, --add-attendees)"))
+		return usageErrorf("at least one update flag is required (--title, --start, --end, --description, --location, --add-attendees)")
 	}
 
 	factory, err := client.NewFactory(ctx)
@@ -886,7 +892,7 @@ func runCalendarRsvp(cmd *cobra.Command, args []string) error {
 	message, _ := cmd.Flags().GetString("message")
 
 	if !validRsvpResponses[response] {
-		return p.PrintError(fmt.Errorf("invalid response '%s': must be accepted, declined, or tentative", response))
+		return usageErrorf("invalid response '%s': must be accepted, declined, or tentative", response)
 	}
 
 	// Get the event to find our attendee entry
@@ -1508,7 +1514,7 @@ func runCalendarShare(cmd *cobra.Command, args []string) error {
 	role, _ := cmd.Flags().GetString("role")
 
 	if !validAclRoles[role] {
-		return p.PrintError(fmt.Errorf("invalid role '%s': must be reader, writer, owner, or freeBusyReader", role))
+		return usageErrorf("invalid role '%s': must be reader, writer, owner, or freeBusyReader", role)
 	}
 
 	factory, err := client.NewFactory(ctx)
@@ -1579,7 +1585,7 @@ func runCalendarUpdateAcl(cmd *cobra.Command, args []string) error {
 	role, _ := cmd.Flags().GetString("role")
 
 	if !validAclRoles[role] {
-		return p.PrintError(fmt.Errorf("invalid role '%s': must be reader, writer, owner, or freeBusyReader", role))
+		return usageErrorf("invalid role '%s': must be reader, writer, owner, or freeBusyReader", role)
 	}
 
 	factory, err := client.NewFactory(ctx)

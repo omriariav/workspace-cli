@@ -1123,8 +1123,22 @@ func runDocsAppend(cmd *cobra.Command, args []string) error {
 
 func runDocsInsert(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	docID := args[0]
+	text, _ := cmd.Flags().GetString("text")
+	position, _ := cmd.Flags().GetInt64("at")
+	contentFormat, _ := cmd.Flags().GetString("content-format")
+	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	// Validate position before auth so invalid CLI input maps to ExitUsage.
+	if contentFormat != "richformat" && position < 1 {
+		return usageErrorf("position must be >= 1")
+	}
+	if contentFormat == "richformat" && cmd.Flags().Changed("at") {
+		fmt.Fprintln(os.Stderr, "warning: --at is ignored when --content-format is richformat")
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -1133,20 +1147,6 @@ func runDocsInsert(cmd *cobra.Command, args []string) error {
 	svc, err := factory.Docs()
 	if err != nil {
 		return p.PrintError(err)
-	}
-
-	docID := args[0]
-	text, _ := cmd.Flags().GetString("text")
-	position, _ := cmd.Flags().GetInt64("at")
-	contentFormat, _ := cmd.Flags().GetString("content-format")
-	tabQuery, _ := cmd.Flags().GetString("tab")
-
-	// Validate position (skip for richformat which provides its own positions)
-	if contentFormat != "richformat" && position < 1 {
-		return p.PrintError(fmt.Errorf("position must be >= 1"))
-	}
-	if contentFormat == "richformat" && cmd.Flags().Changed("at") {
-		fmt.Fprintln(os.Stderr, "warning: --at is ignored when --content-format is richformat")
 	}
 
 	// Resolve tab ID if --tab provided
@@ -1270,10 +1270,10 @@ func runDocsDelete(cmd *cobra.Command, args []string) error {
 
 	// Validate positions
 	if from < 1 {
-		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+		return usageErrorf("--from must be >= 1")
 	}
 	if to <= from {
-		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+		return usageErrorf("--to must be greater than --from")
 	}
 
 	// Resolve tab ID
@@ -1342,10 +1342,10 @@ func runDocsReplaceContent(cmd *cobra.Command, args []string) error {
 
 	// Validate: exactly one of --text or --file must be provided
 	if text == "" && filePath == "" {
-		return p.PrintError(fmt.Errorf("either --text or --file is required"))
+		return usageErrorf("either --text or --file is required")
 	}
 	if text != "" && filePath != "" {
-		return p.PrintError(fmt.Errorf("--text and --file are mutually exclusive"))
+		return usageErrorf("--text and --file are mutually exclusive")
 	}
 
 	// Read content from file if --file provided
@@ -1358,7 +1358,7 @@ func runDocsReplaceContent(cmd *cobra.Command, args []string) error {
 	}
 
 	if text == "" {
-		return p.PrintError(fmt.Errorf("replacement text cannot be empty"))
+		return usageErrorf("replacement text cannot be empty")
 	}
 
 	// Get document to find content end index
@@ -1445,13 +1445,13 @@ func runDocsAddTable(cmd *cobra.Command, args []string) error {
 
 	// Validate
 	if position < 1 {
-		return p.PrintError(fmt.Errorf("--at must be >= 1"))
+		return usageErrorf("--at must be >= 1")
 	}
 	if rows < 1 {
-		return p.PrintError(fmt.Errorf("--rows must be >= 1"))
+		return usageErrorf("--rows must be >= 1")
 	}
 	if cols < 1 {
-		return p.PrintError(fmt.Errorf("--cols must be >= 1"))
+		return usageErrorf("--cols must be >= 1")
 	}
 
 	// Resolve tab ID
@@ -1546,10 +1546,10 @@ func runDocsFormat(cmd *cobra.Command, args []string) error {
 	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	if from < 1 {
-		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+		return usageErrorf("--from must be >= 1")
 	}
 	if to <= from {
-		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+		return usageErrorf("--to must be greater than --from")
 	}
 
 	// Resolve tab ID
@@ -1609,7 +1609,7 @@ func runDocsFormat(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no formatting options specified; use --bold, --italic, --font-size, --color, or --font-family"))
+		return usageErrorf("no formatting options specified; use --bold, --italic, --font-size, --color, or --font-family")
 	}
 
 	rng := &docs.Range{
@@ -1669,10 +1669,10 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	if from < 1 {
-		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+		return usageErrorf("--from must be >= 1")
 	}
 	if to <= from {
-		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+		return usageErrorf("--to must be greater than --from")
 	}
 
 	// Resolve tab ID
@@ -1708,7 +1708,7 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 			"HEADING_4": true, "HEADING_5": true, "HEADING_6": true,
 		}
 		if !validStyles[style] {
-			return p.PrintError(fmt.Errorf("invalid style %q; use NORMAL_TEXT, TITLE, SUBTITLE, or HEADING_1..HEADING_6", style))
+			return usageErrorf("invalid style %q; use NORMAL_TEXT, TITLE, SUBTITLE, or HEADING_1..HEADING_6", style)
 		}
 		paraStyle.NamedStyleType = style
 		fields = append(fields, "namedStyleType")
@@ -1717,14 +1717,14 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 	if direction != "" {
 		validDirs := map[string]bool{"LEFT_TO_RIGHT": true, "RIGHT_TO_LEFT": true}
 		if !validDirs[direction] {
-			return p.PrintError(fmt.Errorf("invalid direction %q; use LEFT_TO_RIGHT or RIGHT_TO_LEFT", direction))
+			return usageErrorf("invalid direction %q; use LEFT_TO_RIGHT or RIGHT_TO_LEFT", direction)
 		}
 		paraStyle.Direction = direction
 		fields = append(fields, "direction")
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no style options specified; use --alignment, --line-spacing, --style, or --direction"))
+		return usageErrorf("no style options specified; use --alignment, --line-spacing, --style, or --direction")
 	}
 
 	rng := &docs.Range{
@@ -1781,7 +1781,7 @@ func runDocsAddList(cmd *cobra.Command, args []string) error {
 	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	if position < 1 {
-		return p.PrintError(fmt.Errorf("--at must be >= 1"))
+		return usageErrorf("--at must be >= 1")
 	}
 
 	// Resolve tab ID
@@ -1814,7 +1814,7 @@ func runDocsAddList(cmd *cobra.Command, args []string) error {
 	case "numbered":
 		bulletPreset = "NUMBERED_DECIMAL_NESTED"
 	default:
-		return p.PrintError(fmt.Errorf("invalid list type: %s (use 'bullet' or 'numbered')", listType))
+		return usageErrorf("invalid list type: %s (use 'bullet' or 'numbered')", listType)
 	}
 
 	loc := &docs.Location{Index: position}
@@ -1879,10 +1879,10 @@ func runDocsRemoveList(cmd *cobra.Command, args []string) error {
 	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	if from < 1 {
-		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+		return usageErrorf("--from must be >= 1")
 	}
 	if to <= from {
-		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+		return usageErrorf("--to must be greater than --from")
 	}
 
 	// Resolve tab ID
@@ -2460,7 +2460,7 @@ func runDocsPinRows(cmd *cobra.Command, args []string) error {
 	count, _ := cmd.Flags().GetInt64("count")
 
 	if count < 0 {
-		return p.PrintError(fmt.Errorf("--count must be >= 0"))
+		return usageErrorf("--count must be >= 0")
 	}
 
 	tabID, err := resolveTabQueryToID(cmd, docID)
@@ -2696,10 +2696,10 @@ func runDocsAddNamedRange(cmd *cobra.Command, args []string) error {
 	to, _ := cmd.Flags().GetInt64("to")
 
 	if from < 1 {
-		return p.PrintError(fmt.Errorf("--from must be >= 1"))
+		return usageErrorf("--from must be >= 1")
 	}
 	if to <= from {
-		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+		return usageErrorf("--to must be greater than --from")
 	}
 
 	tabID, err := resolveTabQueryToID(cmd, docID)
@@ -2745,10 +2745,10 @@ func runDocsDeleteNamedRange(cmd *cobra.Command, args []string) error {
 	id, _ := cmd.Flags().GetString("id")
 
 	if name == "" && id == "" {
-		return p.PrintError(fmt.Errorf("either --name or --id is required"))
+		return usageErrorf("either --name or --id is required")
 	}
 	if name != "" && id != "" {
-		return p.PrintError(fmt.Errorf("use either --name or --id, not both"))
+		return usageErrorf("use either --name or --id, not both")
 	}
 
 	req := &docs.DeleteNamedRangeRequest{}
@@ -2778,7 +2778,7 @@ func runDocsAddFootnote(cmd *cobra.Command, args []string) error {
 	tabQuery, _ := cmd.Flags().GetString("tab")
 
 	if position < 1 {
-		return p.PrintError(fmt.Errorf("--at must be >= 1"))
+		return usageErrorf("--at must be >= 1")
 	}
 
 	loc := &docs.Location{Index: position}
@@ -2883,10 +2883,10 @@ func runDocsReplaceNamedRange(cmd *cobra.Command, args []string) error {
 	text, _ := cmd.Flags().GetString("text")
 
 	if name == "" && id == "" {
-		return p.PrintError(fmt.Errorf("either --name or --id is required"))
+		return usageErrorf("either --name or --id is required")
 	}
 	if name != "" && id != "" {
-		return p.PrintError(fmt.Errorf("use either --name or --id, not both"))
+		return usageErrorf("use either --name or --id, not both")
 	}
 
 	req := &docs.ReplaceNamedRangeContentRequest{
@@ -2940,7 +2940,7 @@ func runDocsUpdateStyle(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no margin options specified; use --margin-top, --margin-bottom, --margin-left, or --margin-right"))
+		return usageErrorf("no margin options specified; use --margin-top, --margin-bottom, --margin-left, or --margin-right")
 	}
 
 	requests := []*docs.Request{
@@ -2989,7 +2989,7 @@ func runDocsUpdateSectionStyle(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no section style options specified"))
+		return usageErrorf("no section style options specified")
 	}
 
 	tabID, err := resolveTabQueryToID(cmd, docID)
@@ -3066,7 +3066,7 @@ func runDocsUpdateTableCellStyle(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no cell style options specified; use --bg-color or --padding"))
+		return usageErrorf("no cell style options specified; use --bg-color or --padding")
 	}
 
 	loc := &docs.Location{Index: tableStart}

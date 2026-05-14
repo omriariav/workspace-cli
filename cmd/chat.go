@@ -646,12 +646,12 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 		spaceName = ensureSpaceName(args[0])
 	}
 	if params, perr := parseParams(cmd); perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	} else if v, ok := paramString(params, "parent"); ok && v != "" {
 		spaceName = v
 	}
 	if spaceName == "" {
-		return p.PrintError(errors.New("chat messages: a space id is required (positional arg or --params parent)"))
+		return usageErrorf("chat messages: a space id is required (positional arg or --params parent)")
 	}
 
 	ctx := context.Background()
@@ -1060,12 +1060,12 @@ func runChatMembers(cmd *cobra.Command, args []string) error {
 		spaceName = ensureSpaceName(args[0])
 	}
 	if params, perr := parseParams(cmd); perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	} else if v, ok := paramString(params, "parent"); ok && v != "" {
 		spaceName = v
 	}
 	if spaceName == "" {
-		return p.PrintError(errors.New("chat members: a space id is required (positional arg or --params parent)"))
+		return usageErrorf("chat members: a space id is required (positional arg or --params parent)")
 	}
 
 	ctx := context.Background()
@@ -1650,7 +1650,7 @@ func runChatUpdateSpace(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(masks) == 0 {
-		return p.PrintError(fmt.Errorf("at least one of --display-name or --description is required"))
+		return usageErrorf("at least one of --display-name or --description is required")
 	}
 
 	updated, err := svc.Spaces.Patch(spaceName, space).UpdateMask(strings.Join(masks, ",")).Context(ctx).Do()
@@ -1736,10 +1736,10 @@ func runChatFindDm(cmd *cobra.Command, args []string) error {
 	email, _ := cmd.Flags().GetString("email")
 
 	if user == "" && email == "" {
-		return p.PrintError(fmt.Errorf("provide either --user or --email"))
+		return usageErrorf("provide either --user or --email")
 	}
 	if user != "" && email != "" {
-		return p.PrintError(fmt.Errorf("--user and --email are mutually exclusive"))
+		return usageErrorf("--user and --email are mutually exclusive")
 	}
 	if email != "" {
 		user = "users/" + email
@@ -1775,18 +1775,18 @@ func runChatSetupSpace(cmd *cobra.Command, args []string) error {
 	switch spaceType {
 	case "SPACE", "DIRECT_MESSAGE", "GROUP_CHAT":
 	default:
-		return p.PrintError(fmt.Errorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType))
+		return usageErrorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType)
 	}
 
 	// Validate flags based on space type
 	switch spaceType {
 	case "DIRECT_MESSAGE", "GROUP_CHAT":
 		if membersStr == "" {
-			return p.PrintError(fmt.Errorf("--members is required for %s type", spaceType))
+			return usageErrorf("--members is required for %s type", spaceType)
 		}
 	default: // SPACE
 		if displayName == "" {
-			return p.PrintError(fmt.Errorf("--display-name is required for %s type", spaceType))
+			return usageErrorf("--display-name is required for %s type", spaceType)
 		}
 	}
 
@@ -2389,7 +2389,7 @@ func runChatBuildCache(cmd *cobra.Command, args []string) error {
 	switch spaceType {
 	case "GROUP_CHAT", "SPACE", "DIRECT_MESSAGE", "all":
 	default:
-		return p.PrintError(fmt.Errorf("invalid --type %q: must be GROUP_CHAT, SPACE, DIRECT_MESSAGE, or all", spaceType))
+		return usageErrorf("invalid --type %q: must be GROUP_CHAT, SPACE, DIRECT_MESSAGE, or all", spaceType)
 	}
 
 	start := time.Now()
@@ -2468,7 +2468,7 @@ func runChatFindGroup(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if len(emails) == 0 {
-		return p.PrintError(fmt.Errorf("--members must contain at least one email address"))
+		return usageErrorf("--members must contain at least one email address")
 	}
 
 	matches := spacecache.FindByMembers(cache, emails)
@@ -2511,14 +2511,14 @@ func runChatFindSpace(cmd *cobra.Command, args []string) error {
 
 	name := strings.TrimSpace(rawName)
 	if name == "" {
-		return p.PrintError(fmt.Errorf("--name must not be empty"))
+		return usageErrorf("--name must not be empty")
 	}
 
 	if spaceType != "" {
 		switch strings.ToUpper(spaceType) {
 		case "SPACE", "GROUP_CHAT", "DIRECT_MESSAGE":
 		default:
-			return p.PrintError(fmt.Errorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType))
+			return usageErrorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType)
 		}
 	}
 

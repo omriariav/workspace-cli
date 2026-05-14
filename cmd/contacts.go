@@ -301,7 +301,7 @@ func runContactsGet(cmd *cobra.Command, args []string) error {
 
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 	if v, ok := paramString(params, "resourceName"); ok && v != "" {
 		resourceName = v
@@ -310,7 +310,7 @@ func runContactsGet(cmd *cobra.Command, args []string) error {
 		pf = v
 	}
 	if resourceName == "" {
-		return p.PrintError(fmt.Errorf("contacts get: resource-name is required (positional arg or --params resourceName)"))
+		return usageErrorf("contacts get: resource-name is required (positional arg or --params resourceName)")
 	}
 
 	ctx := context.Background()
@@ -433,7 +433,7 @@ func runContactsUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(updateFields) == 0 {
-		return p.PrintError(fmt.Errorf("at least one field to update must be specified (--name, --email, --phone, --organization, --title)"))
+		return usageErrorf("at least one field to update must be specified (--name, --email, --phone, --organization, --title)")
 	}
 
 	ctx := context.Background()
@@ -635,7 +635,7 @@ func runContactsBatchUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	if fileData.UpdateMask == "" {
-		return p.PrintError(fmt.Errorf("update_mask is required in the JSON file"))
+		return usageErrorf("update_mask is required in the JSON file")
 	}
 
 	req := &people.BatchUpdateContactsRequest{

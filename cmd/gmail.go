@@ -614,7 +614,7 @@ func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxRe
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 	// Raw mode preserves the API response verbatim. The CLI's --max
 	// default would otherwise slice a verbatim page, breaking the
@@ -1116,7 +1116,7 @@ func runGmailLabel(cmd *cobra.Command, args []string) error {
 	removeStr, _ := cmd.Flags().GetString("remove")
 
 	if addStr == "" && removeStr == "" {
-		return p.PrintError(fmt.Errorf("at least one of --add or --remove is required"))
+		return usageErrorf("at least one of --add or --remove is required")
 	}
 
 	// Fetch label map once for both add and remove
@@ -1271,13 +1271,13 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 	}
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 	if v, ok := paramString(params, "id"); ok && v != "" {
 		threadID = v
 	}
 	if threadID == "" {
-		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)"))
+		return usageErrorf("gmail thread: a thread id is required (positional arg or --params id)")
 	}
 
 	ctx := context.Background()
@@ -1348,7 +1348,7 @@ func runGmailThreadRaw(cmd *cobra.Command, svc *gmail.Service, threadID string) 
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	// --params overrides: id (resource path), format, metadataHeaders.
@@ -1356,7 +1356,7 @@ func runGmailThreadRaw(cmd *cobra.Command, svc *gmail.Service, threadID string) 
 		threadID = v
 	}
 	if threadID == "" {
-		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)"))
+		return usageErrorf("gmail thread: a thread id is required (positional arg or --params id)")
 	}
 	format := "full"
 	if v, ok := paramString(params, "format"); ok && v != "" {
@@ -1709,7 +1709,7 @@ func runGmailForward(cmd *cobra.Command, args []string) error {
 			filePath := filepath.Join(attDir, filename)
 			// Verify the resolved path is still under tmpDir
 			if resolved, err := filepath.Abs(filePath); err != nil || !strings.HasPrefix(resolved, tmpDir) {
-				return p.PrintError(fmt.Errorf("unsafe attachment filename %q", att.Filename))
+				return usageErrorf("unsafe attachment filename %q", att.Filename)
 			}
 			if err := os.WriteFile(filePath, decoded, 0600); err != nil {
 				return p.PrintError(fmt.Errorf("failed to write attachment %q: %w", filename, err))
@@ -1938,7 +1938,7 @@ func runGmailBatchModify(cmd *cobra.Command, args []string) error {
 	removeLabelsStr, _ := cmd.Flags().GetString("remove-labels")
 
 	if addLabelsStr == "" && removeLabelsStr == "" {
-		return p.PrintError(fmt.Errorf("at least one of --add-labels or --remove-labels is required"))
+		return usageErrorf("at least one of --add-labels or --remove-labels is required")
 	}
 
 	ids := strings.Split(idsStr, ",")

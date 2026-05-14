@@ -982,7 +982,7 @@ func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
 			"BIG_NUMBER":                    true,
 		}
 		if !validLayouts[layout] {
-			return p.PrintError(fmt.Errorf("invalid layout '%s'. Valid layouts: BLANK, TITLE, TITLE_AND_BODY, TITLE_AND_TWO_COLUMNS, TITLE_ONLY, SECTION_HEADER, CAPTION_ONLY, MAIN_POINT, BIG_NUMBER", layout))
+			return usageErrorf("invalid layout '%s'. Valid layouts: BLANK, TITLE, TITLE_AND_BODY, TITLE_AND_TWO_COLUMNS, TITLE_ONLY, SECTION_HEADER, CAPTION_ONLY, MAIN_POINT, BIG_NUMBER", layout)
 		}
 		layoutRef = &slides.LayoutReference{
 			PredefinedLayout: layout,
@@ -1111,7 +1111,7 @@ func runSlidesDeleteSlide(cmd *cobra.Command, args []string) error {
 
 		slideID = presentation.Slides[slideNumber-1].ObjectId
 	} else if slideID == "" {
-		return p.PrintError(fmt.Errorf("must specify --slide-id or --slide-number"))
+		return usageErrorf("must specify --slide-id or --slide-number")
 	}
 
 	requests := []*slides.Request{
@@ -1172,7 +1172,7 @@ func runSlidesDuplicateSlide(cmd *cobra.Command, args []string) error {
 
 		slideID = presentation.Slides[slideNumber-1].ObjectId
 	} else if slideID == "" {
-		return p.PrintError(fmt.Errorf("must specify --slide-id or --slide-number"))
+		return usageErrorf("must specify --slide-id or --slide-number")
 	}
 
 	requests := []*slides.Request{
@@ -1423,7 +1423,7 @@ func runSlidesAddShape(cmd *cobra.Command, args []string) error {
 
 	// Validate shape type
 	if !validShapeTypes[shapeType] {
-		return p.PrintError(fmt.Errorf("invalid shape type '%s'. Common types: RECTANGLE, ELLIPSE, TEXT_BOX, TRIANGLE, ARROW, STAR_5", shapeType))
+		return usageErrorf("invalid shape type '%s'. Common types: RECTANGLE, ELLIPSE, TEXT_BOX, TRIANGLE, ARROW, STAR_5", shapeType)
 	}
 
 	slideID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
@@ -1599,25 +1599,25 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 		modeCount++
 	}
 	if modeCount > 1 {
-		return p.PrintError(fmt.Errorf("--object-id, --table-id, and --notes are mutually exclusive"))
+		return usageErrorf("--object-id, --table-id, and --notes are mutually exclusive")
 	}
 	if modeCount == 0 {
-		return p.PrintError(fmt.Errorf("must specify --object-id, --table-id, or --notes"))
+		return usageErrorf("must specify --object-id, --table-id, or --notes")
 	}
 
 	// Validate table cell mode requires row and col
 	if tableID != "" {
 		if row < 0 {
-			return p.PrintError(fmt.Errorf("--row is required when using --table-id (valid values: 0 or greater)"))
+			return usageErrorf("--row is required when using --table-id (valid values: 0 or greater)")
 		}
 		if col < 0 {
-			return p.PrintError(fmt.Errorf("--col is required when using --table-id (valid values: 0 or greater)"))
+			return usageErrorf("--col is required when using --table-id (valid values: 0 or greater)")
 		}
 	}
 
 	// Validate notes mode requires slide targeting
 	if notesMode && slideIDFlag == "" && slideNumber == 0 {
-		return p.PrintError(fmt.Errorf("--notes requires --slide-id or --slide-number"))
+		return usageErrorf("--notes requires --slide-id or --slide-number")
 	}
 
 	// Now create the client after validation passes
@@ -1934,15 +1934,15 @@ func runSlidesDeleteText(cmd *cobra.Command, args []string) error {
 
 	// Validate: need either --object-id or --notes
 	if objectID == "" && !notesMode {
-		return p.PrintError(fmt.Errorf("must specify --object-id or --notes"))
+		return usageErrorf("must specify --object-id or --notes")
 	}
 	if objectID != "" && notesMode {
-		return p.PrintError(fmt.Errorf("--object-id and --notes are mutually exclusive"))
+		return usageErrorf("--object-id and --notes are mutually exclusive")
 	}
 
 	// Validate notes mode requires slide targeting
 	if notesMode && slideIDFlag == "" && slideNumber == 0 {
-		return p.PrintError(fmt.Errorf("--notes requires --slide-id or --slide-number"))
+		return usageErrorf("--notes requires --slide-id or --slide-number")
 	}
 
 	ctx := context.Background()
@@ -2084,7 +2084,7 @@ func runSlidesUpdateTextStyle(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no style changes specified"))
+		return usageErrorf("no style changes specified")
 	}
 
 	var textRange *slides.Range
@@ -2383,7 +2383,7 @@ func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
 	bgColor, _ := cmd.Flags().GetString("background-color")
 
 	if bgColor == "" {
-		return p.PrintError(fmt.Errorf("--background-color is required"))
+		return usageErrorf("--background-color is required")
 	}
 
 	color, err := parseHexColor(bgColor)
@@ -2438,17 +2438,6 @@ func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
 
 func runSlidesUpdateTableBorder(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
-
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.Slides()
-	if err != nil {
-		return p.PrintError(err)
-	}
 
 	presentationID := args[0]
 	tableID, _ := cmd.Flags().GetString("table-id")
@@ -2458,6 +2447,25 @@ func runSlidesUpdateTableBorder(cmd *cobra.Command, args []string) error {
 	colorHex, _ := cmd.Flags().GetString("color")
 	width, _ := cmd.Flags().GetFloat64("width")
 	style, _ := cmd.Flags().GetString("style")
+
+	// Validate enum-shaped flags before auth so invalid CLI input maps
+	// to ExitUsage, not an auth failure.
+	switch border {
+	case "all", "top", "bottom", "left", "right":
+	default:
+		return usageErrorf("invalid border: %s (use top, bottom, left, right, or all)", border)
+	}
+
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	// Build border properties
 	borderProps := &slides.TableBorderProperties{
@@ -2510,7 +2518,7 @@ func runSlidesUpdateTableBorder(cmd *cobra.Command, args []string) error {
 	case "right":
 		borders = []string{"RIGHT"}
 	default:
-		return p.PrintError(fmt.Errorf("invalid border: %s (use top, bottom, left, right, or all)", border))
+		return usageErrorf("invalid border: %s (use top, bottom, left, right, or all)", border)
 	}
 
 	requests := make([]*slides.Request, 0, len(borders))
@@ -2602,7 +2610,7 @@ func runSlidesUpdateParagraphStyle(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no paragraph style changes specified"))
+		return usageErrorf("no paragraph style changes specified")
 	}
 
 	var textRange *slides.Range
@@ -2710,7 +2718,7 @@ func runSlidesUpdateShape(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no shape properties specified"))
+		return usageErrorf("no shape properties specified")
 	}
 
 	requests := []*slides.Request{
@@ -2796,10 +2804,10 @@ func runSlidesUpdateSlideBackground(cmd *cobra.Command, args []string) error {
 
 	// Validate: must specify exactly one of --color or --image-url
 	if colorHex == "" && imageURL == "" {
-		return p.PrintError(fmt.Errorf("must specify --color or --image-url"))
+		return usageErrorf("must specify --color or --image-url")
 	}
 	if colorHex != "" && imageURL != "" {
-		return p.PrintError(fmt.Errorf("--color and --image-url are mutually exclusive"))
+		return usageErrorf("--color and --image-url are mutually exclusive")
 	}
 
 	ctx := context.Background()
@@ -3072,8 +3080,25 @@ func runSlidesAddLine(cmd *cobra.Command, args []string) error {
 
 func runSlidesGroup(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	presentationID := args[0]
+	objectIDsStr, _ := cmd.Flags().GetString("object-ids")
+
+	// Trim and drop empties so inputs like "id1,,id2" or " , id1 " don't
+	// pass validation and send empty object IDs to the API.
+	rawIDs := strings.Split(objectIDsStr, ",")
+	objectIDs := make([]string, 0, len(rawIDs))
+	for _, id := range rawIDs {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			objectIDs = append(objectIDs, trimmed)
+		}
+	}
+
+	if len(objectIDs) < 2 {
+		return usageErrorf("at least 2 non-empty element IDs are required for grouping")
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -3082,18 +3107,6 @@ func runSlidesGroup(cmd *cobra.Command, args []string) error {
 	svc, err := factory.Slides()
 	if err != nil {
 		return p.PrintError(err)
-	}
-
-	presentationID := args[0]
-	objectIDsStr, _ := cmd.Flags().GetString("object-ids")
-
-	objectIDs := strings.Split(objectIDsStr, ",")
-	for i, id := range objectIDs {
-		objectIDs[i] = strings.TrimSpace(id)
-	}
-
-	if len(objectIDs) < 2 {
-		return p.PrintError(fmt.Errorf("at least 2 element IDs are required for grouping"))
 	}
 
 	requests := []*slides.Request{
@@ -3171,7 +3184,7 @@ func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 	validSizes := map[string]bool{"SMALL": true, "MEDIUM": true, "LARGE": true}
 	sizeUpper := strings.ToUpper(size)
 	if !validSizes[sizeUpper] {
-		return p.PrintError(fmt.Errorf("invalid size '%s': must be SMALL, MEDIUM, or LARGE", size))
+		return usageErrorf("invalid size '%s': must be SMALL, MEDIUM, or LARGE", size)
 	}
 
 	ctx := context.Background()

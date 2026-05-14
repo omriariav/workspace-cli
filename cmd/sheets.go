@@ -872,7 +872,7 @@ func runSheetsWrite(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(values) == 0 {
-		return p.PrintError(fmt.Errorf("no values provided; use --values or --values-json"))
+		return usageErrorf("no values provided; use --values or --values-json")
 	}
 
 	valueRange := &sheets.ValueRange{
@@ -918,7 +918,7 @@ func runSheetsAppend(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(values) == 0 {
-		return p.PrintError(fmt.Errorf("no values provided; use --values or --values-json"))
+		return usageErrorf("no values provided; use --values or --values-json")
 	}
 
 	valueRange := &sheets.ValueRange{
@@ -1071,7 +1071,7 @@ func runSheetsDeleteSheet(cmd *cobra.Command, args []string) error {
 			return p.PrintError(fmt.Errorf("sheet '%s' not found", sheetName))
 		}
 	} else if sheetID < 0 {
-		return p.PrintError(fmt.Errorf("must specify --name or --sheet-id"))
+		return usageErrorf("must specify --name or --sheet-id")
 	}
 
 	requests := []*sheets.Request{
@@ -1220,7 +1220,7 @@ func runSheetsDeleteRows(cmd *cobra.Command, args []string) error {
 	to, _ := cmd.Flags().GetInt64("to")
 
 	if to <= from {
-		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+		return usageErrorf("--to must be greater than --from")
 	}
 
 	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
@@ -1334,7 +1334,7 @@ func runSheetsDeleteCols(cmd *cobra.Command, args []string) error {
 	to, _ := cmd.Flags().GetInt64("to")
 
 	if to <= from {
-		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+		return usageErrorf("--to must be greater than --from")
 	}
 
 	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
@@ -1931,7 +1931,7 @@ func runSheetsFormat(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no formatting options specified; use --bold, --italic, --bg-color, --color, or --font-size"))
+		return usageErrorf("no formatting options specified; use --bold, --italic, --bg-color, --color, or --font-size")
 	}
 
 	requests := []*sheets.Request{
@@ -2099,7 +2099,7 @@ func runSheetsFreeze(cmd *cobra.Command, args []string) error {
 	freezeCols, _ := cmd.Flags().GetInt64("cols")
 
 	if !cmd.Flags().Changed("rows") && !cmd.Flags().Changed("cols") {
-		return p.PrintError(fmt.Errorf("specify --rows and/or --cols to freeze"))
+		return usageErrorf("specify --rows and/or --cols to freeze")
 	}
 
 	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
@@ -2254,7 +2254,7 @@ func runSheetsBatchWrite(cmd *cobra.Command, args []string) error {
 	valueInput, _ := cmd.Flags().GetString("value-input")
 
 	if len(ranges) != len(valuesStrs) {
-		return p.PrintError(fmt.Errorf("number of --ranges flags (%d) must match number of --values flags (%d)", len(ranges), len(valuesStrs)))
+		return usageErrorf("number of --ranges flags (%d) must match number of --values flags (%d)", len(ranges), len(valuesStrs))
 	}
 
 	data := make([]*sheets.ValueRange, 0, len(ranges))
@@ -2596,7 +2596,7 @@ func runSheetsAddChart(cmd *cobra.Command, args []string) error {
 
 	validTypes := map[string]bool{"BAR": true, "LINE": true, "AREA": true, "COLUMN": true, "SCATTER": true, "PIE": true, "COMBO": true}
 	if !validTypes[chartType] {
-		return p.PrintError(fmt.Errorf("unknown chart type: %s (valid: BAR, LINE, AREA, COLUMN, SCATTER, PIE, COMBO)", chartType))
+		return usageErrorf("unknown chart type: %s (valid: BAR, LINE, AREA, COLUMN, SCATTER, PIE, COMBO)", chartType)
 	}
 
 	_, gridRange, err := parseRange(svc, spreadsheetID, dataRange)
@@ -2612,7 +2612,7 @@ func runSheetsAddChart(cmd *cobra.Command, args []string) error {
 	if chartType == "PIE" {
 		// PIE: first column = labels (domain), remaining columns = data (series)
 		if gridRange.EndColumnIndex-gridRange.StartColumnIndex < 2 {
-			return p.PrintError(fmt.Errorf("PIE chart requires at least 2 columns (labels + data), got range with %d column(s)", gridRange.EndColumnIndex-gridRange.StartColumnIndex))
+			return usageErrorf("PIE chart requires at least 2 columns (labels + data), got range with %d column(s)", gridRange.EndColumnIndex-gridRange.StartColumnIndex)
 		}
 		domainRange := &sheets.GridRange{
 			SheetId:          gridRange.SheetId,
@@ -2825,7 +2825,7 @@ func runSheetsAddConditionalFormat(cmd *cobra.Command, args []string) error {
 
 	needsValue := map[string]bool{">": true, "<": true, "=": true, "!=": true, "contains": true, "not-contains": true, "formula": true}
 	if needsValue[rule] && value == "" {
-		return p.PrintError(fmt.Errorf("--value is required for rule type %q", rule))
+		return usageErrorf("--value is required for rule type %q", rule)
 	}
 
 	ctx := context.Background()
@@ -3028,7 +3028,7 @@ func runSheetsDeleteConditionalFormat(cmd *cobra.Command, args []string) error {
 	// Validate flags before creating API client
 	index, _ := cmd.Flags().GetInt64("index")
 	if index < 0 {
-		return p.PrintError(fmt.Errorf("--index must be >= 0, got %d", index))
+		return usageErrorf("--index must be >= 0, got %d", index)
 	}
 
 	ctx := context.Background()

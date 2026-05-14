@@ -16,10 +16,10 @@ var ServiceScopes = map[string][]string{
 	"chat":     {"chat.spaces", "chat.messages", "chat.messages.create", "chat.memberships", "chat.messages.reactions", "chat.users.readstate"},
 	"forms":    {"forms.responses.readonly", "forms.body", "forms.body.readonly"},
 	"contacts": {"contacts.readonly", "contacts", "directory.readonly"},
-	// `people` is an alias for `contacts` — both surface the People API.
-	// Kept as a distinct entry so `--services people` works and scoped
-	// warnings can refer to either name interchangeably.
-	"people":        {"contacts.readonly", "contacts", "directory.readonly"},
+	// `people` surfaces the People API for `gws people get`. Includes
+	// `userinfo.profile` which the API requires for `people/me` requests.
+	// Does NOT include admin.directory.group.* — those belong to `groups`.
+	"people":        {"userinfo.profile", "contacts.readonly", "contacts", "directory.readonly"},
 	"groups":        {"admin.directory.group.readonly", "admin.directory.group.member.readonly"},
 	"keep":          {"keep.readonly", "keep"},
 	"driveactivity": {"drive.activity.readonly"},
@@ -33,7 +33,7 @@ func computeAllScopes() []string {
 	seen := make(map[string]bool)
 	var scopes []string
 	// Deterministic order: iterate known service names
-	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "groups", "keep", "driveactivity", "userinfo"}
+	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity", "userinfo"}
 	for _, svc := range order {
 		for _, s := range ServiceScopes[svc] {
 			full := scopePrefix + s
