@@ -9,6 +9,20 @@ package cmd
 // declaratively (arg counts, unknown flags); usageError covers checks
 // that depend on flag values, --params content, or any data Cobra cannot
 // validate up front.
+//
+// CONVENTION for new code:
+//   - Validating user input ("must specify X", "X is required",
+//     "--from must be >= 1", invalid enum value)  → usageErrorf(...)
+//   - Reporting state/post-condition failure ("no cache found",
+//     "document has no content", "sheet 'X' not found",
+//     "you are not an attendee", "unexpected empty response")
+//                                                  → p.PrintError(...)
+//   - Wrapping a Google API error (fmt.Errorf("failed to X: %w", err))
+//                                                  → p.PrintError(...)
+//     (exitCodeForError will map 401/403/429/5xx to 3/4 automatically)
+//
+// State-only sites intentionally exit 1, since their cause is server-
+// or file-side, not the user's invocation.
 
 import (
 	"fmt"

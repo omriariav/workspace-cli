@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.40.0** - Non-zero exit codes for API errors: 1=generic API/runtime, 2=CLI usage, 3=auth (401/403), 4=transient (429/5xx). CLI usage errors — both Cobra-level (wrong args, unknown flags) and runtime input-validation (missing `--params resourceName`, mutually-exclusive flags, out-of-range values) — exit 2 with plain text on stderr. API/runtime errors exit 1/3/4 with a structured error on stderr; the format follows `--format` (JSON by default, `yaml` or `text` if set). Stdout is reserved for successful responses. `--services people` scope fix: adds `userinfo.profile` so `gws people get people/me` works without a 403.
+**v1.40.0** - Non-zero exit codes: 0=success, 1=generic API/runtime, 2=CLI usage / runtime input-validation, 3=auth (401/403), 4=transient (429/5xx). CLI usage errors (Cobra-level: wrong args, unknown flags) and runtime input-validation (required-flag checks, mutually-exclusive flags, out-of-range/enum values, malformed `--params`) exit 2 with plain text on stderr. Server/file state errors (no cache found, document empty, resource not found, "not an attendee") and wrapped API errors exit 1/3/4 with a structured error on stderr; the format follows `--format` (JSON by default, `yaml` or `text` if set). Stdout is reserved for successful responses. See `cmd/usage.go` for the convention new commands should follow. `--services people` scope fix: adds `userinfo.profile` so `gws people get people/me` works without a 403.
 
 ## Roadmap
 
