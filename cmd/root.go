@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/config"
@@ -30,9 +31,15 @@ var rootCmd = &cobra.Command{
 It provides structured, token-efficient access to Gmail, Calendar, Drive,
 Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Groups, Keep,
 and Custom Search.`,
+	// SilenceErrors prevents Cobra from re-printing errors we already
+	// emitted via PrintError (stderr structured JSON). SilenceUsage
+	// prevents the auto-generated help dump on validation failures —
+	// we surface a one-line "Error: ..." on stderr instead and direct
+	// users to --help. Both must be set on rootCmd (not in PreRun),
+	// since arg/flag validation runs before PersistentPreRun.
 	SilenceErrors: true,
+	SilenceUsage:  true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		cmd.SilenceUsage = true
 		emitVersionNotice(cmd, os.Stderr, quiet, os.Getenv("GWS_NO_UPDATE_CHECK") != "")
 	},
 }
@@ -105,16 +112,51 @@ func resolveExitError(err error, errW io.Writer) int {
 		return ExitOK
 	}
 
-	// If the error was already printed by a Printer.PrintError call,
-	// just map the exit code. Otherwise it is a Cobra-level usage error
-	// (plain text, not structured JSON — by design).
+	// Printed via PrintError → already on stderr; just map the code.
 	var printed *printer.AlreadyPrintedError
-	if !errors.As(err, &printed) {
-		fmt.Fprintf(errW, "Error: %s\n", err.Error())
-		return ExitUsage
+	if errors.As(err, &printed) {
+		return exitCodeForError(err)
 	}
 
-	return exitCodeForError(err)
+	// Unprinted error from rootCmd.Execute. Print it ourselves on
+	// stderr, then decide the exit code: Cobra arg/flag validation
+	// failures get ExitUsage; any other unwrapped runtime error
+	// (e.g. a RunE that forgot to call PrintError) gets ExitError.
+	fmt.Fprintf(errW, "Error: %s\n", err.Error())
+	if isCobraUsageError(err) {
+		return ExitUsage
+	}
+	return ExitError
+}
+
+// isCobraUsageError reports whether an error returned from rootCmd.Execute
+// came from Cobra's own arg/flag validation rather than RunE. Cobra does
+// not expose typed sentinels for these, so we match the stable message
+// prefixes Cobra emits for each validation failure.
+func isCobraUsageError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, p := range cobraUsageErrorPrefixes {
+		if strings.Contains(msg, p) {
+			return true
+		}
+	}
+	return false
+}
+
+var cobraUsageErrorPrefixes = []string{
+	"unknown command",
+	"unknown flag",
+	"unknown shorthand flag",
+	"flag needs an argument",
+	"invalid argument",
+	"required flag",
+	"subcommand is required",
+	"accepts ", // e.g. "accepts 1 arg(s), received 0"
+	"requires at least",
+	"requires exactly",
 }
 
 // exitCodeForError maps a Go error to the appropriate CLI exit code by

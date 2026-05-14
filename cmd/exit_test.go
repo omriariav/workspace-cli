@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/omriariav/workspace-cli/internal/printer"
+	"github.com/spf13/cobra"
 	"google.golang.org/api/googleapi"
 )
 
@@ -120,6 +121,116 @@ func TestResolveExitError_CobraUsageMapsToTwoAndWritesStderr(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "Error: unknown flag: --bogus") {
 		t.Errorf("expected Cobra error on stderr, got %q", out)
+	}
+}
+
+// TestResolveExitError_UnwrappedRuntimeErrorMapsToOne verifies that an
+// unprinted error which is NOT a Cobra usage error (e.g. a RunE returning
+// a write error from p.Print) maps to ExitError, not ExitUsage. This is
+// the round-3 fix — previously every non-AlreadyPrintedError mapped to 2.
+func TestResolveExitError_UnwrappedRuntimeErrorMapsToOne(t *testing.T) {
+	var buf bytes.Buffer
+	runtimeErr := fmt.Errorf("write /dev/stdout: broken pipe")
+	if got := resolveExitError(runtimeErr, &buf); got != ExitError {
+		t.Errorf("expected ExitError (1) for unwrapped runtime error, got %d", got)
+	}
+	if !strings.Contains(buf.String(), "broken pipe") {
+		t.Errorf("expected stderr to include error message, got %q", buf.String())
+	}
+}
+
+// TestResolveExitError_CobraEndToEnd_UnknownFlag exercises a real Cobra
+// command tree end-to-end so we catch regressions in SilenceUsage and the
+// usage-error classification. Uses an isolated *cobra.Command so we don't
+// touch the package-level rootCmd.
+func TestResolveExitError_CobraEndToEnd_UnknownFlag(t *testing.T) {
+	root := &cobra.Command{
+		Use:           "test-root",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+	}
+	leaf := &cobra.Command{
+		Use:  "leaf",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error { return nil },
+	}
+	root.AddCommand(leaf)
+	root.SetArgs([]string{"leaf", "--bogus"})
+
+	// Capture root's own stderr/usage outputs (Cobra writes usage via
+	// SetErr / SetOut). SilenceUsage:true should keep these empty.
+	var cobraOut, cobraErr bytes.Buffer
+	root.SetOut(&cobraOut)
+	root.SetErr(&cobraErr)
+
+	var resolverErr bytes.Buffer
+	code := resolveExitError(root.Execute(), &resolverErr)
+
+	if code != ExitUsage {
+		t.Errorf("expected ExitUsage (2) for unknown flag, got %d", code)
+	}
+	if !strings.Contains(resolverErr.String(), "unknown flag") {
+		t.Errorf("expected resolver stderr to mention unknown flag, got %q", resolverErr.String())
+	}
+	// Auto-usage dump must be suppressed.
+	if strings.Contains(cobraErr.String(), "Usage:") || strings.Contains(cobraOut.String(), "Usage:") {
+		t.Errorf("expected no Cobra usage dump under SilenceUsage; got out=%q err=%q", cobraOut.String(), cobraErr.String())
+	}
+}
+
+// TestResolveExitError_CobraEndToEnd_BadArgs covers the other common
+// Cobra validation path (cobra.ExactArgs).
+func TestResolveExitError_CobraEndToEnd_BadArgs(t *testing.T) {
+	root := &cobra.Command{Use: "test-root", SilenceErrors: true, SilenceUsage: true}
+	leaf := &cobra.Command{
+		Use:  "leaf",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error { return nil },
+	}
+	root.AddCommand(leaf)
+	root.SetArgs([]string{"leaf"}) // missing required arg
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+
+	var resolverErr bytes.Buffer
+	code := resolveExitError(root.Execute(), &resolverErr)
+	if code != ExitUsage {
+		t.Errorf("expected ExitUsage (2) for missing arg, got %d", code)
+	}
+	if !strings.Contains(resolverErr.String(), "accepts") {
+		t.Errorf("expected stderr to mention 'accepts ... arg(s)', got %q", resolverErr.String())
+	}
+}
+
+func TestIsCobraUsageError(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want bool
+	}{
+		{"unknown command \"foo\" for \"gws\"", true},
+		{"unknown flag: --bogus", true},
+		{"unknown shorthand flag: 'x'", true},
+		{"flag needs an argument: --to", true},
+		{"invalid argument \"abc\" for \"--max\"", true},
+		{"required flag(s) \"to\" not set", true},
+		{"accepts 1 arg(s), received 0", true},
+		{"requires at least 1 arg(s)", true},
+		{"requires exactly 2 arg(s)", true},
+		{"subcommand is required", true},
+
+		{"failed to get person: googleapi: Error 403", false},
+		{"write /dev/stdout: broken pipe", false},
+		{"something random", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		got := isCobraUsageError(fmt.Errorf("%s", c.msg))
+		if c.msg == "" {
+			got = isCobraUsageError(nil)
+		}
+		if got != c.want {
+			t.Errorf("isCobraUsageError(%q) = %v, want %v", c.msg, got, c.want)
+		}
 	}
 }
 
