@@ -646,7 +646,7 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 		spaceName = ensureSpaceName(args[0])
 	}
 	if params, perr := parseParams(cmd); perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	} else if v, ok := paramString(params, "parent"); ok && v != "" {
 		spaceName = v
 	}
@@ -1060,7 +1060,7 @@ func runChatMembers(cmd *cobra.Command, args []string) error {
 		spaceName = ensureSpaceName(args[0])
 	}
 	if params, perr := parseParams(cmd); perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	} else if v, ok := paramString(params, "parent"); ok && v != "" {
 		spaceName = v
 	}

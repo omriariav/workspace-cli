@@ -108,7 +108,7 @@ func runChatListRaw(cmd *cobra.Command, svc *chat.Service, filter string, pageSi
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	if v, ok := paramString(params, "filter"); ok {
@@ -196,7 +196,7 @@ func runChatMessagesRaw(cmd *cobra.Command, svc *chat.Service, spaceName string,
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	if v, ok := paramString(params, "parent"); ok && v != "" {
@@ -303,7 +303,7 @@ func runChatMembersRaw(cmd *cobra.Command, svc *chat.Service, spaceName string, 
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	if v, ok := paramString(params, "parent"); ok && v != "" {

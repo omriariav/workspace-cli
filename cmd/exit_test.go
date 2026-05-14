@@ -179,6 +179,35 @@ func TestResolveExitError_CobraEndToEnd_UnknownFlag(t *testing.T) {
 	}
 }
 
+// TestResolveExitError_EndToEnd_MalformedParams covers the round-7 fix:
+// malformed --params JSON must exit ExitUsage (2), not 1. parseParams
+// errors are wrapped via usageErrorf at every callsite.
+func TestResolveExitError_EndToEnd_MalformedParams(t *testing.T) {
+	cmd := findSubcommand(peopleCmd, "get")
+	if cmd == nil {
+		t.Fatal("people get command not registered")
+	}
+	if err := cmd.Flags().Set("params", "{not valid json"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cmd.Flags().Set("params", "") })
+
+	oldStderr := os.Stderr
+	devnull, _ := os.Open(os.DevNull)
+	os.Stderr = devnull
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+		_ = devnull.Close()
+	})
+
+	err := cmd.RunE(cmd, []string{"people/c123"})
+	var resolverErr bytes.Buffer
+	code := resolveExitError(err, &resolverErr)
+	if code != ExitUsage {
+		t.Errorf("expected ExitUsage (2) for malformed --params, got %d", code)
+	}
+}
+
 // TestResolveExitError_EndToEnd_RealCommandUsageValidation exercises a
 // real `gws` command path end-to-end. people get validates resourceName
 // BEFORE creating an API client (per the round-9 reorder), so the test

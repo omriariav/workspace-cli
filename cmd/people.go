@@ -57,7 +57,7 @@ func runPeopleGet(cmd *cobra.Command, args []string) error {
 	// instead of after OAuth/config failures.
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 	hasResource := len(args) > 0 && args[0] != ""
 	if v, ok := paramString(params, "resourceName"); ok && v != "" {
@@ -86,7 +86,7 @@ func runPeopleGetWithSvc(cmd *cobra.Command, svc *people.Service, args []string)
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	resourceName := ""

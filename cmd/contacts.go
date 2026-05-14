@@ -301,7 +301,7 @@ func runContactsGet(cmd *cobra.Command, args []string) error {
 
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 	if v, ok := paramString(params, "resourceName"); ok && v != "" {
 		resourceName = v

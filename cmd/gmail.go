@@ -614,7 +614,7 @@ func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxRe
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 	// Raw mode preserves the API response verbatim. The CLI's --max
 	// default would otherwise slice a verbatim page, breaking the
@@ -1271,7 +1271,7 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 	}
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 	if v, ok := paramString(params, "id"); ok && v != "" {
 		threadID = v
@@ -1348,7 +1348,7 @@ func runGmailThreadRaw(cmd *cobra.Command, svc *gmail.Service, threadID string) 
 	p := GetPrinter()
 	params, perr := parseParams(cmd)
 	if perr != nil {
-		return p.PrintError(perr)
+		return usageErrorf("%v", perr)
 	}
 
 	// --params overrides: id (resource path), format, metadataHeaders.
