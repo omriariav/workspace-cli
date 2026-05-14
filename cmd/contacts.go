@@ -35,11 +35,13 @@ var contactsSearchCmd = &cobra.Command{
 }
 
 var contactsGetCmd = &cobra.Command{
-	Use:   "get <resource-name>",
+	Use:   "get [resource-name]",
 	Short: "Get contact details",
-	Long:  "Gets detailed information about a specific contact by resource name (e.g., people/c1234567890).",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runContactsGet,
+	Long: `Gets detailed information about a specific contact by resource name (e.g., people/c1234567890).
+
+Either pass <resource-name> as a positional argument or set "resourceName" via --params.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runContactsGet,
 }
 
 var contactsCreateCmd = &cobra.Command{
@@ -288,8 +290,30 @@ func runContactsSearch(cmd *cobra.Command, args []string) error {
 
 func runContactsGet(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	// Resolve resource name from positional + --params before touching auth
+	// so input errors surface ahead of OAuth/config errors.
+	resourceName := ""
+	if len(args) > 0 {
+		resourceName = args[0]
+	}
+	pf := personFields
+
+	params, perr := parseParams(cmd)
+	if perr != nil {
+		return p.PrintError(perr)
+	}
+	if v, ok := paramString(params, "resourceName"); ok && v != "" {
+		resourceName = v
+	}
+	if v, ok := paramString(params, "personFields"); ok && v != "" {
+		pf = v
+	}
+	if resourceName == "" {
+		return p.PrintError(fmt.Errorf("contacts get: resource-name is required (positional arg or --params resourceName)"))
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -300,13 +324,18 @@ func runContactsGet(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	resourceName := args[0]
+	call := svc.People.Get(resourceName).PersonFields(pf)
+	if sources, ok := paramStringSlice(params, "sources"); ok && len(sources) > 0 {
+		call = call.Sources(sources...)
+	}
 
-	person, err := svc.People.Get(resourceName).
-		PersonFields(personFields).
-		Do()
+	person, err := call.Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to get contact: %w", err))
+	}
+
+	if isRaw(cmd) {
+		return printRaw(person)
 	}
 
 	return p.Print(formatPerson(person))

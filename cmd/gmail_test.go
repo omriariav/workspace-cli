@@ -1277,7 +1277,7 @@ func TestEmailMatchesSelf(t *testing.T) {
 func TestGmailThreadCommand_Help(t *testing.T) {
 	cmd := gmailThreadCmd
 
-	if cmd.Use != "thread <thread-id>" {
+	if cmd.Use != "thread [thread-id]" {
 		t.Errorf("unexpected Use: %s", cmd.Use)
 	}
 

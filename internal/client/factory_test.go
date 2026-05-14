@@ -71,6 +71,27 @@ func TestPeople_WarnsOnMissingContactsScope(t *testing.T) {
 	}
 }
 
+// TestPeople_PeopleAliasGrantsContactsScope verifies that users who run
+// `gws auth login --services people` don't see the misleading "contacts
+// requires additional permissions" warning on `gws people get` (or any
+// other path that hits factory.People). The two service names share the
+// same OAuth scope set per internal/auth/scopes.go.
+func TestPeople_PeopleAliasGrantsContactsScope(t *testing.T) {
+	f := &Factory{
+		ctx:             context.Background(),
+		grantedServices: []string{"people"},
+		scopeWarned:     map[string]bool{},
+		mu:              sync.Mutex{},
+	}
+
+	out := captureStderr(t, func() {
+		_, _ = f.People()
+	})
+	if strings.Contains(out, "requires additional permissions") {
+		t.Errorf("--services people must satisfy the contacts scope check; got %q", out)
+	}
+}
+
 func TestPeopleProfile_NoWarnEvenAfterPeopleWarned(t *testing.T) {
 	// Mixed flow: a code path may have already used People() (and warned).
 	// PeopleProfile should still not emit a warning of its own.

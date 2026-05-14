@@ -38,11 +38,14 @@ var chatListCmd = &cobra.Command{
 }
 
 var chatMessagesCmd = &cobra.Command{
-	Use:   "messages <space-id>",
+	Use:   "messages [space-id]",
 	Short: "List messages in a space",
-	Long:  "Lists recent messages in a Chat space.",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runChatMessages,
+	Long: `Lists recent messages in a Chat space.
+
+The space id is required; pass it as a positional argument or supply it
+via --params (e.g. '{"parent":"spaces/AAA"}') when using --raw.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runChatMessages,
 }
 
 var chatRecentCmd = &cobra.Command{
@@ -66,11 +69,14 @@ Examples:
 }
 
 var chatMembersCmd = &cobra.Command{
-	Use:   "members <space-id>",
+	Use:   "members [space-id]",
 	Short: "List members of a space",
-	Long:  "Lists all members (users and bots) in a Chat space with display names.",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runChatMembers,
+	Long: `Lists all members (users and bots) in a Chat space with display names.
+
+The space id is required; pass it as a positional argument or supply it
+via --params (e.g. '{"parent":"spaces/AAA"}') when using --raw.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runChatMembers,
 }
 
 var chatSendCmd = &cobra.Command{
@@ -581,6 +587,14 @@ func runChatList(cmd *cobra.Command, args []string) error {
 	filter, _ := cmd.Flags().GetString("filter")
 	pageSize, _ := cmd.Flags().GetInt64("page-size")
 	maxResults, _ := cmd.Flags().GetInt64("max")
+	fetchAll := false
+	if f := cmd.Flags().Lookup("all"); f != nil {
+		fetchAll, _ = cmd.Flags().GetBool("all")
+	}
+
+	if isRaw(cmd) {
+		return runChatListRaw(cmd, svc, filter, pageSize, maxResults, fetchAll, cmd.Flags().Changed("max"))
+	}
 
 	var results []map[string]interface{}
 	var pageToken string
@@ -624,8 +638,23 @@ func runChatList(cmd *cobra.Command, args []string) error {
 
 func runChatMessages(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	// Resolve space name from positional + --params before touching auth
+	// so input errors surface ahead of OAuth/config errors.
+	spaceName := ""
+	if len(args) > 0 {
+		spaceName = ensureSpaceName(args[0])
+	}
+	if params, perr := parseParams(cmd); perr != nil {
+		return p.PrintError(perr)
+	} else if v, ok := paramString(params, "parent"); ok && v != "" {
+		spaceName = v
+	}
+	if spaceName == "" {
+		return p.PrintError(errors.New("chat messages: a space id is required (positional arg or --params parent)"))
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -635,8 +664,6 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return p.PrintError(err)
 	}
-
-	spaceName := ensureSpaceName(args[0])
 	maxResults, _ := cmd.Flags().GetInt64("max")
 	filter, _ := cmd.Flags().GetString("filter")
 	orderBy, _ := cmd.Flags().GetString("order-by")
@@ -644,8 +671,14 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 	after, _ := cmd.Flags().GetString("after")
 	before, _ := cmd.Flags().GetString("before")
 	resolveSenders, _ := cmd.Flags().GetBool("resolve-senders")
+	fetchAll := false
+	if f := cmd.Flags().Lookup("all"); f != nil {
+		fetchAll, _ = cmd.Flags().GetBool("all")
+	}
 
-	// Build filter from --after/--before flags, combining with --filter
+	// Fold --after/--before into the filter expression up-front so the
+	// raw path sees the same query the ergonomic path does. (Before this
+	// move, --after/--before were silently dropped under --raw.)
 	var filterParts []string
 	if after != "" {
 		filterParts = append(filterParts, fmt.Sprintf(`createTime > "%s"`, after))
@@ -658,6 +691,10 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 	}
 	if len(filterParts) > 0 {
 		filter = strings.Join(filterParts, " AND ")
+	}
+
+	if isRaw(cmd) {
+		return runChatMessagesRaw(cmd, svc, spaceName, maxResults, filter, orderBy, showDeleted, fetchAll, cmd.Flags().Changed("max"))
 	}
 
 	if maxResults <= 0 {
@@ -1015,8 +1052,23 @@ func runChatRecent(cmd *cobra.Command, args []string) error {
 
 func runChatMembers(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	// Resolve space name from positional + --params before touching auth
+	// so input errors surface ahead of OAuth/config errors.
+	spaceName := ""
+	if len(args) > 0 {
+		spaceName = ensureSpaceName(args[0])
+	}
+	if params, perr := parseParams(cmd); perr != nil {
+		return p.PrintError(perr)
+	} else if v, ok := paramString(params, "parent"); ok && v != "" {
+		spaceName = v
+	}
+	if spaceName == "" {
+		return p.PrintError(errors.New("chat members: a space id is required (positional arg or --params parent)"))
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -1027,11 +1079,18 @@ func runChatMembers(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	spaceName := ensureSpaceName(args[0])
 	maxResults, _ := cmd.Flags().GetInt64("max")
 	filter, _ := cmd.Flags().GetString("filter")
 	showGroups, _ := cmd.Flags().GetBool("show-groups")
 	showInvited, _ := cmd.Flags().GetBool("show-invited")
+	fetchAll := false
+	if f := cmd.Flags().Lookup("all"); f != nil {
+		fetchAll, _ = cmd.Flags().GetBool("all")
+	}
+
+	if isRaw(cmd) {
+		return runChatMembersRaw(cmd, svc, spaceName, maxResults, filter, showGroups, showInvited, fetchAll, cmd.Flags().Changed("max"))
+	}
 
 	// Page size per request (Google caps at 100)
 	pageSize := maxResults

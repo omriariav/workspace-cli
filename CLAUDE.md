@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.38.0** - Drive `resolve-comment` / `unresolve-comment` now use `Replies.Create` with `action=resolve|reopen` (preserves the original comment; optional `--content` for a closing/reopening note). Gmail `read` and `thread` expose an `attachments` array with `filename`, `mime_type`, `size`, `attachment_id`, and `part_id` so callers can chain into `gws gmail attachment`. New `gws chat recent --since <2h|7d|RFC3339>` recaps messages across active spaces using `lastActiveTime` as a prefilter, with `--max`, `--max-per-space`, `--max-spaces`, `--resolve-senders`, and `--exclude-self`.
+**v1.39.0** - Adds `--raw` and `--params` to six list/get commands for programmatic, API-shape JSON output (skips field renaming, base64 decoding, header collapsing). New noun-verb command paths: `gws chat spaces list`, `gws chat messages list`, `gws chat members list`, and `gws people get`. `gmail list` switches to `users.messages.list` shape under `--raw`. `--all` aggregates the top-level list field across pages and drops `nextPageToken`. `--params` is a JSON object whose keys map directly to Google API request parameters and override the equivalent CLI flags (params win). `contacts get` and `gmail thread` relaxed to accept the resource id via `--params resourceName`/`--params id`.
 
 ## Roadmap
 

@@ -6,16 +6,20 @@ const scopePrefix = "https://www.googleapis.com/auth/"
 
 // ServiceScopes maps each service to its required Google API scopes.
 var ServiceScopes = map[string][]string{
-	"gmail":         {"gmail.readonly", "gmail.send", "gmail.modify", "gmail.settings.basic", "gmail.settings.sharing"},
-	"calendar":      {"calendar.readonly", "calendar.events", "calendar"},
-	"drive":         {"drive.readonly", "drive.file", "drive"},
-	"docs":          {"documents.readonly", "documents"},
-	"sheets":        {"spreadsheets"},
-	"slides":        {"presentations.readonly", "presentations"},
-	"tasks":         {"tasks.readonly", "tasks"},
-	"chat":          {"chat.spaces", "chat.messages", "chat.messages.create", "chat.memberships", "chat.messages.reactions", "chat.users.readstate"},
-	"forms":         {"forms.responses.readonly", "forms.body", "forms.body.readonly"},
-	"contacts":      {"contacts.readonly", "contacts", "directory.readonly"},
+	"gmail":    {"gmail.readonly", "gmail.send", "gmail.modify", "gmail.settings.basic", "gmail.settings.sharing"},
+	"calendar": {"calendar.readonly", "calendar.events", "calendar"},
+	"drive":    {"drive.readonly", "drive.file", "drive"},
+	"docs":     {"documents.readonly", "documents"},
+	"sheets":   {"spreadsheets"},
+	"slides":   {"presentations.readonly", "presentations"},
+	"tasks":    {"tasks.readonly", "tasks"},
+	"chat":     {"chat.spaces", "chat.messages", "chat.messages.create", "chat.memberships", "chat.messages.reactions", "chat.users.readstate"},
+	"forms":    {"forms.responses.readonly", "forms.body", "forms.body.readonly"},
+	"contacts": {"contacts.readonly", "contacts", "directory.readonly"},
+	// `people` is an alias for `contacts` — both surface the People API.
+	// Kept as a distinct entry so `--services people` works and scoped
+	// warnings can refer to either name interchangeably.
+	"people":        {"contacts.readonly", "contacts", "directory.readonly"},
 	"groups":        {"admin.directory.group.readonly", "admin.directory.group.member.readonly"},
 	"keep":          {"keep.readonly", "keep"},
 	"driveactivity": {"drive.activity.readonly"},
@@ -70,11 +74,14 @@ func ScopesForServices(services []string) []string {
 }
 
 // ServiceForScope returns the service name for a given full scope URL.
-// Returns empty string if the scope is not recognized.
+// Returns empty string if the scope is not recognized. Iteration order is
+// deterministic so aliases (e.g. `people` ↔ `contacts`) always resolve to
+// the canonical name first.
 func ServiceForScope(scope string) string {
 	short := strings.TrimPrefix(scope, scopePrefix)
-	for svc, ss := range ServiceScopes {
-		for _, s := range ss {
+	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity", "userinfo"}
+	for _, svc := range order {
+		for _, s := range ServiceScopes[svc] {
 			if s == short {
 				return svc
 			}
@@ -85,7 +92,7 @@ func ServiceForScope(scope string) string {
 
 // ValidServiceNames returns all known service names.
 func ValidServiceNames() []string {
-	return []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "groups", "keep", "driveactivity"}
+	return []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity"}
 }
 
 // ValidateServices checks that all service names are recognized.

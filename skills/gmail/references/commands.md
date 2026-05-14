@@ -30,6 +30,8 @@ Usage: gws gmail list [flags]
 | `--all` | bool | false | Fetch all matching results (may take time for large result sets) |
 | `--query` | string | | Gmail search query |
 | `--include-labels` | bool | false | Include Gmail label IDs in output |
+| `--raw` | bool | false | Emit unmodified `users.messages.list` response JSON (switches the underlying call from `threads.list` to `messages.list`) |
+| `--params` | string | | JSON object mapped to `users.messages.list` request parameters (`q`, `maxResults` [per-page], `pageToken`, `includeSpamTrash`, `labelIds`). Overrides equivalent CLI flags. |
 
 ### Output Fields (JSON)
 
@@ -94,13 +96,19 @@ No additional flags. Use the `message_id` from `gws gmail list` output.
 Reads and displays all messages in a Gmail thread (conversation).
 
 ```
-Usage: gws gmail thread <thread-id>
+Usage: gws gmail thread [thread-id]
 ```
 
-No additional flags. Use the `thread_id` from `gws gmail list` output.
+Use the `thread_id` from `gws gmail list` output.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--raw` | bool | false | Emit unmodified `users.threads.get` response JSON (full payload tree, base64 `parts[*].body.data`, `headers` as `{name,value}` arrays, `internalDate`, `labelIds`, `snippet`) |
+| `--params` | string | | JSON object mapped to `users.threads.get` request parameters (`id`, `format`, `metadataHeaders`). Overrides equivalent CLI flags. |
 
 ### Output Fields (JSON)
 
+Default ergonomic output:
 - `thread_id` — Thread ID
 - `message_count` — Number of messages in thread
 - `messages` — Array of messages, each with:
@@ -109,6 +117,8 @@ No additional flags. Use the `thread_id` from `gws gmail list` output.
   - `body` — Message body text
   - `labels` — Applied label IDs
   - `attachments` — Array (omitted when empty); same shape as `gws gmail read`
+
+Under `--raw` the response shape matches Google's `users.threads.get` reference exactly.
 
 ---
 

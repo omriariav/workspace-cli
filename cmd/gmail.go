@@ -158,15 +158,18 @@ Examples:
 }
 
 var gmailThreadCmd = &cobra.Command{
-	Use:   "thread <thread-id>",
+	Use:   "thread [thread-id]",
 	Short: "Read a full thread",
 	Long: `Reads and displays all messages in a Gmail thread (conversation).
 
 Use the thread_id from "gws gmail list" to view the full conversation.
+The thread id is required; pass it as a positional argument or supply it
+via --params (e.g. '{"id":"18abc"}') when using --raw.
 
 Examples:
-  gws gmail thread 18abc123`,
-	Args: cobra.ExactArgs(1),
+  gws gmail thread 18abc123
+  gws gmail thread --raw --params '{"id":"18abc123","format":"metadata"}'`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runGmailThread,
 }
 
@@ -329,6 +332,8 @@ func init() {
 	gmailListCmd.Flags().String("query", "", "Gmail search query (e.g., 'is:unread', 'from:someone@example.com')")
 	gmailListCmd.Flags().Bool("all", false, "Fetch all matching results (may take time for large result sets)")
 	gmailListCmd.Flags().Bool("include-labels", false, "Include Gmail label IDs in output")
+	addRawParamsFlags(gmailListCmd)
+	addRawParamsFlags(gmailThreadCmd)
 
 	// Send flags
 	gmailSendCmd.Flags().String("to", "", "Recipient email address (required)")
@@ -475,6 +480,14 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 	fetchAll, _ := cmd.Flags().GetBool("all")
 	includeLabels, _ := cmd.Flags().GetBool("include-labels")
 
+	if isRaw(cmd) {
+		// In raw mode `--max` only caps the response when the user
+		// explicitly set it; otherwise we leave the API response
+		// verbatim (the --raw contract is "no modifications").
+		maxExplicit := cmd.Flags().Changed("max")
+		return runGmailListRaw(cmd, svc, query, maxResults, fetchAll, maxExplicit)
+	}
+
 	// Gmail API has a hard limit of 500 results per request
 	const apiMaxPerPage int64 = 500
 
@@ -590,6 +603,141 @@ func runGmailList(cmd *cobra.Command, args []string) error {
 		"threads": results,
 		"count":   len(results),
 	})
+}
+
+// runGmailListRaw implements `gmail list --raw`. It routes through
+// users.messages.list (which is what the issue's raw shape documents) and
+// emits the SDK response struct as JSON. --all aggregates the `messages`
+// field across pages and drops nextPageToken; the final shape is
+// {"messages":[...], "resultSizeEstimate":N}.
+func runGmailListRaw(cmd *cobra.Command, svc *gmail.Service, query string, maxResults int64, fetchAll, maxExplicit bool) error {
+	p := GetPrinter()
+	params, perr := parseParams(cmd)
+	if perr != nil {
+		return p.PrintError(perr)
+	}
+	// Raw mode preserves the API response verbatim. The CLI's --max
+	// default would otherwise slice a verbatim page, breaking the
+	// --raw contract. Only honor --max when the caller set it.
+	if !maxExplicit {
+		maxResults = 0
+	}
+
+	// --params overrides flag-derived values (documented precedence:
+	// params win). `maxResults` in --params maps directly to the Google
+	// API's per-page parameter (this is what the API reference calls
+	// "maxResults"). The CLI `--max` flag is a separate total-results
+	// cap applied to the aggregated response.
+	if v, ok := paramString(params, "q"); ok {
+		query = v
+	}
+	pageToken, _ := paramString(params, "pageToken")
+	includeSpamTrash, includeSpamTrashSet := paramBool(params, "includeSpamTrash")
+	labelIds, labelIdsSet := paramStringSlice(params, "labelIds")
+
+	const apiMaxPerPage int64 = 500
+	paramPageSize, paramPageSizeSet := paramInt64(params, "maxResults")
+
+	// --all means "fetch every page": ignore --max (a 10-default would
+	// silently cap an --all run otherwise).
+	if fetchAll {
+		maxResults = 0
+	}
+
+	var aggregated *gmail.ListMessagesResponse
+	pageNum := 1
+
+	for {
+		// Determine page size for this request: --params maxResults
+		// wins if set, otherwise size by remaining budget capped at the
+		// API max.
+		var perPage int64
+		switch {
+		case paramPageSizeSet && paramPageSize > 0:
+			perPage = paramPageSize
+			if perPage > apiMaxPerPage {
+				perPage = apiMaxPerPage
+			}
+		default:
+			perPage = apiMaxPerPage
+		}
+		if maxResults > 0 {
+			collected := int64(0)
+			if aggregated != nil {
+				collected = int64(len(aggregated.Messages))
+			}
+			remaining := maxResults - collected
+			if remaining <= 0 {
+				break
+			}
+			// Clamp every request to the remaining --max budget, even
+			// when --params maxResults asks for more. Otherwise the
+			// server's nextPageToken points past the slice we return,
+			// and clients continuing pagination skip items 6-N.
+			if remaining < perPage {
+				perPage = remaining
+			}
+		}
+
+		call := svc.Users.Messages.List("me").MaxResults(perPage)
+		if query != "" {
+			call = call.Q(query)
+		}
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+		if includeSpamTrashSet {
+			call = call.IncludeSpamTrash(includeSpamTrash)
+		}
+		if labelIdsSet && len(labelIds) > 0 {
+			call = call.LabelIds(labelIds...)
+		}
+
+		resp, err := call.Do()
+		if err != nil {
+			return p.PrintError(fmt.Errorf("failed to list messages: %w", err))
+		}
+
+		if aggregated == nil {
+			aggregated = resp
+		} else {
+			aggregated.Messages = append(aggregated.Messages, resp.Messages...)
+			aggregated.NextPageToken = resp.NextPageToken
+			aggregated.ResultSizeEstimate = resp.ResultSizeEstimate
+		}
+
+		if resp.NextPageToken != "" && (fetchAll || maxResults > apiMaxPerPage) {
+			fmt.Fprintf(os.Stderr, "Fetched page %d (%d messages so far)...\n", pageNum, len(aggregated.Messages))
+		}
+
+		if resp.NextPageToken == "" {
+			break
+		}
+		if maxResults > 0 && int64(len(aggregated.Messages)) >= maxResults {
+			break
+		}
+		// Single-page mode: stop after the first page unless --all asks
+		// us to keep paging.
+		if !fetchAll {
+			break
+		}
+
+		pageToken = resp.NextPageToken
+		pageNum++
+	}
+
+	if aggregated == nil {
+		aggregated = &gmail.ListMessagesResponse{}
+	}
+	if maxResults > 0 && int64(len(aggregated.Messages)) > maxResults {
+		aggregated.Messages = aggregated.Messages[:maxResults]
+	}
+	if fetchAll {
+		// Aggregated output: drop nextPageToken per the issue spec.
+		aggregated.NextPageToken = ""
+	}
+
+	return printRaw(aggregated)
 }
 
 func runGmailRead(cmd *cobra.Command, args []string) error {
@@ -1114,8 +1262,25 @@ func runGmailTrash(cmd *cobra.Command, args []string) error {
 
 func runGmailThread(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	// Resolve thread id from positional + --params before touching auth
+	// so input errors surface ahead of OAuth/config errors.
+	threadID := ""
+	if len(args) > 0 {
+		threadID = args[0]
+	}
+	params, perr := parseParams(cmd)
+	if perr != nil {
+		return p.PrintError(perr)
+	}
+	if v, ok := paramString(params, "id"); ok && v != "" {
+		threadID = v
+	}
+	if threadID == "" {
+		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)"))
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -1126,7 +1291,11 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	threadID := args[0]
+	if isRaw(cmd) {
+		// runGmailThreadRaw also parses --params; threadID is already
+		// resolved, so the runner's own params check is a no-op pass-through.
+		return runGmailThreadRaw(cmd, svc, threadID)
+	}
 
 	thread, err := svc.Users.Threads.Get("me", threadID).Format("full").Do()
 	if err != nil {
@@ -1168,6 +1337,43 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 		"message_count": len(messages),
 		"messages":      messages,
 	})
+}
+
+// runGmailThreadRaw implements `gmail thread <id> --raw`. Emits the
+// users.threads.get response as-is: `messages[*].payload.headers` as
+// {name,value} arrays, `payload.parts` as a nested tree, base64url
+// body data in `payload.body.data` / `parts[*].body.data`, plus
+// `internalDate`, `labelIds`, `snippet`, etc.
+func runGmailThreadRaw(cmd *cobra.Command, svc *gmail.Service, threadID string) error {
+	p := GetPrinter()
+	params, perr := parseParams(cmd)
+	if perr != nil {
+		return p.PrintError(perr)
+	}
+
+	// --params overrides: id (resource path), format, metadataHeaders.
+	if v, ok := paramString(params, "id"); ok && v != "" {
+		threadID = v
+	}
+	if threadID == "" {
+		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)"))
+	}
+	format := "full"
+	if v, ok := paramString(params, "format"); ok && v != "" {
+		format = v
+	}
+	metadataHeaders, hasMetadataHeaders := paramStringSlice(params, "metadataHeaders")
+
+	call := svc.Users.Threads.Get("me", threadID).Format(format)
+	if hasMetadataHeaders && len(metadataHeaders) > 0 {
+		call = call.MetadataHeaders(metadataHeaders...)
+	}
+
+	thread, err := call.Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get thread: %w", err))
+	}
+	return printRaw(thread)
 }
 
 func runGmailEventID(cmd *cobra.Command, args []string) error {

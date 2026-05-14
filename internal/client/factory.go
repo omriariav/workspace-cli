@@ -84,16 +84,27 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 	}, nil
 }
 
+// serviceAliases maps every accepted alias for a service to its canonical
+// name. Aliases share the same OAuth scope set in auth.ServiceScopes — see
+// `people` ↔ `contacts` (both surface the People API).
+var serviceAliases = map[string]string{
+	"contacts": "contacts",
+	"people":   "contacts",
+}
+
 // checkServiceScopes checks if the required service was granted during login.
 // Prints a warning to stderr if the service was not included in the scoped login.
+// Treats `people` and `contacts` (and any other entry in serviceAliases) as
+// equivalent — a login with one grants the other.
 func (f *Factory) checkServiceScopes(service string) {
 	if len(f.grantedServices) == 0 {
 		return // Full auth or no metadata — skip check
 	}
 
+	canonical := canonicalService(service)
 	for _, s := range f.grantedServices {
-		if s == service {
-			return // Granted
+		if canonicalService(s) == canonical {
+			return // Granted (directly or via alias)
 		}
 	}
 
@@ -106,6 +117,15 @@ func (f *Factory) checkServiceScopes(service string) {
 	allServices := append(f.grantedServices, service)
 	fmt.Fprintf(os.Stderr, "%s requires additional permissions. Re-authorize with:\n  gws auth login --services %s\n",
 		service, strings.Join(allServices, ","))
+}
+
+// canonicalService returns the canonical name for a service, resolving any
+// alias (e.g. "people" → "contacts"). Unknown services pass through.
+func canonicalService(s string) string {
+	if c, ok := serviceAliases[s]; ok {
+		return c
+	}
+	return s
 }
 
 // Gmail returns the Gmail service client.

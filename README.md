@@ -94,9 +94,9 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 
 | Command | Description |
 |---------|-------------|
-| `gws gmail list` | List threads with `thread_id` and `message_id` (`--max`, `--query`, `--all`, `--include-labels`) |
+| `gws gmail list` | List threads with `thread_id` and `message_id` (`--max`, `--query`, `--all`, `--include-labels`, `--raw`, `--params`). Under `--raw` switches to `users.messages.list` shape. |
 | `gws gmail read <id>` | Read message body and headers |
-| `gws gmail thread <id>` | Read full thread conversation |
+| `gws gmail thread [id]` | Read full thread conversation (`--raw`, `--params`; id may be supplied via `--params id`) |
 | `gws gmail send` | Send email (`--to`, `--subject`, `--body`, `--cc`, `--bcc`, `--thread-id`, `--reply-to-message-id`, `--attachment`) |
 | `gws gmail reply <id>` | Reply to message (`--body`, `--cc`, `--bcc`, `--all`) |
 | `gws gmail forward <id>` | Forward message (`--to`, `--body`, `--cc`, `--bcc`) |
@@ -347,10 +347,13 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 
 | Command | Description |
 |---------|-------------|
-| `gws chat list` | List spaces (`--filter`, `--page-size`) |
+| `gws chat list` | List spaces (`--filter`, `--page-size`, `--raw`, `--params`) |
+| `gws chat spaces list` | List spaces (API-shape friendly path; same as `chat list` with `--raw` / `--params` documented examples) |
 | `gws chat recent` | Recap messages across active spaces (`--since`, `--max`, `--max-per-space`, `--max-spaces`) |
-| `gws chat messages <space>` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`, `--after`, `--before`, `--resolve-senders`) |
-| `gws chat members <space>` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`) |
+| `gws chat messages [space]` | List messages (`--max`, `--filter`, `--order-by`, `--show-deleted`, `--after`, `--before`, `--resolve-senders`, `--raw`, `--params`; space may be supplied via `--params parent`) |
+| `gws chat messages list` | List messages by `parent` via `--params` (programmatic path) |
+| `gws chat members [space]` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`, `--raw`, `--params`; space may be supplied via `--params parent`) |
+| `gws chat members list` | List members by `parent` via `--params` (programmatic path) |
 | `gws chat send` | Send message (`--space`, `--text`) |
 | `gws chat get <message>` | Get a single message (`--resolve-senders`) |
 | `gws chat update <message>` | Update message text (`--text`) |
@@ -397,9 +400,15 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 |---------|-------------|
 | `gws contacts list` | List contacts (`--max`) |
 | `gws contacts search <query>` | Search contacts by name/email/phone |
-| `gws contacts get <resource-name>` | Get contact details |
+| `gws contacts get [resource-name]` | Get contact details (`--raw`, `--params`; resource-name may be supplied via `--params resourceName`) |
 | `gws contacts create` | Create contact (`--name`, `--email`, `--phone`) |
 | `gws contacts delete <resource-name>` | Delete a contact |
+
+### People (programmatic People API)
+
+| Command | Description |
+|---------|-------------|
+| `gws people get [resource-name]` | Direct People.Get wrapper for programmatic use (`--raw`, `--params`, `--person-fields`). Use `--params '{"resourceName":"people/me","personFields":"emailAddresses"}'`. |
 
 ### Groups
 
@@ -454,6 +463,42 @@ $ gws calendar events --days 1
     ...
   ]
 }
+```
+
+### Programmatic mode: `--raw` and `--params`
+
+Several list/get commands accept two extra flags for scripting:
+
+- `--raw` emits the unmodified Google API response JSON (no field renaming,
+  no base64 decoding, no header collapsing). Default ergonomic output is
+  untouched when the flag is not set.
+- `--params <json>` accepts a JSON object whose keys map directly to the
+  underlying API request parameters. Keys supplied here **override** the
+  equivalent CLI flags (params win).
+
+Under `--all`, raw mode concatenates the top-level list field across pages
+(`messages` / `spaces` / `memberships`) and drops `nextPageToken` from the final
+output.
+
+Supported in this release:
+
+| Command | Wraps |
+|---|---|
+| `gmail list` | `users.messages.list` (under `--raw`) |
+| `gmail thread <id>` | `users.threads.get` |
+| `chat spaces list` | `spaces.list` |
+| `chat members list` | `spaces.members.list` |
+| `chat messages list` | `spaces.messages.list` |
+| `people get` | `people.get` |
+
+Examples:
+
+```bash
+gws gmail list --query "in:sent" --max 5 --raw
+gws gmail thread 18abc --raw
+gws chat spaces list --params '{"pageSize":50}' --all --raw
+gws chat messages list --params '{"parent":"spaces/AAA","pageSize":50,"filter":"createTime > \"2025-01-01T00:00:00Z\""}' --all --raw
+gws people get --params '{"resourceName":"people/me","personFields":"emailAddresses"}' --raw
 ```
 
 ## Development
