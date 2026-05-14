@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.40.0** - Non-zero exit codes for API errors: 1=generic, 2=CLI usage, 3=auth (401/403), 4=transient (429/5xx). Errors now go to stderr as structured JSON; stdout is reserved for successful responses. `--services people` scope fix: adds `userinfo.profile` so `gws people get people/me` works without a 403.
+**v1.40.0** - Non-zero exit codes for API errors: 1=generic, 2=CLI usage, 3=auth (401/403), 4=transient (429/5xx). API/runtime errors go to stderr as structured JSON; CLI usage errors (wrong args, unknown flags) go to stderr as plain text. Stdout is reserved for successful responses. `--services people` scope fix: adds `userinfo.profile` so `gws people get people/me` works without a 403.
 
 ## Roadmap
 

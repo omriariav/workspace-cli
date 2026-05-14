@@ -81,23 +81,34 @@ const (
 	ExitTransient = 4
 )
 
+// Execute runs the root command and exits with the appropriate code.
 func Execute() error {
+	code := executeAndResolve(os.Stderr)
+	if code != ExitOK {
+		os.Exit(code)
+	}
+	return nil
+}
+
+// executeAndResolve runs the root command, prints any unprinted errors to
+// errW, and returns the exit code. Extracted from Execute so the exit-code
+// logic is unit-testable without os.Exit.
+func executeAndResolve(errW io.Writer) int {
 	err := rootCmd.Execute()
 	if err == nil {
-		return nil
+		return ExitOK
 	}
 
 	// If the error was already printed by a Printer.PrintError call,
 	// just map the exit code. Otherwise it is a Cobra-level usage error
-	// that needs to be emitted.
+	// (plain text, not structured JSON — by design).
 	var printed *printer.AlreadyPrintedError
 	if !errors.As(err, &printed) {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
-		os.Exit(ExitUsage)
+		fmt.Fprintf(errW, "Error: %s\n", err.Error())
+		return ExitUsage
 	}
 
-	os.Exit(exitCodeForError(err))
-	return nil // unreachable
+	return exitCodeForError(err)
 }
 
 // exitCodeForError maps a Go error to the appropriate CLI exit code by
