@@ -3502,12 +3502,9 @@ func TestChatFindSpace_InvalidType(t *testing.T) {
 	os.Stderr = oldStderr
 
 	output, _ := io.ReadAll(r)
-	var result map[string]interface{}
-	if err := json.Unmarshal(output, &result); err != nil {
-		t.Fatalf("failed to parse output: %v\nraw: %s", err, output)
-	}
-	if msg, _ := result["error"].(string); msg == "" {
-		t.Errorf("expected error in output, got %v", result)
+	// usageErrorf produces plain "Error: ..." (was JSON before #192).
+	if !strings.Contains(string(output), "invalid --type") {
+		t.Errorf("expected --type validation error, got %s", output)
 	}
 }
 

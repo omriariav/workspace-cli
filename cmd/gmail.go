@@ -1709,7 +1709,7 @@ func runGmailForward(cmd *cobra.Command, args []string) error {
 			filePath := filepath.Join(attDir, filename)
 			// Verify the resolved path is still under tmpDir
 			if resolved, err := filepath.Abs(filePath); err != nil || !strings.HasPrefix(resolved, tmpDir) {
-				return p.PrintError(fmt.Errorf("unsafe attachment filename %q", att.Filename))
+				return usageErrorf("unsafe attachment filename %q", att.Filename)
 			}
 			if err := os.WriteFile(filePath, decoded, 0600); err != nil {
 				return p.PrintError(fmt.Errorf("failed to write attachment %q: %w", filename, err))

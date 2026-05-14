@@ -1380,7 +1380,7 @@ func runDriveConvert(cmd *cobra.Command, args []string) error {
 		var ok bool
 		targetMime, ok = formatToGoogleMime[toFormat]
 		if !ok {
-			return p.PrintError(fmt.Errorf("unsupported format %q; use docs, sheets, or slides", toFormat))
+			return usageErrorf("unsupported format %q; use docs, sheets, or slides", toFormat)
 		}
 	} else {
 		// Auto-detect from source file MIME type
@@ -1394,7 +1394,7 @@ func runDriveConvert(cmd *cobra.Command, args []string) error {
 		var ok bool
 		targetMime, ok = officeToGoogleMime[src.MimeType]
 		if !ok {
-			return p.PrintError(fmt.Errorf("unsupported source MIME type %q; use --to to specify target format", src.MimeType))
+			return usageErrorf("unsupported source MIME type %q; use --to to specify target format", src.MimeType)
 		}
 		if name == "" {
 			name = src.Name

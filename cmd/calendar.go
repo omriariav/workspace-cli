@@ -555,7 +555,7 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 		} else if t, err := time.ParseInLocation("2006-01-02", fromStr, time.Local); err == nil {
 			start = t
 		} else {
-			return p.PrintError(fmt.Errorf("invalid --from date %q: use YYYY-MM-DD or RFC3339 format", fromStr))
+			return usageErrorf("invalid --from date %q: use YYYY-MM-DD or RFC3339 format", fromStr)
 		}
 	}
 	timeMin := start.Format(time.RFC3339)
@@ -579,7 +579,7 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	}
 	if updatedMin != "" {
 		if _, err := time.Parse(time.RFC3339, updatedMin); err != nil {
-			return p.PrintError(fmt.Errorf("invalid --updated-min %q: use RFC3339 format", updatedMin))
+			return usageErrorf("invalid --updated-min %q: use RFC3339 format", updatedMin)
 		}
 		call = call.UpdatedMin(updatedMin)
 	}
@@ -886,7 +886,7 @@ func runCalendarRsvp(cmd *cobra.Command, args []string) error {
 	message, _ := cmd.Flags().GetString("message")
 
 	if !validRsvpResponses[response] {
-		return p.PrintError(fmt.Errorf("invalid response '%s': must be accepted, declined, or tentative", response))
+		return usageErrorf("invalid response '%s': must be accepted, declined, or tentative", response)
 	}
 
 	// Get the event to find our attendee entry
@@ -1508,7 +1508,7 @@ func runCalendarShare(cmd *cobra.Command, args []string) error {
 	role, _ := cmd.Flags().GetString("role")
 
 	if !validAclRoles[role] {
-		return p.PrintError(fmt.Errorf("invalid role '%s': must be reader, writer, owner, or freeBusyReader", role))
+		return usageErrorf("invalid role '%s': must be reader, writer, owner, or freeBusyReader", role)
 	}
 
 	factory, err := client.NewFactory(ctx)
@@ -1579,7 +1579,7 @@ func runCalendarUpdateAcl(cmd *cobra.Command, args []string) error {
 	role, _ := cmd.Flags().GetString("role")
 
 	if !validAclRoles[role] {
-		return p.PrintError(fmt.Errorf("invalid role '%s': must be reader, writer, owner, or freeBusyReader", role))
+		return usageErrorf("invalid role '%s': must be reader, writer, owner, or freeBusyReader", role)
 	}
 
 	factory, err := client.NewFactory(ctx)

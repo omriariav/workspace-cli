@@ -1775,18 +1775,18 @@ func runChatSetupSpace(cmd *cobra.Command, args []string) error {
 	switch spaceType {
 	case "SPACE", "DIRECT_MESSAGE", "GROUP_CHAT":
 	default:
-		return p.PrintError(fmt.Errorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType))
+		return usageErrorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType)
 	}
 
 	// Validate flags based on space type
 	switch spaceType {
 	case "DIRECT_MESSAGE", "GROUP_CHAT":
 		if membersStr == "" {
-			return p.PrintError(fmt.Errorf("--members is required for %s type", spaceType))
+			return usageErrorf("--members is required for %s type", spaceType)
 		}
 	default: // SPACE
 		if displayName == "" {
-			return p.PrintError(fmt.Errorf("--display-name is required for %s type", spaceType))
+			return usageErrorf("--display-name is required for %s type", spaceType)
 		}
 	}
 
@@ -2389,7 +2389,7 @@ func runChatBuildCache(cmd *cobra.Command, args []string) error {
 	switch spaceType {
 	case "GROUP_CHAT", "SPACE", "DIRECT_MESSAGE", "all":
 	default:
-		return p.PrintError(fmt.Errorf("invalid --type %q: must be GROUP_CHAT, SPACE, DIRECT_MESSAGE, or all", spaceType))
+		return usageErrorf("invalid --type %q: must be GROUP_CHAT, SPACE, DIRECT_MESSAGE, or all", spaceType)
 	}
 
 	start := time.Now()
@@ -2518,7 +2518,7 @@ func runChatFindSpace(cmd *cobra.Command, args []string) error {
 		switch strings.ToUpper(spaceType) {
 		case "SPACE", "GROUP_CHAT", "DIRECT_MESSAGE":
 		default:
-			return p.PrintError(fmt.Errorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType))
+			return usageErrorf("invalid --type %q: must be SPACE, GROUP_CHAT, or DIRECT_MESSAGE", spaceType)
 		}
 	}
 

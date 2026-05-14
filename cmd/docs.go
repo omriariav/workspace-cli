@@ -1708,7 +1708,7 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 			"HEADING_4": true, "HEADING_5": true, "HEADING_6": true,
 		}
 		if !validStyles[style] {
-			return p.PrintError(fmt.Errorf("invalid style %q; use NORMAL_TEXT, TITLE, SUBTITLE, or HEADING_1..HEADING_6", style))
+			return usageErrorf("invalid style %q; use NORMAL_TEXT, TITLE, SUBTITLE, or HEADING_1..HEADING_6", style)
 		}
 		paraStyle.NamedStyleType = style
 		fields = append(fields, "namedStyleType")
@@ -1717,7 +1717,7 @@ func runDocsSetParagraphStyle(cmd *cobra.Command, args []string) error {
 	if direction != "" {
 		validDirs := map[string]bool{"LEFT_TO_RIGHT": true, "RIGHT_TO_LEFT": true}
 		if !validDirs[direction] {
-			return p.PrintError(fmt.Errorf("invalid direction %q; use LEFT_TO_RIGHT or RIGHT_TO_LEFT", direction))
+			return usageErrorf("invalid direction %q; use LEFT_TO_RIGHT or RIGHT_TO_LEFT", direction)
 		}
 		paraStyle.Direction = direction
 		fields = append(fields, "direction")
@@ -1814,7 +1814,7 @@ func runDocsAddList(cmd *cobra.Command, args []string) error {
 	case "numbered":
 		bulletPreset = "NUMBERED_DECIMAL_NESTED"
 	default:
-		return p.PrintError(fmt.Errorf("invalid list type: %s (use 'bullet' or 'numbered')", listType))
+		return usageErrorf("invalid list type: %s (use 'bullet' or 'numbered')", listType)
 	}
 
 	loc := &docs.Location{Index: position}

@@ -982,7 +982,7 @@ func runSlidesAddSlide(cmd *cobra.Command, args []string) error {
 			"BIG_NUMBER":                    true,
 		}
 		if !validLayouts[layout] {
-			return p.PrintError(fmt.Errorf("invalid layout '%s'. Valid layouts: BLANK, TITLE, TITLE_AND_BODY, TITLE_AND_TWO_COLUMNS, TITLE_ONLY, SECTION_HEADER, CAPTION_ONLY, MAIN_POINT, BIG_NUMBER", layout))
+			return usageErrorf("invalid layout '%s'. Valid layouts: BLANK, TITLE, TITLE_AND_BODY, TITLE_AND_TWO_COLUMNS, TITLE_ONLY, SECTION_HEADER, CAPTION_ONLY, MAIN_POINT, BIG_NUMBER", layout)
 		}
 		layoutRef = &slides.LayoutReference{
 			PredefinedLayout: layout,
@@ -1423,7 +1423,7 @@ func runSlidesAddShape(cmd *cobra.Command, args []string) error {
 
 	// Validate shape type
 	if !validShapeTypes[shapeType] {
-		return p.PrintError(fmt.Errorf("invalid shape type '%s'. Common types: RECTANGLE, ELLIPSE, TEXT_BOX, TRIANGLE, ARROW, STAR_5", shapeType))
+		return usageErrorf("invalid shape type '%s'. Common types: RECTANGLE, ELLIPSE, TEXT_BOX, TRIANGLE, ARROW, STAR_5", shapeType)
 	}
 
 	slideID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
@@ -2510,7 +2510,7 @@ func runSlidesUpdateTableBorder(cmd *cobra.Command, args []string) error {
 	case "right":
 		borders = []string{"RIGHT"}
 	default:
-		return p.PrintError(fmt.Errorf("invalid border: %s (use top, bottom, left, right, or all)", border))
+		return usageErrorf("invalid border: %s (use top, bottom, left, right, or all)", border)
 	}
 
 	requests := make([]*slides.Request, 0, len(borders))

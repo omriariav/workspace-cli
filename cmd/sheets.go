@@ -2254,7 +2254,7 @@ func runSheetsBatchWrite(cmd *cobra.Command, args []string) error {
 	valueInput, _ := cmd.Flags().GetString("value-input")
 
 	if len(ranges) != len(valuesStrs) {
-		return p.PrintError(fmt.Errorf("number of --ranges flags (%d) must match number of --values flags (%d)", len(ranges), len(valuesStrs)))
+		return usageErrorf("number of --ranges flags (%d) must match number of --values flags (%d)", len(ranges), len(valuesStrs))
 	}
 
 	data := make([]*sheets.ValueRange, 0, len(ranges))
@@ -2596,7 +2596,7 @@ func runSheetsAddChart(cmd *cobra.Command, args []string) error {
 
 	validTypes := map[string]bool{"BAR": true, "LINE": true, "AREA": true, "COLUMN": true, "SCATTER": true, "PIE": true, "COMBO": true}
 	if !validTypes[chartType] {
-		return p.PrintError(fmt.Errorf("unknown chart type: %s (valid: BAR, LINE, AREA, COLUMN, SCATTER, PIE, COMBO)", chartType))
+		return usageErrorf("unknown chart type: %s (valid: BAR, LINE, AREA, COLUMN, SCATTER, PIE, COMBO)", chartType)
 	}
 
 	_, gridRange, err := parseRange(svc, spreadsheetID, dataRange)
@@ -2612,7 +2612,7 @@ func runSheetsAddChart(cmd *cobra.Command, args []string) error {
 	if chartType == "PIE" {
 		// PIE: first column = labels (domain), remaining columns = data (series)
 		if gridRange.EndColumnIndex-gridRange.StartColumnIndex < 2 {
-			return p.PrintError(fmt.Errorf("PIE chart requires at least 2 columns (labels + data), got range with %d column(s)", gridRange.EndColumnIndex-gridRange.StartColumnIndex))
+			return usageErrorf("PIE chart requires at least 2 columns (labels + data), got range with %d column(s)", gridRange.EndColumnIndex-gridRange.StartColumnIndex)
 		}
 		domainRange := &sheets.GridRange{
 			SheetId:          gridRange.SheetId,

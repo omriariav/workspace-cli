@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -175,6 +176,47 @@ func TestResolveExitError_CobraEndToEnd_UnknownFlag(t *testing.T) {
 	// Auto-usage dump must be suppressed.
 	if strings.Contains(cobraErr.String(), "Usage:") || strings.Contains(cobraOut.String(), "Usage:") {
 		t.Errorf("expected no Cobra usage dump under SilenceUsage; got out=%q err=%q", cobraOut.String(), cobraErr.String())
+	}
+}
+
+// TestResolveExitError_EndToEnd_RealCommandUsageValidation exercises a
+// real `gws` command path end-to-end: invoke chat setup-space with an
+// invalid --type (a runtime validation that uses usageErrorf), and
+// verify resolveExitError returns ExitUsage. This is the integration
+// test codex requested — it touches the actual command registry, not
+// a synthetic *cobra.Command.
+func TestResolveExitError_EndToEnd_RealCommandUsageValidation(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "setup-space")
+	if cmd == nil {
+		t.Fatal("chat setup-space command not registered")
+	}
+	if err := cmd.Flags().Set("display-name", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("type", "BOGUS_TYPE"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cmd.Flags().Set("display-name", "")
+		cmd.Flags().Set("type", "")
+	})
+
+	// usageErrorf writes to os.Stderr. We don't capture it here — the
+	// point of this test is the exit code, not the message format
+	// (covered elsewhere).
+	oldStderr := os.Stderr
+	devnull, _ := os.Open(os.DevNull)
+	os.Stderr = devnull
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+		_ = devnull.Close()
+	})
+
+	err := cmd.RunE(cmd, []string{})
+	var resolverErr bytes.Buffer
+	code := resolveExitError(err, &resolverErr)
+	if code != ExitUsage {
+		t.Errorf("expected ExitUsage (2) for invalid --type, got %d", code)
 	}
 }
 
