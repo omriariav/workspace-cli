@@ -1599,25 +1599,25 @@ func runSlidesAddText(cmd *cobra.Command, args []string) error {
 		modeCount++
 	}
 	if modeCount > 1 {
-		return p.PrintError(fmt.Errorf("--object-id, --table-id, and --notes are mutually exclusive"))
+		return usageErrorf("--object-id, --table-id, and --notes are mutually exclusive")
 	}
 	if modeCount == 0 {
-		return p.PrintError(fmt.Errorf("must specify --object-id, --table-id, or --notes"))
+		return usageErrorf("must specify --object-id, --table-id, or --notes")
 	}
 
 	// Validate table cell mode requires row and col
 	if tableID != "" {
 		if row < 0 {
-			return p.PrintError(fmt.Errorf("--row is required when using --table-id (valid values: 0 or greater)"))
+			return usageErrorf("--row is required when using --table-id (valid values: 0 or greater)")
 		}
 		if col < 0 {
-			return p.PrintError(fmt.Errorf("--col is required when using --table-id (valid values: 0 or greater)"))
+			return usageErrorf("--col is required when using --table-id (valid values: 0 or greater)")
 		}
 	}
 
 	// Validate notes mode requires slide targeting
 	if notesMode && slideIDFlag == "" && slideNumber == 0 {
-		return p.PrintError(fmt.Errorf("--notes requires --slide-id or --slide-number"))
+		return usageErrorf("--notes requires --slide-id or --slide-number")
 	}
 
 	// Now create the client after validation passes
@@ -1934,15 +1934,15 @@ func runSlidesDeleteText(cmd *cobra.Command, args []string) error {
 
 	// Validate: need either --object-id or --notes
 	if objectID == "" && !notesMode {
-		return p.PrintError(fmt.Errorf("must specify --object-id or --notes"))
+		return usageErrorf("must specify --object-id or --notes")
 	}
 	if objectID != "" && notesMode {
-		return p.PrintError(fmt.Errorf("--object-id and --notes are mutually exclusive"))
+		return usageErrorf("--object-id and --notes are mutually exclusive")
 	}
 
 	// Validate notes mode requires slide targeting
 	if notesMode && slideIDFlag == "" && slideNumber == 0 {
-		return p.PrintError(fmt.Errorf("--notes requires --slide-id or --slide-number"))
+		return usageErrorf("--notes requires --slide-id or --slide-number")
 	}
 
 	ctx := context.Background()
@@ -3171,7 +3171,7 @@ func runSlidesThumbnail(cmd *cobra.Command, args []string) error {
 	validSizes := map[string]bool{"SMALL": true, "MEDIUM": true, "LARGE": true}
 	sizeUpper := strings.ToUpper(size)
 	if !validSizes[sizeUpper] {
-		return p.PrintError(fmt.Errorf("invalid size '%s': must be SMALL, MEDIUM, or LARGE", size))
+		return usageErrorf("invalid size '%s': must be SMALL, MEDIUM, or LARGE", size)
 	}
 
 	ctx := context.Background()

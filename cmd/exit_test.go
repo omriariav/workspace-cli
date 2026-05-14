@@ -202,6 +202,25 @@ func TestResolveExitError_CobraEndToEnd_BadArgs(t *testing.T) {
 	}
 }
 
+// TestResolveExitError_UsageErrorfMapsToTwo verifies that the runtime
+// input-validation helper produces the same exit code as Cobra's own
+// usage errors. usageErrorf already wrote to stderr, so resolveExitError
+// must NOT re-print.
+func TestResolveExitError_UsageErrorfMapsToTwo(t *testing.T) {
+	// Simulate what usageErrorf returns (its stderr write is a side
+	// effect we don't drive here).
+	wrapped := &printer.AlreadyPrintedError{Err: &usageError{msg: "people get: resourceName is required"}}
+
+	var buf bytes.Buffer
+	code := resolveExitError(wrapped, &buf)
+	if code != ExitUsage {
+		t.Errorf("expected ExitUsage (2) for usageError, got %d", code)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no extra stderr write (usageErrorf already wrote), got %q", buf.String())
+	}
+}
+
 func TestIsCobraUsageError(t *testing.T) {
 	cases := []struct {
 		msg  string

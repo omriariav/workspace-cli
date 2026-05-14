@@ -446,10 +446,10 @@ func runFormsUpdate(cmd *cobra.Command, args []string) error {
 	hasDescription := cmd.Flags().Changed("description")
 
 	if hasFile && (hasTitle || hasDescription) {
-		return p.PrintError(fmt.Errorf("--file cannot be combined with --title or --description"))
+		return usageErrorf("--file cannot be combined with --title or --description")
 	}
 	if !hasFile && !hasTitle && !hasDescription {
-		return p.PrintError(fmt.Errorf("provide --file, --title, or --description"))
+		return usageErrorf("provide --file, --title, or --description")
 	}
 
 	ctx := context.Background()

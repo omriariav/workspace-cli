@@ -1277,7 +1277,7 @@ func runGmailThread(cmd *cobra.Command, args []string) error {
 		threadID = v
 	}
 	if threadID == "" {
-		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)"))
+		return usageErrorf("gmail thread: a thread id is required (positional arg or --params id)")
 	}
 
 	ctx := context.Background()
@@ -1356,7 +1356,7 @@ func runGmailThreadRaw(cmd *cobra.Command, svc *gmail.Service, threadID string) 
 		threadID = v
 	}
 	if threadID == "" {
-		return p.PrintError(fmt.Errorf("gmail thread: a thread id is required (positional arg or --params id)"))
+		return usageErrorf("gmail thread: a thread id is required (positional arg or --params id)")
 	}
 	format := "full"
 	if v, ok := paramString(params, "format"); ok && v != "" {

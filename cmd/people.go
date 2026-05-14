@@ -8,7 +8,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/omriariav/workspace-cli/internal/client"
@@ -65,7 +64,7 @@ func runPeopleGet(cmd *cobra.Command, args []string) error {
 		hasResource = true
 	}
 	if !hasResource {
-		return p.PrintError(errors.New("people get: resourceName is required (positional arg or --params resourceName)"))
+		return usageErrorf("people get: resourceName is required (positional arg or --params resourceName)")
 	}
 
 	ctx := context.Background()
@@ -98,7 +97,7 @@ func runPeopleGetWithSvc(cmd *cobra.Command, svc *people.Service, args []string)
 		resourceName = v
 	}
 	if resourceName == "" {
-		return p.PrintError(errors.New("people get: resourceName is required (positional arg or --params resourceName)"))
+		return usageErrorf("people get: resourceName is required (positional arg or --params resourceName)")
 	}
 
 	pf, _ := cmd.Flags().GetString("person-fields")

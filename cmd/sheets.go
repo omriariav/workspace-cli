@@ -2825,7 +2825,7 @@ func runSheetsAddConditionalFormat(cmd *cobra.Command, args []string) error {
 
 	needsValue := map[string]bool{">": true, "<": true, "=": true, "!=": true, "contains": true, "not-contains": true, "formula": true}
 	if needsValue[rule] && value == "" {
-		return p.PrintError(fmt.Errorf("--value is required for rule type %q", rule))
+		return usageErrorf("--value is required for rule type %q", rule)
 	}
 
 	ctx := context.Background()
@@ -3028,7 +3028,7 @@ func runSheetsDeleteConditionalFormat(cmd *cobra.Command, args []string) error {
 	// Validate flags before creating API client
 	index, _ := cmd.Flags().GetInt64("index")
 	if index < 0 {
-		return p.PrintError(fmt.Errorf("--index must be >= 0, got %d", index))
+		return usageErrorf("--index must be >= 0, got %d", index)
 	}
 
 	ctx := context.Background()

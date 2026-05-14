@@ -651,7 +651,7 @@ func runChatMessages(cmd *cobra.Command, args []string) error {
 		spaceName = v
 	}
 	if spaceName == "" {
-		return p.PrintError(errors.New("chat messages: a space id is required (positional arg or --params parent)"))
+		return usageErrorf("chat messages: a space id is required (positional arg or --params parent)")
 	}
 
 	ctx := context.Background()
@@ -1065,7 +1065,7 @@ func runChatMembers(cmd *cobra.Command, args []string) error {
 		spaceName = v
 	}
 	if spaceName == "" {
-		return p.PrintError(errors.New("chat members: a space id is required (positional arg or --params parent)"))
+		return usageErrorf("chat members: a space id is required (positional arg or --params parent)")
 	}
 
 	ctx := context.Background()

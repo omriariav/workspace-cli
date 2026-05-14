@@ -115,6 +115,13 @@ func resolveExitError(err error, errW io.Writer) int {
 	// Printed via PrintError → already on stderr; just map the code.
 	var printed *printer.AlreadyPrintedError
 	if errors.As(err, &printed) {
+		// Runtime input-validation paths wrap their message in
+		// usageError so the user sees the same exit code (2) and
+		// format (plain text) as Cobra's own arg/flag errors.
+		var ue *usageError
+		if errors.As(err, &ue) {
+			return ExitUsage
+		}
 		return exitCodeForError(err)
 	}
 
