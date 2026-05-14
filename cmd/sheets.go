@@ -872,7 +872,7 @@ func runSheetsWrite(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(values) == 0 {
-		return p.PrintError(fmt.Errorf("no values provided; use --values or --values-json"))
+		return usageErrorf("no values provided; use --values or --values-json")
 	}
 
 	valueRange := &sheets.ValueRange{
@@ -918,7 +918,7 @@ func runSheetsAppend(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(values) == 0 {
-		return p.PrintError(fmt.Errorf("no values provided; use --values or --values-json"))
+		return usageErrorf("no values provided; use --values or --values-json")
 	}
 
 	valueRange := &sheets.ValueRange{
@@ -1071,7 +1071,7 @@ func runSheetsDeleteSheet(cmd *cobra.Command, args []string) error {
 			return p.PrintError(fmt.Errorf("sheet '%s' not found", sheetName))
 		}
 	} else if sheetID < 0 {
-		return p.PrintError(fmt.Errorf("must specify --name or --sheet-id"))
+		return usageErrorf("must specify --name or --sheet-id")
 	}
 
 	requests := []*sheets.Request{
@@ -1220,7 +1220,7 @@ func runSheetsDeleteRows(cmd *cobra.Command, args []string) error {
 	to, _ := cmd.Flags().GetInt64("to")
 
 	if to <= from {
-		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+		return usageErrorf("--to must be greater than --from")
 	}
 
 	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
@@ -1334,7 +1334,7 @@ func runSheetsDeleteCols(cmd *cobra.Command, args []string) error {
 	to, _ := cmd.Flags().GetInt64("to")
 
 	if to <= from {
-		return p.PrintError(fmt.Errorf("--to must be greater than --from"))
+		return usageErrorf("--to must be greater than --from")
 	}
 
 	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)
@@ -1931,7 +1931,7 @@ func runSheetsFormat(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no formatting options specified; use --bold, --italic, --bg-color, --color, or --font-size"))
+		return usageErrorf("no formatting options specified; use --bold, --italic, --bg-color, --color, or --font-size")
 	}
 
 	requests := []*sheets.Request{
@@ -2099,7 +2099,7 @@ func runSheetsFreeze(cmd *cobra.Command, args []string) error {
 	freezeCols, _ := cmd.Flags().GetInt64("cols")
 
 	if !cmd.Flags().Changed("rows") && !cmd.Flags().Changed("cols") {
-		return p.PrintError(fmt.Errorf("specify --rows and/or --cols to freeze"))
+		return usageErrorf("specify --rows and/or --cols to freeze")
 	}
 
 	sheetID, err := getSheetID(svc, spreadsheetID, sheetName)

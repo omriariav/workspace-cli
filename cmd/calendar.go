@@ -732,7 +732,7 @@ func runCalendarUpdate(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if !hasChanges {
-		return p.PrintError(fmt.Errorf("at least one update flag is required (--title, --start, --end, --description, --location, --add-attendees)"))
+		return usageErrorf("at least one update flag is required (--title, --start, --end, --description, --location, --add-attendees)")
 	}
 
 	factory, err := client.NewFactory(ctx)

@@ -328,7 +328,7 @@ func runTasksUpdate(cmd *cobra.Command, args []string) error {
 	dueChanged := cmd.Flags().Changed("due")
 
 	if !titleChanged && !notesChanged && !dueChanged {
-		return p.PrintError(fmt.Errorf("at least one of --title, --notes, or --due is required"))
+		return usageErrorf("at least one of --title, --notes, or --due is required")
 	}
 
 	ctx := context.Background()

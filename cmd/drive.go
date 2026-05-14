@@ -2588,12 +2588,12 @@ func runDriveActivity(cmd *cobra.Command, args []string) error {
 
 	// Validate mutual exclusivity
 	if itemID != "" && folderID != "" {
-		return p.PrintError(fmt.Errorf("--item-id and --folder-id are mutually exclusive"))
+		return usageErrorf("--item-id and --folder-id are mutually exclusive")
 	}
 
 	// Validate --days
 	if days < 0 {
-		return p.PrintError(fmt.Errorf("--days must be non-negative"))
+		return usageErrorf("--days must be non-negative")
 	}
 
 	req := &driveactivity.QueryDriveActivityRequest{

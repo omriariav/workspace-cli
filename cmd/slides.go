@@ -1111,7 +1111,7 @@ func runSlidesDeleteSlide(cmd *cobra.Command, args []string) error {
 
 		slideID = presentation.Slides[slideNumber-1].ObjectId
 	} else if slideID == "" {
-		return p.PrintError(fmt.Errorf("must specify --slide-id or --slide-number"))
+		return usageErrorf("must specify --slide-id or --slide-number")
 	}
 
 	requests := []*slides.Request{
@@ -1172,7 +1172,7 @@ func runSlidesDuplicateSlide(cmd *cobra.Command, args []string) error {
 
 		slideID = presentation.Slides[slideNumber-1].ObjectId
 	} else if slideID == "" {
-		return p.PrintError(fmt.Errorf("must specify --slide-id or --slide-number"))
+		return usageErrorf("must specify --slide-id or --slide-number")
 	}
 
 	requests := []*slides.Request{
@@ -2084,7 +2084,7 @@ func runSlidesUpdateTextStyle(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no style changes specified"))
+		return usageErrorf("no style changes specified")
 	}
 
 	var textRange *slides.Range
@@ -2383,7 +2383,7 @@ func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
 	bgColor, _ := cmd.Flags().GetString("background-color")
 
 	if bgColor == "" {
-		return p.PrintError(fmt.Errorf("--background-color is required"))
+		return usageErrorf("--background-color is required")
 	}
 
 	color, err := parseHexColor(bgColor)
@@ -2602,7 +2602,7 @@ func runSlidesUpdateParagraphStyle(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no paragraph style changes specified"))
+		return usageErrorf("no paragraph style changes specified")
 	}
 
 	var textRange *slides.Range
@@ -2710,7 +2710,7 @@ func runSlidesUpdateShape(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(fields) == 0 {
-		return p.PrintError(fmt.Errorf("no shape properties specified"))
+		return usageErrorf("no shape properties specified")
 	}
 
 	requests := []*slides.Request{
@@ -2796,10 +2796,10 @@ func runSlidesUpdateSlideBackground(cmd *cobra.Command, args []string) error {
 
 	// Validate: must specify exactly one of --color or --image-url
 	if colorHex == "" && imageURL == "" {
-		return p.PrintError(fmt.Errorf("must specify --color or --image-url"))
+		return usageErrorf("must specify --color or --image-url")
 	}
 	if colorHex != "" && imageURL != "" {
-		return p.PrintError(fmt.Errorf("--color and --image-url are mutually exclusive"))
+		return usageErrorf("--color and --image-url are mutually exclusive")
 	}
 
 	ctx := context.Background()
@@ -3093,7 +3093,7 @@ func runSlidesGroup(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(objectIDs) < 2 {
-		return p.PrintError(fmt.Errorf("at least 2 element IDs are required for grouping"))
+		return usageErrorf("at least 2 element IDs are required for grouping")
 	}
 
 	requests := []*slides.Request{

@@ -3286,13 +3286,9 @@ func TestChatFindGroup_ErrorOnEmptyMembers(t *testing.T) {
 	os.Stderr = oldStderr
 
 	output, _ := io.ReadAll(r)
-	var result map[string]interface{}
-	if err := json.Unmarshal(output, &result); err != nil {
-		t.Fatalf("failed to parse output: %v\nraw: %s", err, output)
-	}
-	errMsg, ok := result["error"].(string)
-	if !ok || errMsg == "" {
-		t.Errorf("expected error message in output, got %v", result)
+	// usageErrorf produces plain "Error: ..." now (was JSON before).
+	if !strings.Contains(string(output), "--members must contain at least one email address") {
+		t.Errorf("expected --members validation error, got %s", output)
 	}
 }
 

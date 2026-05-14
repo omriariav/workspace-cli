@@ -66,7 +66,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	clientSecret := config.GetClientSecret()
 
 	if clientID == "" || clientSecret == "" {
-		return p.PrintError(fmt.Errorf("missing credentials: set GWS_CLIENT_ID and GWS_CLIENT_SECRET environment variables, or use --client-id and --client-secret flags"))
+		return usageErrorf("missing credentials: set GWS_CLIENT_ID and GWS_CLIENT_SECRET environment variables, or use --client-id and --client-secret flags")
 	}
 
 	// Determine scopes and services based on --services flag, config, or all

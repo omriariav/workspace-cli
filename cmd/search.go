@@ -48,10 +48,10 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	apiKey := viper.GetString("search_api_key")
 
 	if engineID == "" {
-		return p.PrintError(fmt.Errorf("missing Search Engine ID: set GWS_SEARCH_ENGINE_ID environment variable or use --engine-id flag"))
+		return usageErrorf("missing Search Engine ID: set GWS_SEARCH_ENGINE_ID environment variable or use --engine-id flag")
 	}
 	if apiKey == "" {
-		return p.PrintError(fmt.Errorf("missing API Key: set GWS_SEARCH_API_KEY environment variable or use --api-key flag"))
+		return usageErrorf("missing API Key: set GWS_SEARCH_API_KEY environment variable or use --api-key flag")
 	}
 
 	query := args[0]
@@ -62,10 +62,10 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	// Validate input ranges (Google Custom Search API limits)
 	if maxResults < 1 || maxResults > 10 {
-		return p.PrintError(fmt.Errorf("--max must be between 1 and 10"))
+		return usageErrorf("--max must be between 1 and 10")
 	}
 	if start < 1 || start > 100 {
-		return p.PrintError(fmt.Errorf("--start must be between 1 and 100"))
+		return usageErrorf("--start must be between 1 and 100")
 	}
 
 	// Build URL

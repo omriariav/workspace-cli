@@ -635,7 +635,7 @@ func runContactsBatchUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	if fileData.UpdateMask == "" {
-		return p.PrintError(fmt.Errorf("update_mask is required in the JSON file"))
+		return usageErrorf("update_mask is required in the JSON file")
 	}
 
 	req := &people.BatchUpdateContactsRequest{

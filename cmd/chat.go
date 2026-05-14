@@ -1650,7 +1650,7 @@ func runChatUpdateSpace(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(masks) == 0 {
-		return p.PrintError(fmt.Errorf("at least one of --display-name or --description is required"))
+		return usageErrorf("at least one of --display-name or --description is required")
 	}
 
 	updated, err := svc.Spaces.Patch(spaceName, space).UpdateMask(strings.Join(masks, ",")).Context(ctx).Do()
@@ -1736,10 +1736,10 @@ func runChatFindDm(cmd *cobra.Command, args []string) error {
 	email, _ := cmd.Flags().GetString("email")
 
 	if user == "" && email == "" {
-		return p.PrintError(fmt.Errorf("provide either --user or --email"))
+		return usageErrorf("provide either --user or --email")
 	}
 	if user != "" && email != "" {
-		return p.PrintError(fmt.Errorf("--user and --email are mutually exclusive"))
+		return usageErrorf("--user and --email are mutually exclusive")
 	}
 	if email != "" {
 		user = "users/" + email
@@ -2468,7 +2468,7 @@ func runChatFindGroup(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if len(emails) == 0 {
-		return p.PrintError(fmt.Errorf("--members must contain at least one email address"))
+		return usageErrorf("--members must contain at least one email address")
 	}
 
 	matches := spacecache.FindByMembers(cache, emails)
@@ -2511,7 +2511,7 @@ func runChatFindSpace(cmd *cobra.Command, args []string) error {
 
 	name := strings.TrimSpace(rawName)
 	if name == "" {
-		return p.PrintError(fmt.Errorf("--name must not be empty"))
+		return usageErrorf("--name must not be empty")
 	}
 
 	if spaceType != "" {

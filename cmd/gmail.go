@@ -1116,7 +1116,7 @@ func runGmailLabel(cmd *cobra.Command, args []string) error {
 	removeStr, _ := cmd.Flags().GetString("remove")
 
 	if addStr == "" && removeStr == "" {
-		return p.PrintError(fmt.Errorf("at least one of --add or --remove is required"))
+		return usageErrorf("at least one of --add or --remove is required")
 	}
 
 	// Fetch label map once for both add and remove
@@ -1938,7 +1938,7 @@ func runGmailBatchModify(cmd *cobra.Command, args []string) error {
 	removeLabelsStr, _ := cmd.Flags().GetString("remove-labels")
 
 	if addLabelsStr == "" && removeLabelsStr == "" {
-		return p.PrintError(fmt.Errorf("at least one of --add-labels or --remove-labels is required"))
+		return usageErrorf("at least one of --add-labels or --remove-labels is required")
 	}
 
 	ids := strings.Split(idsStr, ",")
