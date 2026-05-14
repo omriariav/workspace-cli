@@ -1,6 +1,7 @@
 package printer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -43,10 +44,15 @@ func (p *TextPrinter) Print(data interface{}) error {
 }
 
 // PrintError writes an error to the error writer (stderr) and returns the
-// original error wrapped in AlreadyPrintedError.
+// original error wrapped in AlreadyPrintedError. Write errors are joined
+// onto the returned chain.
 func (p *TextPrinter) PrintError(err error) error {
-	fmt.Fprintf(p.errW, "Error: %s\n", err.Error())
-	return &AlreadyPrintedError{Err: err}
+	_, writeErr := fmt.Fprintf(p.errW, "Error: %s\n", err.Error())
+	printed := &AlreadyPrintedError{Err: err}
+	if writeErr != nil {
+		return errors.Join(printed, writeErr)
+	}
+	return printed
 }
 
 func (p *TextPrinter) printMap(m map[string]interface{}) error {

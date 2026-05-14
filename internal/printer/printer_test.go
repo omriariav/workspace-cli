@@ -500,6 +500,33 @@ func TestTextPrinter_Print_SliceOfStrings(t *testing.T) {
 	}
 }
 
+// failingWriter always returns an error on Write; used to verify that
+// PrintError surfaces encode failures via errors.Join.
+type failingWriter struct{ err error }
+
+func (f *failingWriter) Write(p []byte) (int, error) { return 0, f.err }
+
+func TestJSONPrinter_PrintError_JoinsEncodeFailure(t *testing.T) {
+	var ok bytes.Buffer
+	fw := &failingWriter{err: errors.New("disk full")}
+	p := NewJSONPrinter(&ok, fw)
+
+	printErr := p.PrintError(errors.New("api boom"))
+
+	// AlreadyPrintedError must still be present for callers that key on it.
+	var printed *AlreadyPrintedError
+	if !errors.As(printErr, &printed) {
+		t.Fatalf("expected AlreadyPrintedError in chain, got %T", printErr)
+	}
+	if !strings.Contains(printed.Err.Error(), "api boom") {
+		t.Errorf("expected original error preserved, got %v", printed.Err)
+	}
+	// And the underlying write failure must be inspectable.
+	if !strings.Contains(printErr.Error(), "disk full") {
+		t.Errorf("expected encode failure joined into chain, got %q", printErr.Error())
+	}
+}
+
 func TestTextPrinter_Print_ReflectSlice(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewTextPrinter(&buf, &bytes.Buffer{})

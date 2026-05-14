@@ -90,11 +90,17 @@ func Execute() error {
 	return nil
 }
 
-// executeAndResolve runs the root command, prints any unprinted errors to
-// errW, and returns the exit code. Extracted from Execute so the exit-code
-// logic is unit-testable without os.Exit.
+// executeAndResolve runs the root command and returns the exit code.
+// Errors from PrintError are mapped via exitCodeForError; Cobra usage
+// errors are printed to errW as plain text and exit ExitUsage.
 func executeAndResolve(errW io.Writer) int {
-	err := rootCmd.Execute()
+	return resolveExitError(rootCmd.Execute(), errW)
+}
+
+// resolveExitError maps a Cobra execution error to an exit code. Pure
+// function — no os.Exit, no rootCmd reference — so unit tests can drive
+// every branch of the dispatch contract.
+func resolveExitError(err error, errW io.Writer) int {
 	if err == nil {
 		return ExitOK
 	}

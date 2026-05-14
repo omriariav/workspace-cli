@@ -2,6 +2,7 @@ package printer
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 )
 
@@ -26,12 +27,18 @@ func (p *JSONPrinter) Print(data interface{}) error {
 
 // PrintError writes a structured error to the error writer (stderr) and
 // returns the original error wrapped in AlreadyPrintedError so callers
-// propagate a non-zero exit without re-printing.
+// propagate a non-zero exit without re-printing. If the encode fails
+// (rare; broken stderr), the encode error is joined onto the returned
+// chain so it is still inspectable.
 func (p *JSONPrinter) PrintError(err error) error {
 	enc := json.NewEncoder(p.errW)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(map[string]interface{}{
+	encErr := enc.Encode(map[string]interface{}{
 		"error": err.Error(),
 	})
-	return &AlreadyPrintedError{Err: err}
+	printed := &AlreadyPrintedError{Err: err}
+	if encErr != nil {
+		return errors.Join(printed, encErr)
+	}
+	return printed
 }

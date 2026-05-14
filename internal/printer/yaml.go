@@ -1,6 +1,7 @@
 package printer
 
 import (
+	"errors"
 	"io"
 
 	"gopkg.in/yaml.v3"
@@ -26,12 +27,17 @@ func (p *YAMLPrinter) Print(data interface{}) error {
 }
 
 // PrintError writes a structured error to the error writer (stderr) and
-// returns the original error wrapped in AlreadyPrintedError.
+// returns the original error wrapped in AlreadyPrintedError. Encode errors
+// are joined onto the returned chain.
 func (p *YAMLPrinter) PrintError(err error) error {
 	enc := yaml.NewEncoder(p.errW)
 	enc.SetIndent(2)
-	_ = enc.Encode(map[string]interface{}{
+	encErr := enc.Encode(map[string]interface{}{
 		"error": err.Error(),
 	})
-	return &AlreadyPrintedError{Err: err}
+	printed := &AlreadyPrintedError{Err: err}
+	if encErr != nil {
+		return errors.Join(printed, encErr)
+	}
+	return printed
 }
