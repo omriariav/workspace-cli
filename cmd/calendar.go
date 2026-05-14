@@ -525,17 +525,6 @@ func runCalendarList(cmd *cobra.Command, args []string) error {
 
 func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
-
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.Calendar()
-	if err != nil {
-		return p.PrintError(err)
-	}
 
 	days, _ := cmd.Flags().GetInt("days")
 	fromStr, _ := cmd.Flags().GetString("from")
@@ -548,6 +537,8 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 	timezone, _ := cmd.Flags().GetString("timezone")
 	updatedMin, _ := cmd.Flags().GetString("updated-min")
 
+	// Pure input validation before auth — invalid CLI input must surface
+	// as ExitUsage, not as an auth failure.
 	start := time.Now()
 	if fromStr != "" {
 		if t, err := time.Parse(time.RFC3339, fromStr); err == nil {
@@ -558,6 +549,23 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 			return usageErrorf("invalid --from date %q: use YYYY-MM-DD or RFC3339 format", fromStr)
 		}
 	}
+	if updatedMin != "" {
+		if _, err := time.Parse(time.RFC3339, updatedMin); err != nil {
+			return usageErrorf("invalid --updated-min %q: use RFC3339 format", updatedMin)
+		}
+	}
+
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Calendar()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	timeMin := start.Format(time.RFC3339)
 	timeMax := start.AddDate(0, 0, days).Format(time.RFC3339)
 
@@ -578,9 +586,7 @@ func runCalendarEvents(cmd *cobra.Command, args []string) error {
 		call = call.TimeZone(timezone)
 	}
 	if updatedMin != "" {
-		if _, err := time.Parse(time.RFC3339, updatedMin); err != nil {
-			return usageErrorf("invalid --updated-min %q: use RFC3339 format", updatedMin)
-		}
+		// Already validated above.
 		call = call.UpdatedMin(updatedMin)
 	}
 

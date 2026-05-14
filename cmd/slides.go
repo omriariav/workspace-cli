@@ -2438,17 +2438,6 @@ func runSlidesUpdateTableCell(cmd *cobra.Command, args []string) error {
 
 func runSlidesUpdateTableBorder(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
-
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.Slides()
-	if err != nil {
-		return p.PrintError(err)
-	}
 
 	presentationID := args[0]
 	tableID, _ := cmd.Flags().GetString("table-id")
@@ -2458,6 +2447,25 @@ func runSlidesUpdateTableBorder(cmd *cobra.Command, args []string) error {
 	colorHex, _ := cmd.Flags().GetString("color")
 	width, _ := cmd.Flags().GetFloat64("width")
 	style, _ := cmd.Flags().GetString("style")
+
+	// Validate enum-shaped flags before auth so invalid CLI input maps
+	// to ExitUsage, not an auth failure.
+	switch border {
+	case "all", "top", "bottom", "left", "right":
+	default:
+		return usageErrorf("invalid border: %s (use top, bottom, left, right, or all)", border)
+	}
+
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	// Build border properties
 	borderProps := &slides.TableBorderProperties{
@@ -3072,8 +3080,25 @@ func runSlidesAddLine(cmd *cobra.Command, args []string) error {
 
 func runSlidesGroup(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	presentationID := args[0]
+	objectIDsStr, _ := cmd.Flags().GetString("object-ids")
+
+	// Trim and drop empties so inputs like "id1,,id2" or " , id1 " don't
+	// pass validation and send empty object IDs to the API.
+	rawIDs := strings.Split(objectIDsStr, ",")
+	objectIDs := make([]string, 0, len(rawIDs))
+	for _, id := range rawIDs {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			objectIDs = append(objectIDs, trimmed)
+		}
+	}
+
+	if len(objectIDs) < 2 {
+		return usageErrorf("at least 2 non-empty element IDs are required for grouping")
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -3082,18 +3107,6 @@ func runSlidesGroup(cmd *cobra.Command, args []string) error {
 	svc, err := factory.Slides()
 	if err != nil {
 		return p.PrintError(err)
-	}
-
-	presentationID := args[0]
-	objectIDsStr, _ := cmd.Flags().GetString("object-ids")
-
-	objectIDs := strings.Split(objectIDsStr, ",")
-	for i, id := range objectIDs {
-		objectIDs[i] = strings.TrimSpace(id)
-	}
-
-	if len(objectIDs) < 2 {
-		return usageErrorf("at least 2 element IDs are required for grouping")
 	}
 
 	requests := []*slides.Request{

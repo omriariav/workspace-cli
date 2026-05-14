@@ -1123,8 +1123,22 @@ func runDocsAppend(cmd *cobra.Command, args []string) error {
 
 func runDocsInsert(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	docID := args[0]
+	text, _ := cmd.Flags().GetString("text")
+	position, _ := cmd.Flags().GetInt64("at")
+	contentFormat, _ := cmd.Flags().GetString("content-format")
+	tabQuery, _ := cmd.Flags().GetString("tab")
+
+	// Validate position before auth so invalid CLI input maps to ExitUsage.
+	if contentFormat != "richformat" && position < 1 {
+		return usageErrorf("position must be >= 1")
+	}
+	if contentFormat == "richformat" && cmd.Flags().Changed("at") {
+		fmt.Fprintln(os.Stderr, "warning: --at is ignored when --content-format is richformat")
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -1133,20 +1147,6 @@ func runDocsInsert(cmd *cobra.Command, args []string) error {
 	svc, err := factory.Docs()
 	if err != nil {
 		return p.PrintError(err)
-	}
-
-	docID := args[0]
-	text, _ := cmd.Flags().GetString("text")
-	position, _ := cmd.Flags().GetInt64("at")
-	contentFormat, _ := cmd.Flags().GetString("content-format")
-	tabQuery, _ := cmd.Flags().GetString("tab")
-
-	// Validate position (skip for richformat which provides its own positions)
-	if contentFormat != "richformat" && position < 1 {
-		return usageErrorf("position must be >= 1")
-	}
-	if contentFormat == "richformat" && cmd.Flags().Changed("at") {
-		fmt.Fprintln(os.Stderr, "warning: --at is ignored when --content-format is richformat")
 	}
 
 	// Resolve tab ID if --tab provided
