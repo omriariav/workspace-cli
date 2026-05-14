@@ -137,33 +137,44 @@ func resolveExitError(err error, errW io.Writer) int {
 }
 
 // isCobraUsageError reports whether an error returned from rootCmd.Execute
-// came from Cobra's own arg/flag validation rather than RunE. Cobra does
-// not expose typed sentinels for these, so we match the stable message
-// prefixes Cobra emits for each validation failure.
+// came from Cobra's own arg/flag validation rather than a RunE. Cobra does
+// not expose typed sentinels for these, so we match the stable shapes
+// Cobra produces — using strict prefix/substring patterns so unrelated
+// runtime errors that happen to contain a Cobra-ish word don't get
+// misclassified as ExitUsage.
 func isCobraUsageError(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := err.Error()
+	// Prefix-only patterns. Cobra emits these at the start of the
+	// error message; a runtime error that happens to say e.g.
+	// "this argument is invalid" will not match.
 	for _, p := range cobraUsageErrorPrefixes {
-		if strings.Contains(msg, p) {
+		if strings.HasPrefix(msg, p) {
 			return true
 		}
+	}
+	// Argument-count errors from cobra.ExactArgs/MinimumNArgs/etc.
+	// Cobra renders them as "accepts N arg(s), received M".
+	if strings.HasPrefix(msg, "accepts ") && strings.Contains(msg, "arg(s), received") {
+		return true
+	}
+	if msg == "subcommand is required" {
+		return true
 	}
 	return false
 }
 
 var cobraUsageErrorPrefixes = []string{
-	"unknown command",
-	"unknown flag",
-	"unknown shorthand flag",
-	"flag needs an argument",
-	"invalid argument",
-	"required flag",
-	"subcommand is required",
-	"accepts ", // e.g. "accepts 1 arg(s), received 0"
-	"requires at least",
-	"requires exactly",
+	"unknown command \"",       // unknown command "foo" for "gws"
+	"unknown flag: ",           // unknown flag: --bogus
+	"unknown shorthand flag: ", // unknown shorthand flag: 'x' in -x
+	"flag needs an argument: ", // flag needs an argument: --to
+	`invalid argument "`,       // invalid argument "abc" for "--max" flag: ...
+	"required flag(s) ",        // required flag(s) "to" not set
+	"requires at least ",       // cobra.MinimumNArgs
+	"requires exactly ",        // pre-Cobra-1.x exact-args message
 }
 
 // exitCodeForError maps a Go error to the appropriate CLI exit code by

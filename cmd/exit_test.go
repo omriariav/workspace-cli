@@ -180,30 +180,18 @@ func TestResolveExitError_CobraEndToEnd_UnknownFlag(t *testing.T) {
 }
 
 // TestResolveExitError_EndToEnd_RealCommandUsageValidation exercises a
-// real `gws` command path end-to-end: invoke chat setup-space with an
-// invalid --type (a runtime validation that uses usageErrorf), and
-// verify resolveExitError returns ExitUsage. This is the integration
-// test codex requested — it touches the actual command registry, not
-// a synthetic *cobra.Command.
+// real `gws` command path end-to-end. people get validates resourceName
+// BEFORE creating an API client (per the round-9 reorder), so the test
+// is reliable in CI environments without OAuth credentials — the
+// validation fires regardless of auth state.
 func TestResolveExitError_EndToEnd_RealCommandUsageValidation(t *testing.T) {
-	cmd := findSubcommand(chatCmd, "setup-space")
+	cmd := findSubcommand(peopleCmd, "get")
 	if cmd == nil {
-		t.Fatal("chat setup-space command not registered")
+		t.Fatal("people get command not registered")
 	}
-	if err := cmd.Flags().Set("display-name", "x"); err != nil {
-		t.Fatal(err)
-	}
-	if err := cmd.Flags().Set("type", "BOGUS_TYPE"); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		cmd.Flags().Set("display-name", "")
-		cmd.Flags().Set("type", "")
-	})
 
-	// usageErrorf writes to os.Stderr. We don't capture it here — the
-	// point of this test is the exit code, not the message format
-	// (covered elsewhere).
+	// usageErrorf writes to os.Stderr. Redirect to /dev/null to keep
+	// the test output clean; the message format is tested elsewhere.
 	oldStderr := os.Stderr
 	devnull, _ := os.Open(os.DevNull)
 	os.Stderr = devnull
@@ -212,11 +200,12 @@ func TestResolveExitError_EndToEnd_RealCommandUsageValidation(t *testing.T) {
 		_ = devnull.Close()
 	})
 
+	// No positional arg, no --params resourceName → usageErrorf path.
 	err := cmd.RunE(cmd, []string{})
 	var resolverErr bytes.Buffer
 	code := resolveExitError(err, &resolverErr)
 	if code != ExitUsage {
-		t.Errorf("expected ExitUsage (2) for invalid --type, got %d", code)
+		t.Errorf("expected ExitUsage (2) for missing resourceName, got %d", code)
 	}
 }
 
@@ -268,26 +257,36 @@ func TestIsCobraUsageError(t *testing.T) {
 		msg  string
 		want bool
 	}{
+		// Real Cobra validation messages — these must match.
 		{"unknown command \"foo\" for \"gws\"", true},
 		{"unknown flag: --bogus", true},
-		{"unknown shorthand flag: 'x'", true},
+		{"unknown shorthand flag: 'x' in -x", true},
 		{"flag needs an argument: --to", true},
-		{"invalid argument \"abc\" for \"--max\"", true},
+		{"invalid argument \"abc\" for \"--max\" flag: strconv.ParseInt: parsing \"abc\": invalid syntax", true},
 		{"required flag(s) \"to\" not set", true},
 		{"accepts 1 arg(s), received 0", true},
 		{"requires at least 1 arg(s)", true},
 		{"requires exactly 2 arg(s)", true},
 		{"subcommand is required", true},
 
+		// Runtime errors that previously would have matched the loose
+		// strings.Contains check — these MUST NOT be misclassified.
 		{"failed to get person: googleapi: Error 403", false},
 		{"write /dev/stdout: broken pipe", false},
 		{"something random", false},
+		{"this argument is invalid for our use case", false},        // contains "invalid argument" substring? no — different shape
+		{"validation failed: required flag missing in JSON", false}, // contains "required flag" but not as prefix
+		{"server says: unknown flag was set in the request", false}, // "unknown flag" not at start
+		{"the response contained subcommand is required", false},    // not exact equality
+		{"failed: accepts UTF-8 only; arg(s), received raw", false}, // contains both markers but wrong shape
 		{"", false},
 	}
 	for _, c := range cases {
-		got := isCobraUsageError(fmt.Errorf("%s", c.msg))
+		var got bool
 		if c.msg == "" {
 			got = isCobraUsageError(nil)
+		} else {
+			got = isCobraUsageError(fmt.Errorf("%s", c.msg))
 		}
 		if got != c.want {
 			t.Errorf("isCobraUsageError(%q) = %v, want %v", c.msg, got, c.want)
