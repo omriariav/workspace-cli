@@ -8,20 +8,21 @@ import (
 	"testing"
 )
 
-// captureOutput captures stdout during a function call and returns the output.
+// captureOutput captures stderr during a function call and returns the output.
+// (PrintError writes structured errors to stderr per #190.)
 func captureOutput(t *testing.T, fn func()) string {
 	t.Helper()
-	old := os.Stdout
+	old := os.Stderr
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("failed to create pipe: %v", err)
 	}
-	os.Stdout = w
+	os.Stderr = w
 
 	fn()
 
 	w.Close()
-	os.Stdout = old
+	os.Stderr = old
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)

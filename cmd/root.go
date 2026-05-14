@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/omriariav/workspace-cli/internal/updatecheck"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"google.golang.org/api/googleapi"
 )
 
 var (
@@ -28,7 +30,9 @@ var rootCmd = &cobra.Command{
 It provides structured, token-efficient access to Gmail, Calendar, Drive,
 Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Groups, Keep,
 and Custom Search.`,
+	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		cmd.SilenceUsage = true
 		emitVersionNotice(cmd, os.Stderr, quiet, os.Getenv("GWS_NO_UPDATE_CHECK") != "")
 	},
 }
@@ -62,8 +66,53 @@ func emitVersionNotice(cmd *cobra.Command, w io.Writer, quietFlag, suppressEnv b
 	}
 }
 
+// Exit codes per the #190 contract:
+//
+//	0 — success
+//	1 — generic API / runtime error
+//	2 — CLI usage error (wrong args, unknown flag)
+//	3 — auth failure (HTTP 401 / 403)
+//	4 — transient / retryable (HTTP 429, 5xx)
+const (
+	ExitOK        = 0
+	ExitError     = 1
+	ExitUsage     = 2
+	ExitAuth      = 3
+	ExitTransient = 4
+)
+
 func Execute() error {
-	return rootCmd.Execute()
+	err := rootCmd.Execute()
+	if err == nil {
+		return nil
+	}
+
+	// If the error was already printed by a Printer.PrintError call,
+	// just map the exit code. Otherwise it is a Cobra-level usage error
+	// that needs to be emitted.
+	var printed *printer.AlreadyPrintedError
+	if !errors.As(err, &printed) {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
+		os.Exit(ExitUsage)
+	}
+
+	os.Exit(exitCodeForError(err))
+	return nil // unreachable
+}
+
+// exitCodeForError maps a Go error to the appropriate CLI exit code by
+// inspecting the underlying googleapi.Error HTTP status.
+func exitCodeForError(err error) int {
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.Code == 401 || apiErr.Code == 403:
+			return ExitAuth
+		case apiErr.Code == 429 || apiErr.Code >= 500:
+			return ExitTransient
+		}
+	}
+	return ExitError
 }
 
 func init() {

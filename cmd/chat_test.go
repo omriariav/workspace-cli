@@ -3275,15 +3275,15 @@ func TestChatFindGroup_ErrorOnEmptyMembers(t *testing.T) {
 	cmd := newFindGroupCmd()
 	cmd.Flags().Set("members", "  ,  , ")
 
-	// Capture stdout (PrintError writes error JSON to stdout)
-	oldStdout := os.Stdout
+	// Capture stderr (PrintError writes error JSON to stderr per #190)
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
-	os.Stdout = w
+	os.Stderr = w
 
 	cmd.RunE(cmd, []string{})
 
 	w.Close()
-	os.Stdout = oldStdout
+	os.Stderr = oldStderr
 
 	output, _ := io.ReadAll(r)
 	var result map[string]interface{}
@@ -3498,12 +3498,12 @@ func TestChatFindSpace_InvalidType(t *testing.T) {
 	cmd.Flags().Set("name", "sales")
 	cmd.Flags().Set("type", "BOGUS")
 
-	oldStdout := os.Stdout
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
-	os.Stdout = w
+	os.Stderr = w
 	cmd.RunE(cmd, []string{})
 	w.Close()
-	os.Stdout = oldStdout
+	os.Stderr = oldStderr
 
 	output, _ := io.ReadAll(r)
 	var result map[string]interface{}
@@ -3639,12 +3639,12 @@ func TestChatFindSpace_NoCache(t *testing.T) {
 	cmd := newFindSpaceCmd()
 	cmd.Flags().Set("name", "sales")
 
-	oldStdout := os.Stdout
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
-	os.Stdout = w
+	os.Stderr = w
 	cmd.RunE(cmd, []string{})
 	w.Close()
-	os.Stdout = oldStdout
+	os.Stderr = oldStderr
 
 	output, _ := io.ReadAll(r)
 	var result map[string]interface{}
@@ -3666,14 +3666,14 @@ func TestChatFindGroup_NoCache(t *testing.T) {
 	cmd := newFindGroupCmd()
 	cmd.Flags().Set("members", "alice@example.com")
 
-	oldStdout := os.Stdout
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
-	os.Stdout = w
+	os.Stderr = w
 
 	cmd.RunE(cmd, []string{})
 
 	w.Close()
-	os.Stdout = oldStdout
+	os.Stderr = oldStderr
 
 	output, _ := io.ReadAll(r)
 	var result map[string]interface{}

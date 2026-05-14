@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.39.0** - Adds `--raw` and `--params` to six list/get commands for programmatic, API-shape JSON output (skips field renaming, base64 decoding, header collapsing). New noun-verb command paths: `gws chat spaces list`, `gws chat messages list`, `gws chat members list`, and `gws people get`. `gmail list` switches to `users.messages.list` shape under `--raw`. `--all` aggregates the top-level list field across pages and drops `nextPageToken`. `--params` is a JSON object whose keys map directly to Google API request parameters and override the equivalent CLI flags (params win). `contacts get` and `gmail thread` relaxed to accept the resource id via `--params resourceName`/`--params id`.
+**v1.40.0** - Non-zero exit codes for API errors: 1=generic, 2=CLI usage, 3=auth (401/403), 4=transient (429/5xx). Errors now go to stderr as structured JSON; stdout is reserved for successful responses. `--services people` scope fix: adds `userinfo.profile` so `gws people get people/me` works without a 403.
 
 ## Roadmap
 

@@ -13,7 +13,8 @@ func (p *NullPrinter) Print(data interface{}) error {
 	return nil
 }
 
-// PrintError discards the error.
+// PrintError suppresses output but returns the error wrapped in
+// AlreadyPrintedError so the process still exits non-zero.
 func (p *NullPrinter) PrintError(err error) error {
-	return nil
+	return &AlreadyPrintedError{Err: err}
 }

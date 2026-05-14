@@ -11,12 +11,14 @@ import (
 
 // TextPrinter outputs data as human-readable text.
 type TextPrinter struct {
-	w io.Writer
+	w    io.Writer
+	errW io.Writer
 }
 
-// NewTextPrinter creates a new text printer.
-func NewTextPrinter(w io.Writer) *TextPrinter {
-	return &TextPrinter{w: w}
+// NewTextPrinter creates a new text printer with separate output and error
+// writers.
+func NewTextPrinter(w, errW io.Writer) *TextPrinter {
+	return &TextPrinter{w: w, errW: errW}
 }
 
 // Print outputs data as human-readable text.
@@ -40,10 +42,11 @@ func (p *TextPrinter) Print(data interface{}) error {
 	}
 }
 
-// PrintError outputs an error as text.
+// PrintError writes an error to the error writer (stderr) and returns the
+// original error wrapped in AlreadyPrintedError.
 func (p *TextPrinter) PrintError(err error) error {
-	_, writeErr := fmt.Fprintf(p.w, "Error: %s\n", err.Error())
-	return writeErr
+	fmt.Fprintf(p.errW, "Error: %s\n", err.Error())
+	return &AlreadyPrintedError{Err: err}
 }
 
 func (p *TextPrinter) printMap(m map[string]interface{}) error {

@@ -488,15 +488,37 @@ func TestRunPeopleGet_MissingResourceNameErrors(t *testing.T) {
 	defer cleanup()
 
 	cmd := newPeopleGetCmd(t, nil)
-	// Per the printer-error convention, the runner emits a structured
-	// error object via the printer and returns the printer's nil. The
-	// error message must show up on stdout.
-	out, _ := captureStdout(t, func() error {
-		return runPeopleGetWithSvc(cmd, svc, nil)
+	// PrintError writes to stderr per #190.
+	errOut := captureStderrStr(t, func() {
+		_ = runPeopleGetWithSvc(cmd, svc, nil)
 	})
-	if !strings.Contains(out, "resourceName is required") {
-		t.Errorf("expected structured error JSON on stdout, got %q", out)
+	if !strings.Contains(errOut, "resourceName is required") {
+		t.Errorf("expected structured error JSON on stderr, got %q", errOut)
 	}
+}
+
+func captureStderrStr(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stderr = w
+
+	var buf bytes.Buffer
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(&buf, r)
+	}()
+
+	fn()
+	_ = w.Close()
+	wg.Wait()
+	os.Stderr = orig
+	return buf.String()
 }
 
 func TestParseParams_RejectsTrailingJunk(t *testing.T) {

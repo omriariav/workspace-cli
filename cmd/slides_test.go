@@ -830,17 +830,17 @@ func TestSlidesAddTextCommand_ValidationErrors(t *testing.T) {
 				}
 			}
 
-			// Capture os.Stdout since the printer writes directly to it
-			oldStdout := os.Stdout
+			// Capture os.Stderr since PrintError writes to stderr (#190)
+			oldStderr := os.Stderr
 			r, w, _ := os.Pipe()
-			os.Stdout = w
+			os.Stderr = w
 
 			// Execute the command with a dummy presentation ID
 			_ = cmd.RunE(cmd, []string{"test-presentation-id"})
 
-			// Restore stdout and read captured output
+			// Restore stderr and read captured output
 			w.Close()
-			os.Stdout = oldStdout
+			os.Stderr = oldStderr
 			captured, _ := io.ReadAll(r)
 			output := string(captured)
 
@@ -1068,14 +1068,14 @@ func TestSlidesAddTextCommand_NotesValidation(t *testing.T) {
 				}
 			}
 
-			oldStdout := os.Stdout
+			oldStderr := os.Stderr
 			r, w, _ := os.Pipe()
-			os.Stdout = w
+			os.Stderr = w
 
 			_ = cmd.RunE(cmd, []string{"test-presentation-id"})
 
 			w.Close()
-			os.Stdout = oldStdout
+			os.Stderr = oldStderr
 			captured, _ := io.ReadAll(r)
 			output := string(captured)
 
@@ -1136,14 +1136,14 @@ func TestSlidesDeleteTextCommand_NotesValidation(t *testing.T) {
 				}
 			}
 
-			oldStdout := os.Stdout
+			oldStderr := os.Stderr
 			r, w, _ := os.Pipe()
-			os.Stdout = w
+			os.Stderr = w
 
 			_ = cmd.RunE(cmd, []string{"test-presentation-id"})
 
 			w.Close()
-			os.Stdout = oldStdout
+			os.Stderr = oldStderr
 			captured, _ := io.ReadAll(r)
 			output := string(captured)
 
