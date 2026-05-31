@@ -409,7 +409,8 @@ Usage: gws drive delete-comment [flags]
 
 ## gws drive resolve-comment
 
-Marks a comment as resolved.
+Marks a comment as resolved by posting a reply with `action=resolve`. The
+original comment content is preserved.
 
 ```
 Usage: gws drive resolve-comment [flags]
@@ -419,12 +420,14 @@ Usage: gws drive resolve-comment [flags]
 |------|------|---------|----------|-------------|
 | `--file-id` | string | | Yes | File ID |
 | `--comment-id` | string | | Yes | Comment ID |
+| `--content` | string | | No | Optional closing note attached to the resolve reply |
 
 ---
 
 ## gws drive unresolve-comment
 
-Marks a comment as unresolved.
+Reopens a resolved comment by posting a reply with `action=reopen`. The
+original comment content is preserved.
 
 ```
 Usage: gws drive unresolve-comment [flags]
@@ -434,6 +437,7 @@ Usage: gws drive unresolve-comment [flags]
 |------|------|---------|----------|-------------|
 | `--file-id` | string | | Yes | File ID |
 | `--comment-id` | string | | Yes | Comment ID |
+| `--content` | string | | No | Optional reopening note attached to the reopen reply |
 
 ---
 

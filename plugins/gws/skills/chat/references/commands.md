@@ -34,13 +34,29 @@ Usage: gws chat list [flags]
 |------|------|---------|-------------|
 | `--filter` | string | | Filter spaces (e.g. `spaceType = "SPACE"`) |
 | `--page-size` | int | 100 | Number of spaces per page |
+| `--all` | bool | false | Fetch every page (raw mode aggregates the list field and drops `nextPageToken`) |
+| `--raw` | bool | false | Emit unmodified `spaces.list` response JSON |
+| `--params` | string | | JSON object mapped to `spaces.list` request parameters (`pageSize`, `filter`, `pageToken`). Overrides equivalent CLI flags. |
 
 ### Output Fields (JSON)
 
-Each space includes:
+Default ergonomic output. Each space includes:
 - `name` — Space resource name (e.g., `spaces/AAAA1234`)
 - `displayName` — Human-readable space name
 - `type` — Space type (`ROOM`, `DM`, `GROUP_CHAT`)
+
+Under `--raw` the response shape matches Google's `spaces.list` reference exactly (`{"spaces":[...],"nextPageToken":"..."}`).
+
+---
+
+## gws chat spaces list
+
+Programmatic alias for `gws chat list` that mirrors the API method name. Same flag surface; useful when scripting against `spaces.list`.
+
+```
+Usage: gws chat spaces list [flags]
+gws chat spaces list --params '{"pageSize":50,"filter":"spaceType = \"DIRECT_MESSAGE\""}' --raw --all
+```
 
 ---
 
@@ -49,7 +65,7 @@ Each space includes:
 Lists recent messages in a Chat space. Supports filtering, ordering, pagination, and showing deleted messages.
 
 ```
-Usage: gws chat messages <space-id> [flags]
+Usage: gws chat messages [space-id] [flags]
 ```
 
 | Flag | Type | Default | Description |
@@ -61,6 +77,17 @@ Usage: gws chat messages <space-id> [flags]
 | `--order-by` | string | | Order messages (e.g. `createTime DESC`) |
 | `--show-deleted` | bool | false | Include deleted messages in results |
 | `--resolve-senders` | bool | false | Make extra API calls to fill missing `sender_display_name` (via space membership listing) and add `self` (via People API `people/me`). |
+| `--all` | bool | false | Fetch every page (raw mode aggregates the `messages` field; ignores `--max`) |
+| `--raw` | bool | false | Emit unmodified `spaces.messages.list` response JSON |
+| `--params` | string | | JSON object mapped to `spaces.messages.list` request parameters (`parent`, `pageSize`, `filter`, `orderBy`, `showDeleted`, `pageToken`). Overrides equivalent CLI flags. |
+
+### gws chat messages list
+
+Programmatic alias that accepts `parent` via `--params` instead of a positional argument:
+
+```
+gws chat messages list --params '{"parent":"spaces/AAA","pageSize":50,"filter":"createTime > \"2025-01-01T00:00:00Z\""}' --raw --all
+```
 
 `--after` and `--before` are convenience flags that translate to filter expressions. They combine with `--filter` using AND.
 
@@ -79,7 +106,7 @@ The space ID format is `spaces/AAAA1234` (get from `gws chat list`).
 Lists all members of a Chat space with display names and emails (auto-resolved via People API, cached locally).
 
 ```
-Usage: gws chat members <space-id> [flags]
+Usage: gws chat members [space-id] [flags]
 ```
 
 | Flag | Type | Default | Description |
@@ -88,6 +115,44 @@ Usage: gws chat members <space-id> [flags]
 | `--filter` | string | | Filter members (e.g. `member.type = "HUMAN"`) |
 | `--show-groups` | bool | false | Include Google Group memberships |
 | `--show-invited` | bool | false | Include invited memberships |
+| `--all` | bool | false | Fetch every page (raw mode aggregates the `memberships` field; ignores `--max`) |
+| `--raw` | bool | false | Emit unmodified `spaces.members.list` response JSON |
+| `--params` | string | | JSON object mapped to `spaces.members.list` request parameters (`parent`, `pageSize`, `filter`, `showGroups`, `showInvited`, `pageToken`). Overrides equivalent CLI flags. |
+
+### gws chat members list
+
+Programmatic alias that accepts `parent` via `--params` instead of a positional argument:
+
+```
+gws chat members list --params '{"parent":"spaces/AAA","pageSize":50}' --raw --all
+```
+
+---
+
+## gws chat recent
+
+Recaps Chat messages across every space active within a time window. Uses `spaces.list` `lastActiveTime` as a prefilter, then queries `spaces.messages.list` per active space with `createTime > since` and `orderBy=createTime DESC`. Output is flattened and globally sorted newest-first.
+
+```
+Usage: gws chat recent [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--since` | string | `2h` | Time window: Go duration (`2h`, `12h`, `7d`) or RFC3339 timestamp |
+| `--max` | int | 500 | Maximum total messages (0 = all) |
+| `--max-per-space` | int | 100 | Maximum messages per active space (0 = all) |
+| `--max-spaces` | int | 0 | Cap on active spaces after sorting by `lastActiveTime` DESC (0 = all) |
+| `--resolve-senders` | bool | false | Resolve sender display names (one extra membership-list call per active space) and detect `self` |
+| `--exclude-self` | bool | false | Omit authenticated-user messages (best-effort, requires self detection) |
+
+### Output Fields (JSON)
+
+- `since` — Resolved RFC3339 cutoff
+- `spaces_scanned` — Total spaces returned by `spaces.list`
+- `active_spaces` — Spaces matching `lastActiveTime >= since` (after `--max-spaces` cap)
+- `count` — Number of messages in the response (after `--max` cap)
+- `messages[]` — Each entry: `space`, `space_display_name`, `space_type`, `space_last_active_time`, `name`, `text`, `create_time`, `sender`, plus `sender_type`/`sender_resource`/`sender_display_name`/`self` when available
 
 ---
 

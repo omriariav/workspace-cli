@@ -1,6 +1,6 @@
 {
   "name": "gws",
-  "version": "1.35.0",
+  "version": "1.40.0",
   "description": "Unofficial Google Workspace CLI skills for Codex. Teaches Codex how to use gws for Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Groups, Keep, and Search.",
   "author": {
     "name": "Omri Ariav",
