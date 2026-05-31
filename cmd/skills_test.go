@@ -230,6 +230,87 @@ var expectedSkills = []string{
 	"contacts", "groups", "keep",
 }
 
+func TestCodexSkills_MirrorClaudeSkills(t *testing.T) {
+	claudeBase := skillsDir(t)
+	codexBase := codexSkillsDir(t)
+
+	for _, skill := range expectedSkills {
+		t.Run(skill, func(t *testing.T) {
+			claudeSkillDir := filepath.Join(claudeBase, skill)
+			codexSkillDir := filepath.Join(codexBase, skill)
+
+			claudeData, err := os.ReadFile(filepath.Join(claudeSkillDir, "SKILL.md"))
+			if err != nil {
+				t.Fatalf("failed to read Claude SKILL.md: %v", err)
+			}
+			codexData, err := os.ReadFile(filepath.Join(codexSkillDir, "SKILL.md"))
+			if err != nil {
+				t.Fatalf("failed to read Codex SKILL.md: %v", err)
+			}
+
+			want := stripTopLevelSkillVersion(string(claudeData))
+			if got := string(codexData); got != want {
+				t.Error("Codex SKILL.md should mirror Claude SKILL.md except for the top-level version field")
+			}
+
+			assertCodexBundledFilesMirrorClaude(t, claudeSkillDir, codexSkillDir)
+		})
+	}
+}
+
+func stripTopLevelSkillVersion(content string) string {
+	lines := strings.SplitAfter(content, "\n")
+	for i, line := range lines {
+		if i > 0 && line == "---\n" {
+			return content
+		}
+		if strings.HasPrefix(line, "version: ") {
+			return strings.Join(append(lines[:i], lines[i+1:]...), "")
+		}
+	}
+	return content
+}
+
+func assertCodexBundledFilesMirrorClaude(t *testing.T, claudeSkillDir, codexSkillDir string) {
+	t.Helper()
+
+	err := filepath.Walk(claudeSkillDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+
+		rel, err := filepath.Rel(claudeSkillDir, path)
+		if err != nil {
+			return err
+		}
+		if rel == "SKILL.md" {
+			return nil
+		}
+
+		assertFilesEqual(t, path, filepath.Join(codexSkillDir, rel))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("failed to walk %s: %v", claudeSkillDir, err)
+	}
+}
+
+func assertFilesEqual(t *testing.T, wantPath, gotPath string) {
+	t.Helper()
+
+	want, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", wantPath, err)
+	}
+	got, err := os.ReadFile(gotPath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", gotPath, err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("expected %s to mirror %s", gotPath, wantPath)
+	}
+}
+
 func TestSkillDirectories_AllExist(t *testing.T) {
 	base := skillsDir(t)
 	for _, skill := range expectedSkills {
