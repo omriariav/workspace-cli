@@ -605,3 +605,32 @@ Usage: gws gmail attachment [flags]
 - `status` — Always `"downloaded"`
 - `file` — Output file path
 - `size` — File size in bytes
+
+## gws gmail links
+
+Fetches the full message and extracts `<a href>` anchors from `text/html` MIME parts. Read-only; no Gmail state is modified.
+
+```
+Usage: gws gmail links <message-id>
+```
+
+No flags beyond global flags.
+
+### Output Fields (JSON)
+
+- `message_id` — Message ID
+- `links` — Array of anchor objects in document order (empty array when no anchors found)
+
+Each link object:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | Visible anchor text |
+| `href` | string | Full URL |
+| `mime_part` | string | Always `"text/html"` |
+| `google_docs_id` | string | (Google Docs only) document ID from URL path |
+| `query` | string | (Google Docs only) raw query string |
+| `fragment` | string | (Google Docs only) URL fragment including `#` |
+| `tab_id` | string | (Google Docs only) `tab` query parameter value |
+
+All non-empty `href` anchors are returned, including `mailto:` links. Google Docs metadata fields are omitted when not applicable.

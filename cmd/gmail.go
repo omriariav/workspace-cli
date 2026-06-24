@@ -16,7 +16,9 @@ import (
 	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
+	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
+	"golang.org/x/net/html"
 	"google.golang.org/api/gmail/v1"
 )
 
@@ -312,6 +314,14 @@ var gmailAttachmentCmd = &cobra.Command{
 	RunE:  runGmailAttachment,
 }
 
+var gmailLinksCmd = &cobra.Command{
+	Use:   "links <message-id>",
+	Short: "Extract HTML anchor links from a Gmail message",
+	Long:  "Fetches the full message and extracts <a href> anchors from text/html MIME parts. Includes parsed Google Docs metadata where applicable.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runGmailLinks,
+}
+
 func init() {
 	rootCmd.AddCommand(gmailCmd)
 	gmailCmd.AddCommand(gmailListCmd)
@@ -385,6 +395,7 @@ func init() {
 	gmailCmd.AddCommand(gmailSendDraftCmd)
 	gmailCmd.AddCommand(gmailDeleteDraftCmd)
 	gmailCmd.AddCommand(gmailAttachmentCmd)
+	gmailCmd.AddCommand(gmailLinksCmd)
 
 	// Batch modify flags
 	gmailBatchModifyCmd.Flags().String("ids", "", "Comma-separated message IDs (required)")
@@ -2564,4 +2575,192 @@ func runGmailAttachment(cmd *cobra.Command, args []string) error {
 		"file":   output,
 		"size":   len(data),
 	})
+}
+
+func runGmailLinks(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return runGmailLinksWithService(svc, args[0], p)
+}
+
+func runGmailLinksWithService(svc *gmail.Service, messageID string, p printer.Printer) error {
+	msg, err := svc.Users.Messages.Get("me", messageID).Format("full").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get message: %w", err))
+	}
+
+	attachmentMessageID := msg.Id
+	if attachmentMessageID == "" {
+		attachmentMessageID = messageID
+	}
+	links, err := extractHTMLLinks(svc, attachmentMessageID, msg.Payload)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return p.Print(map[string]interface{}{
+		"message_id": msg.Id,
+		"links":      links,
+	})
+}
+
+// extractHTMLLinks walks the MIME tree and returns all <a href> anchors found
+// in text/html parts. svc and messageID are used to fetch body data stored as
+// Gmail attachments (Body.AttachmentId); pass nil/empty to skip attachment fetch.
+func extractHTMLLinks(svc *gmail.Service, messageID string, payload *gmail.MessagePart) ([]map[string]interface{}, error) {
+	var htmlBodies []string
+	if err := collectHTMLParts(svc, messageID, payload, &htmlBodies); err != nil {
+		return nil, err
+	}
+
+	links := []map[string]interface{}{}
+	for _, body := range htmlBodies {
+		links = append(links, parseHTMLAnchors(body)...)
+	}
+	return links, nil
+}
+
+// collectHTMLParts recursively collects decoded text/html body strings from a
+// MIME part tree. When a text/html part carries Body.AttachmentId instead of
+// inline Body.Data, it fetches the body via Users.Messages.Attachments.Get
+// (requires non-nil svc and a non-empty messageID).
+func collectHTMLParts(svc *gmail.Service, messageID string, part *gmail.MessagePart, out *[]string) error {
+	if part == nil {
+		return nil
+	}
+	if part.MimeType == "text/html" {
+		if part.Body != nil {
+			if part.Body.Data != "" {
+				body, err := decodeBase64URLString(part.Body.Data)
+				if err != nil {
+					return fmt.Errorf("failed to decode HTML MIME part: %w", err)
+				}
+				*out = append(*out, body)
+			} else if svc != nil && messageID != "" && part.Body.AttachmentId != "" {
+				att, err := svc.Users.Messages.Attachments.Get("me", messageID, part.Body.AttachmentId).Do()
+				if err != nil {
+					return fmt.Errorf("failed to get HTML MIME attachment %q: %w", part.Body.AttachmentId, err)
+				}
+				if att.Data != "" {
+					body, err := decodeBase64URLString(att.Data)
+					if err != nil {
+						return fmt.Errorf("failed to decode HTML MIME attachment %q: %w", part.Body.AttachmentId, err)
+					}
+					*out = append(*out, body)
+				}
+			}
+		}
+		return nil
+	}
+	for _, child := range part.Parts {
+		if err := collectHTMLParts(svc, messageID, child, out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// decodeBase64URLString decodes a base64url string with or without padding.
+func decodeBase64URLString(data string) (string, error) {
+	b, rawErr := base64.RawURLEncoding.DecodeString(data)
+	if rawErr == nil {
+		return string(b), nil
+	}
+	b, paddedErr := base64.URLEncoding.DecodeString(data)
+	if paddedErr == nil {
+		return string(b), nil
+	}
+	return "", fmt.Errorf("raw base64url decode failed: %w; padded base64url decode failed: %v", rawErr, paddedErr)
+}
+
+// parseHTMLAnchors extracts <a href> anchors from an HTML string and returns
+// structured link records in document order.
+func parseHTMLAnchors(htmlBody string) []map[string]interface{} {
+	doc, err := html.Parse(strings.NewReader(htmlBody))
+	if err != nil {
+		return nil
+	}
+
+	var links []map[string]interface{}
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "a" {
+			var href string
+			for _, attr := range n.Attr {
+				if attr.Key == "href" {
+					href = attr.Val
+					break
+				}
+			}
+			if href != "" {
+				text := strings.TrimSpace(htmlNodeText(n))
+				link := map[string]interface{}{
+					"text":      text,
+					"href":      href,
+					"mime_part": "text/html",
+				}
+				if meta := parseGoogleDocsURL(href); meta != nil {
+					for k, v := range meta {
+						link[k] = v
+					}
+				}
+				links = append(links, link)
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	return links
+}
+
+// htmlNodeText returns the concatenated visible text of a node subtree.
+func htmlNodeText(n *html.Node) string {
+	if n.Type == html.TextNode {
+		return n.Data
+	}
+	var sb strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		sb.WriteString(htmlNodeText(c))
+	}
+	return sb.String()
+}
+
+// parseGoogleDocsURL parses a Google Docs URL and returns doc id, fragment,
+// query, and tab_id. Returns nil for non-Docs URLs.
+func parseGoogleDocsURL(href string) map[string]interface{} {
+	u, err := url.Parse(href)
+	if err != nil || !strings.EqualFold(u.Hostname(), "docs.google.com") {
+		return nil
+	}
+	// Expect path: /document/d/{docId}/...
+	segments := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+	if len(segments) < 3 || segments[0] != "document" || segments[1] != "d" || segments[2] == "" {
+		return nil
+	}
+	result := map[string]interface{}{
+		"google_docs_id": segments[2],
+	}
+	if u.Fragment != "" {
+		result["fragment"] = "#" + u.Fragment
+	}
+	if u.RawQuery != "" {
+		result["query"] = u.RawQuery
+	}
+	if tab := u.Query().Get("tab"); tab != "" {
+		result["tab_id"] = tab
+	}
+	return result
 }

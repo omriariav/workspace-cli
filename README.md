@@ -124,6 +124,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws gmail send-draft <id>` | Send an existing draft |
 | `gws gmail delete-draft <id>` | Delete a draft |
 | `gws gmail attachment` | Download attachment (`--message-id`, `--id`, `--output`) |
+| `gws gmail links <id>` | Extract HTML anchor links from a message |
 
 ### Calendar
 
