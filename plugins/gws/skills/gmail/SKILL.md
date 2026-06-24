@@ -37,6 +37,7 @@ For initial setup, see the `gws-auth` skill.
 | List unread emails | `gws gmail list --query "is:unread"` |
 | Search emails | `gws gmail list --query "from:user@example.com"` |
 | Read a message | `gws gmail read <message-id>` |
+| Extract HTML links | `gws gmail links <message-id>` |
 | Read full thread | `gws gmail thread <thread-id>` |
 | Send an email | `gws gmail send --to user@example.com --subject "Hi" --body "Hello"` |
 | List all labels | `gws gmail labels` |
