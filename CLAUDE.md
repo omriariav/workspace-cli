@@ -18,7 +18,7 @@
 | Service | Commands |
 |---------|----------|
 | `auth` | login, logout, status |
-| `gmail` | list, read, thread, send, reply, forward, labels, label, archive, trash, event-id, untrash, delete, batch-modify, batch-delete, trash-thread, untrash-thread, delete-thread, label-info, create-label, update-label, delete-label, drafts, draft, create-draft, update-draft, send-draft, delete-draft, attachment |
+| `gmail` | list, read, links, thread, send, reply, forward, labels, label, archive, trash, event-id, untrash, delete, batch-modify, batch-delete, trash-thread, untrash-thread, delete-thread, label-info, create-label, update-label, delete-label, drafts, draft, create-draft, update-draft, send-draft, delete-draft, attachment |
 | `calendar` | list, events, create, update, delete, rsvp, get, quick-add, instances, move, get-calendar, create-calendar, update-calendar, delete-calendar, clear, subscribe, unsubscribe, calendar-info, update-subscription, acl, share, unshare, update-acl, freebusy, colors, settings |
 | `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, move, clear |
 | `drive` | list, search, info, download, upload, create-folder, move, delete, copy, convert, comments, permissions, share, unshare, permission, update-permission, revisions, revision, delete-revision, replies, reply, get-reply, delete-reply, comment, add-comment, delete-comment, resolve-comment, unresolve-comment, export, empty-trash, update, shared-drives, shared-drive, create-drive, delete-drive, update-drive, about, changes, activity |
@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.40.0** - Non-zero exit codes: 0=success, 1=generic API/runtime, 2=CLI usage / runtime input-validation, 3=auth (401/403), 4=transient (429/5xx). CLI usage errors (Cobra-level: wrong args, unknown flags) and runtime input-validation (required-flag checks, mutually-exclusive flags, out-of-range/enum values, malformed `--params`) exit 2 with plain text on stderr. Server/file state errors (no cache found, document empty, resource not found, "not an attendee") and wrapped API errors exit 1/3/4 with a structured error on stderr; the format follows `--format` (JSON by default, `yaml` or `text` if set). Stdout is reserved for successful responses. See `cmd/usage.go` for the convention new commands should follow. `--services people` scope fix: adds `userinfo.profile` so `gws people get people/me` works without a 403.
+**v1.40.1** - Gmail HTML link extraction via `gws gmail links <message-id>`, including read-only `text/html` MIME traversal, attachment-backed HTML bodies, deterministic JSON link output, and Google Docs metadata parsing.
 
 ## Roadmap
 
