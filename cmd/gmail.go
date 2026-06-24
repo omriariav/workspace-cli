@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/omriariav/workspace-cli/internal/client"
+	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/html"
 	"google.golang.org/api/gmail/v1"
@@ -2590,14 +2591,23 @@ func runGmailLinks(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	messageID := args[0]
+	return runGmailLinksWithService(svc, args[0], p)
+}
 
+func runGmailLinksWithService(svc *gmail.Service, messageID string, p printer.Printer) error {
 	msg, err := svc.Users.Messages.Get("me", messageID).Format("full").Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to get message: %w", err))
 	}
 
-	links := extractHTMLLinks(msg.Payload)
+	attachmentMessageID := msg.Id
+	if attachmentMessageID == "" {
+		attachmentMessageID = messageID
+	}
+	links, err := extractHTMLLinks(svc, attachmentMessageID, msg.Payload)
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	return p.Print(map[string]interface{}{
 		"message_id": msg.Id,
@@ -2606,37 +2616,72 @@ func runGmailLinks(cmd *cobra.Command, args []string) error {
 }
 
 // extractHTMLLinks walks the MIME tree and returns all <a href> anchors found
-// in text/html parts.
-func extractHTMLLinks(payload *gmail.MessagePart) []map[string]interface{} {
+// in text/html parts. svc and messageID are used to fetch body data stored as
+// Gmail attachments (Body.AttachmentId); pass nil/empty to skip attachment fetch.
+func extractHTMLLinks(svc *gmail.Service, messageID string, payload *gmail.MessagePart) ([]map[string]interface{}, error) {
 	var htmlBodies []string
-	collectHTMLParts(payload, &htmlBodies)
+	if err := collectHTMLParts(svc, messageID, payload, &htmlBodies); err != nil {
+		return nil, err
+	}
 
 	links := []map[string]interface{}{}
 	for _, body := range htmlBodies {
 		links = append(links, parseHTMLAnchors(body)...)
 	}
-	return links
+	return links, nil
 }
 
 // collectHTMLParts recursively collects decoded text/html body strings from a
-// MIME part tree.
-func collectHTMLParts(part *gmail.MessagePart, out *[]string) {
+// MIME part tree. When a text/html part carries Body.AttachmentId instead of
+// inline Body.Data, it fetches the body via Users.Messages.Attachments.Get
+// (requires non-nil svc and a non-empty messageID).
+func collectHTMLParts(svc *gmail.Service, messageID string, part *gmail.MessagePart, out *[]string) error {
 	if part == nil {
-		return
+		return nil
 	}
 	if part.MimeType == "text/html" {
-		if part.Body != nil && part.Body.Data != "" {
-			if data, err := base64.RawURLEncoding.DecodeString(part.Body.Data); err == nil {
-				*out = append(*out, string(data))
-			} else if data, err := base64.URLEncoding.DecodeString(part.Body.Data); err == nil {
-				*out = append(*out, string(data))
+		if part.Body != nil {
+			if part.Body.Data != "" {
+				body, err := decodeBase64URLString(part.Body.Data)
+				if err != nil {
+					return fmt.Errorf("failed to decode HTML MIME part: %w", err)
+				}
+				*out = append(*out, body)
+			} else if svc != nil && messageID != "" && part.Body.AttachmentId != "" {
+				att, err := svc.Users.Messages.Attachments.Get("me", messageID, part.Body.AttachmentId).Do()
+				if err != nil {
+					return fmt.Errorf("failed to get HTML MIME attachment %q: %w", part.Body.AttachmentId, err)
+				}
+				if att.Data != "" {
+					body, err := decodeBase64URLString(att.Data)
+					if err != nil {
+						return fmt.Errorf("failed to decode HTML MIME attachment %q: %w", part.Body.AttachmentId, err)
+					}
+					*out = append(*out, body)
+				}
 			}
 		}
-		return
+		return nil
 	}
 	for _, child := range part.Parts {
-		collectHTMLParts(child, out)
+		if err := collectHTMLParts(svc, messageID, child, out); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// decodeBase64URLString decodes a base64url string with or without padding.
+func decodeBase64URLString(data string) (string, error) {
+	b, rawErr := base64.RawURLEncoding.DecodeString(data)
+	if rawErr == nil {
+		return string(b), nil
+	}
+	b, paddedErr := base64.URLEncoding.DecodeString(data)
+	if paddedErr == nil {
+		return string(b), nil
+	}
+	return "", fmt.Errorf("raw base64url decode failed: %w; padded base64url decode failed: %v", rawErr, paddedErr)
 }
 
 // parseHTMLAnchors extracts <a href> anchors from an HTML string and returns

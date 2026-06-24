@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/omriariav/workspace-cli/internal/printer"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )
@@ -3008,7 +3009,9 @@ func TestCollectHTMLParts(t *testing.T) {
 	}
 
 	var collected []string
-	collectHTMLParts(payload, &collected)
+	if err := collectHTMLParts(nil, "", payload, &collected); err != nil {
+		t.Fatalf("collectHTMLParts: %v", err)
+	}
 
 	if len(collected) != 1 {
 		t.Fatalf("expected 1 HTML body, got %d", len(collected))
@@ -3038,7 +3041,9 @@ func TestCollectHTMLParts_Nested(t *testing.T) {
 	}
 
 	var collected []string
-	collectHTMLParts(payload, &collected)
+	if err := collectHTMLParts(nil, "", payload, &collected); err != nil {
+		t.Fatalf("collectHTMLParts: %v", err)
+	}
 
 	if len(collected) != 1 {
 		t.Fatalf("expected 1 HTML body, got %d", len(collected))
@@ -3138,7 +3143,10 @@ func TestGmailLinks_MockServer(t *testing.T) {
 		t.Fatalf("failed to get message: %v", err)
 	}
 
-	links := extractHTMLLinks(msg.Payload)
+	links, err := extractHTMLLinks(nil, "gemini-msg-id", msg.Payload)
+	if err != nil {
+		t.Fatalf("extractHTMLLinks: %v", err)
+	}
 
 	if len(links) != 2 {
 		t.Fatalf("expected 2 links, got %d: %+v", len(links), links)
@@ -3183,7 +3191,9 @@ func TestCollectHTMLParts_RawBase64(t *testing.T) {
 	}
 
 	var collected []string
-	collectHTMLParts(payload, &collected)
+	if err := collectHTMLParts(nil, "", payload, &collected); err != nil {
+		t.Fatalf("collectHTMLParts: %v", err)
+	}
 
 	if len(collected) != 1 {
 		t.Fatalf("expected 1 HTML body, got %d", len(collected))
@@ -3200,11 +3210,94 @@ func TestGmailLinks_EmptyHTML(t *testing.T) {
 		MimeType: "text/plain",
 		Body:     &gmail.MessagePartBody{Data: base64.URLEncoding.EncodeToString([]byte("just plain text"))},
 	}
-	links := extractHTMLLinks(payload)
+	links, err := extractHTMLLinks(nil, "", payload)
+	if err != nil {
+		t.Fatalf("extractHTMLLinks: %v", err)
+	}
 	if links == nil {
 		t.Error("expected non-nil empty slice, got nil")
 	}
 	if len(links) != 0 {
 		t.Errorf("expected 0 links, got %d", len(links))
+	}
+}
+
+// TestGmailLinks_RunnerLevel exercises the full runGmailLinks critical path:
+// Format("full") request, attachment-ID HTML fetch, message_id from msg.Id
+// (not CLI arg), and printer JSON output shape.
+func TestGmailLinks_RunnerLevel(t *testing.T) {
+	htmlInline := `<a href="https://docs.google.com/document/d/INLINEID/edit?usp=sharing">Inline doc</a>`
+	htmlAttach := `<a href="https://example.com/attached">Attached page</a>`
+
+	inlineData := base64.RawURLEncoding.EncodeToString([]byte(htmlInline))
+	attachData := base64.RawURLEncoding.EncodeToString([]byte(htmlAttach))
+
+	var gotFormat string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/gmail/v1/users/me/messages/cli-msg-id" && r.Method == "GET":
+			gotFormat = r.URL.Query().Get("format")
+			msg := &gmail.Message{
+				Id: "run-msg-id",
+				Payload: &gmail.MessagePart{
+					MimeType: "multipart/alternative",
+					Parts: []*gmail.MessagePart{
+						{MimeType: "text/plain", Body: &gmail.MessagePartBody{Data: base64.RawURLEncoding.EncodeToString([]byte("plain"))}},
+						// Inline HTML part
+						{MimeType: "text/html", Body: &gmail.MessagePartBody{Data: inlineData}},
+						// HTML part stored as Gmail attachment
+						{MimeType: "text/html", Body: &gmail.MessagePartBody{AttachmentId: "html-att-id"}},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(msg)
+		case r.URL.Path == "/gmail/v1/users/me/messages/run-msg-id/attachments/html-att-id" && r.Method == "GET":
+			att := &gmail.MessagePartBody{Data: attachData}
+			json.NewEncoder(w).Encode(att)
+		default:
+			t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	var buf bytes.Buffer
+	p := printer.New(&buf, "json")
+	if err := runGmailLinksWithService(svc, "cli-msg-id", p); err != nil {
+		t.Fatalf("runGmailLinksWithService: %v", err)
+	}
+
+	// Verify Format("full") was used (SDK sends lowercase).
+	if strings.ToLower(gotFormat) != "full" {
+		t.Errorf("expected format=full, got %q", gotFormat)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
+		t.Fatalf("output not valid JSON: %v\n%s", err, buf.String())
+	}
+	if parsed["message_id"] != "run-msg-id" {
+		t.Errorf("JSON message_id: want run-msg-id, got %v", parsed["message_id"])
+	}
+	parsedLinks, ok := parsed["links"].([]interface{})
+	if !ok {
+		t.Fatalf("JSON links is not an array: %T %v", parsed["links"], parsed["links"])
+	}
+	if len(parsedLinks) != 2 {
+		t.Errorf("JSON links length: want 2, got %d", len(parsedLinks))
+	}
+	first := parsedLinks[0].(map[string]interface{})
+	if first["google_docs_id"] != "INLINEID" {
+		t.Errorf("first link google_docs_id: %v", first["google_docs_id"])
+	}
+	second := parsedLinks[1].(map[string]interface{})
+	if second["href"] != "https://example.com/attached" {
+		t.Errorf("second link href: %v", second["href"])
 	}
 }
