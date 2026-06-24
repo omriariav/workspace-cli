@@ -488,7 +488,7 @@ Returns `message_id` and a `links` array in document order. Each entry has:
 - `fragment` — (Google Docs only) URL fragment including `#`, e.g. `#heading=h.abc`
 - `tab_id` — (Google Docs only) tab ID from the `tab` query parameter, e.g. `t.0`
 
-`mailto:` links are excluded. Google Docs metadata fields are only present when applicable.
+All non-empty `href` anchors are returned, including `mailto:` links. Google Docs metadata fields are only present when applicable.
 
 **Examples:**
 ```bash

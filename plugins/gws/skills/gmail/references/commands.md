@@ -633,4 +633,4 @@ Each link object:
 | `fragment` | string | (Google Docs only) URL fragment including `#` |
 | `tab_id` | string | (Google Docs only) `tab` query parameter value |
 
-`mailto:` links are excluded. Google Docs metadata fields are omitted when not applicable.
+All non-empty `href` anchors are returned, including `mailto:` links. Google Docs metadata fields are omitted when not applicable.
