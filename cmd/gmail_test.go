@@ -2896,3 +2896,277 @@ func TestExtractAttachments_SkipsPartsWithoutAttachmentID(t *testing.T) {
 		t.Errorf("expected no attachments, got %+v", got)
 	}
 }
+
+// TestParseGoogleDocsURL covers URL parsing for Docs links.
+func TestParseGoogleDocsURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		href     string
+		wantNil  bool
+		wantID   string
+		wantFrag string
+		wantQry  string
+		wantTab  string
+	}{
+		{
+			name:    "basic docs link",
+			href:    "https://docs.google.com/document/d/DOCID123/edit?usp=sharing",
+			wantID:  "DOCID123",
+			wantQry: "usp=sharing",
+		},
+		{
+			name:     "docs link with fragment",
+			href:     "https://docs.google.com/document/d/DOCID123/edit?usp=sharing#heading=h.abc",
+			wantID:   "DOCID123",
+			wantQry:  "usp=sharing",
+			wantFrag: "#heading=h.abc",
+		},
+		{
+			name:    "docs link with tab query param",
+			href:    "https://docs.google.com/document/d/DOCID123/edit?tab=t.0",
+			wantID:  "DOCID123",
+			wantQry: "tab=t.0",
+			wantTab: "t.0",
+		},
+		{
+			name:    "non-docs google link returns nil",
+			href:    "https://drive.google.com/file/d/XYZ/view",
+			wantNil: true,
+		},
+		{
+			name:    "non-google link returns nil",
+			href:    "https://example.com/path",
+			wantNil: true,
+		},
+		{
+			name:    "mailto returns nil",
+			href:    "mailto:user@example.com",
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseGoogleDocsURL(tt.href)
+			if tt.wantNil {
+				if got != nil {
+					t.Errorf("expected nil, got %v", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatal("expected non-nil result")
+			}
+			if got["google_docs_id"] != tt.wantID {
+				t.Errorf("google_docs_id: want %q, got %v", tt.wantID, got["google_docs_id"])
+			}
+			if tt.wantFrag != "" {
+				if got["fragment"] != tt.wantFrag {
+					t.Errorf("fragment: want %q, got %v", tt.wantFrag, got["fragment"])
+				}
+			} else {
+				if _, ok := got["fragment"]; ok {
+					t.Errorf("expected no fragment key, got %v", got["fragment"])
+				}
+			}
+			if tt.wantQry != "" {
+				if got["query"] != tt.wantQry {
+					t.Errorf("query: want %q, got %v", tt.wantQry, got["query"])
+				}
+			}
+			if tt.wantTab != "" {
+				if got["tab_id"] != tt.wantTab {
+					t.Errorf("tab_id: want %q, got %v", tt.wantTab, got["tab_id"])
+				}
+			}
+		})
+	}
+}
+
+// TestCollectHTMLParts verifies MIME tree traversal collects text/html bodies.
+func TestCollectHTMLParts(t *testing.T) {
+	htmlBody := "<html><body>hello</body></html>"
+	htmlData := base64.URLEncoding.EncodeToString([]byte(htmlBody))
+	plainData := base64.URLEncoding.EncodeToString([]byte("hello plain"))
+
+	payload := &gmail.MessagePart{
+		MimeType: "multipart/alternative",
+		Parts: []*gmail.MessagePart{
+			{MimeType: "text/plain", Body: &gmail.MessagePartBody{Data: plainData}},
+			{MimeType: "text/html", Body: &gmail.MessagePartBody{Data: htmlData}},
+		},
+	}
+
+	var collected []string
+	collectHTMLParts(payload, &collected)
+
+	if len(collected) != 1 {
+		t.Fatalf("expected 1 HTML body, got %d", len(collected))
+	}
+	if collected[0] != htmlBody {
+		t.Errorf("unexpected HTML body: %q", collected[0])
+	}
+}
+
+// TestCollectHTMLParts_Nested ensures nested multipart structures are traversed.
+func TestCollectHTMLParts_Nested(t *testing.T) {
+	htmlBody := "<p>nested</p>"
+	htmlData := base64.URLEncoding.EncodeToString([]byte(htmlBody))
+
+	payload := &gmail.MessagePart{
+		MimeType: "multipart/mixed",
+		Parts: []*gmail.MessagePart{
+			{
+				MimeType: "multipart/alternative",
+				Parts: []*gmail.MessagePart{
+					{MimeType: "text/plain", Body: &gmail.MessagePartBody{Data: base64.URLEncoding.EncodeToString([]byte("plain"))}},
+					{MimeType: "text/html", Body: &gmail.MessagePartBody{Data: htmlData}},
+				},
+			},
+			{MimeType: "application/pdf", Filename: "doc.pdf", Body: &gmail.MessagePartBody{AttachmentId: "att1"}},
+		},
+	}
+
+	var collected []string
+	collectHTMLParts(payload, &collected)
+
+	if len(collected) != 1 {
+		t.Fatalf("expected 1 HTML body, got %d", len(collected))
+	}
+	if collected[0] != htmlBody {
+		t.Errorf("unexpected body: %q", collected[0])
+	}
+}
+
+// TestParseHTMLAnchors verifies anchor extraction from HTML, including Gemini
+// Notes style where the visible text differs from the plain text body.
+func TestParseHTMLAnchors(t *testing.T) {
+	htmlBody := `<html><body>` +
+		`<a href="https://docs.google.com/document/d/DOCID1/edit?usp=sharing">Notes by Gemini</a>` +
+		`<a href="https://docs.google.com/document/d/DOCID1/edit?usp=sharing#heading=h.xyz">Open meeting notes</a>` +
+		`<a href="https://example.com/other">Other link</a>` +
+		`<a href="mailto:skip@example.com">Email</a>` +
+		`</body></html>`
+
+	links := parseHTMLAnchors(htmlBody)
+
+	// mailto link is excluded; 3 anchors remain
+	if len(links) != 3 {
+		t.Fatalf("expected 3 links, got %d: %+v", len(links), links)
+	}
+
+	// First link: Notes by Gemini
+	if links[0]["text"] != "Notes by Gemini" {
+		t.Errorf("link[0] text: %v", links[0]["text"])
+	}
+	if links[0]["href"] != "https://docs.google.com/document/d/DOCID1/edit?usp=sharing" {
+		t.Errorf("link[0] href: %v", links[0]["href"])
+	}
+	if links[0]["mime_part"] != "text/html" {
+		t.Errorf("link[0] mime_part: %v", links[0]["mime_part"])
+	}
+	if links[0]["google_docs_id"] != "DOCID1" {
+		t.Errorf("link[0] google_docs_id: %v", links[0]["google_docs_id"])
+	}
+
+	// Second link: has fragment
+	if links[1]["fragment"] != "#heading=h.xyz" {
+		t.Errorf("link[1] fragment: %v", links[1]["fragment"])
+	}
+
+	// Third link: non-Docs, no google_docs_id key
+	if _, ok := links[2]["google_docs_id"]; ok {
+		t.Errorf("link[2] should not have google_docs_id")
+	}
+}
+
+// TestGmailLinks_MockServer tests extractHTMLLinks against a mock Gmail API
+// response, covering the Gemini Notes email pattern.
+func TestGmailLinks_MockServer(t *testing.T) {
+	htmlBody := `<html><body>` +
+		`<a href="https://docs.google.com/document/d/GEMINI_DOC_ID/edit?usp=sharing">Notes by Gemini</a> ` +
+		`<a href="https://docs.google.com/document/d/GEMINI_DOC_ID/edit?usp=sharing&tab=t.0#heading=h.intro">Open meeting notes</a>` +
+		`</body></html>`
+	plainBody := "Notes by Gemini\nOpen meeting notes"
+
+	htmlData := base64.URLEncoding.EncodeToString([]byte(htmlBody))
+	plainData := base64.URLEncoding.EncodeToString([]byte(plainBody))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/messages/gemini-msg-id" && r.Method == "GET" {
+			msg := &gmail.Message{
+				Id: "gemini-msg-id",
+				Payload: &gmail.MessagePart{
+					MimeType: "multipart/alternative",
+					Parts: []*gmail.MessagePart{
+						{MimeType: "text/plain", Body: &gmail.MessagePartBody{Data: plainData}},
+						{MimeType: "text/html", Body: &gmail.MessagePartBody{Data: htmlData}},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(msg)
+			return
+		}
+		t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	msg, err := svc.Users.Messages.Get("me", "gemini-msg-id").Format("full").Do()
+	if err != nil {
+		t.Fatalf("failed to get message: %v", err)
+	}
+
+	links := extractHTMLLinks(msg.Payload)
+
+	if len(links) != 2 {
+		t.Fatalf("expected 2 links, got %d: %+v", len(links), links)
+	}
+
+	// Both links point to the same doc
+	for i, link := range links {
+		if link["google_docs_id"] != "GEMINI_DOC_ID" {
+			t.Errorf("link[%d] google_docs_id: want GEMINI_DOC_ID, got %v", i, link["google_docs_id"])
+		}
+		if link["mime_part"] != "text/html" {
+			t.Errorf("link[%d] mime_part: %v", i, link["mime_part"])
+		}
+	}
+
+	if links[0]["text"] != "Notes by Gemini" {
+		t.Errorf("link[0] text: %v", links[0]["text"])
+	}
+	if links[1]["text"] != "Open meeting notes" {
+		t.Errorf("link[1] text: %v", links[1]["text"])
+	}
+
+	// Second link has fragment and tab_id
+	if links[1]["fragment"] != "#heading=h.intro" {
+		t.Errorf("link[1] fragment: %v", links[1]["fragment"])
+	}
+	if links[1]["tab_id"] != "t.0" {
+		t.Errorf("link[1] tab_id: %v", links[1]["tab_id"])
+	}
+}
+
+// TestGmailLinks_EmptyHTML ensures an empty links slice is returned for
+// messages with no HTML parts or no anchors.
+func TestGmailLinks_EmptyHTML(t *testing.T) {
+	payload := &gmail.MessagePart{
+		MimeType: "text/plain",
+		Body:     &gmail.MessagePartBody{Data: base64.URLEncoding.EncodeToString([]byte("just plain text"))},
+	}
+	links := extractHTMLLinks(payload)
+	if links == nil {
+		t.Error("expected non-nil empty slice, got nil")
+	}
+	if len(links) != 0 {
+		t.Errorf("expected 0 links, got %d", len(links))
+	}
+}

@@ -146,6 +146,7 @@ func TestGmailCommands(t *testing.T) {
 		{"send-draft", "send-draft", false},
 		{"delete-draft", "delete-draft", false},
 		{"attachment", "attachment", false},
+		{"links", "links <message-id>", true},
 	}
 
 	for _, tt := range tests {

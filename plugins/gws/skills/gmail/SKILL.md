@@ -470,6 +470,35 @@ ATT_ID=$(gws gmail read 18abc123 --format json | jq -r '.attachments[0].attachme
 gws gmail attachment --message-id 18abc123 --id "$ATT_ID" --output report.pdf
 ```
 
+### links — Extract HTML anchor links from a message
+
+```bash
+gws gmail links <message-id>
+```
+
+Fetches the full message and extracts `<a href>` anchors from `text/html` MIME parts. Useful when a message's plain text body contains visible labels like "Notes by Gemini" or "Open meeting notes" but the underlying URL is only present in the HTML part.
+
+Returns `message_id` and a `links` array in document order. Each entry has:
+- `text` — Visible anchor text
+- `href` — Full URL
+- `mime_part` — Always `"text/html"`
+- `google_docs_id` — (Google Docs only) document ID parsed from the URL path
+- `query` — (Google Docs only) raw query string, e.g. `usp=sharing`
+- `fragment` — (Google Docs only) URL fragment including `#`, e.g. `#heading=h.abc`
+- `tab_id` — (Google Docs only) tab ID from the `tab` query parameter, e.g. `t.0`
+
+`mailto:` links are excluded. Google Docs metadata fields are only present when applicable.
+
+**Examples:**
+```bash
+gws gmail links 18abc123 --format json
+
+# Gemini Notes flow: find the Google Doc URL in a Gemini Notes email.
+DOC_URL=$(gws gmail links 18abc123 --format json | jq -r '.links[] | select(.text == "Notes by Gemini") | .href')
+DOC_ID=$(gws gmail links 18abc123 --format json | jq -r '.links[] | select(.google_docs_id) | .google_docs_id' | head -1)
+gws docs read "$DOC_ID"
+```
+
 ## Tips for AI Agents
 
 - Always use `--format json` (the default) for programmatic parsing
