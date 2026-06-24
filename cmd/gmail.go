@@ -2626,8 +2626,9 @@ func collectHTMLParts(part *gmail.MessagePart, out *[]string) {
 	}
 	if part.MimeType == "text/html" {
 		if part.Body != nil && part.Body.Data != "" {
-			data, err := base64.URLEncoding.DecodeString(part.Body.Data)
-			if err == nil {
+			if data, err := base64.RawURLEncoding.DecodeString(part.Body.Data); err == nil {
+				*out = append(*out, string(data))
+			} else if data, err := base64.URLEncoding.DecodeString(part.Body.Data); err == nil {
 				*out = append(*out, string(data))
 			}
 		}
@@ -2657,7 +2658,7 @@ func parseHTMLAnchors(htmlBody string) []map[string]interface{} {
 					break
 				}
 			}
-			if href != "" && !strings.HasPrefix(href, "mailto:") {
+			if href != "" {
 				text := strings.TrimSpace(htmlNodeText(n))
 				link := map[string]interface{}{
 					"text":      text,

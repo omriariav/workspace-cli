@@ -3050,9 +3050,9 @@ func TestParseHTMLAnchors(t *testing.T) {
 
 	links := parseHTMLAnchors(htmlBody)
 
-	// mailto link is excluded; 3 anchors remain
-	if len(links) != 3 {
-		t.Fatalf("expected 3 links, got %d: %+v", len(links), links)
+	// All 4 anchors returned; mailto is included like any other href.
+	if len(links) != 4 {
+		t.Fatalf("expected 4 links, got %d: %+v", len(links), links)
 	}
 
 	// First link: Notes by Gemini
@@ -3077,6 +3077,11 @@ func TestParseHTMLAnchors(t *testing.T) {
 	// Third link: non-Docs, no google_docs_id key
 	if _, ok := links[2]["google_docs_id"]; ok {
 		t.Errorf("link[2] should not have google_docs_id")
+	}
+
+	// Fourth link: mailto included
+	if links[3]["href"] != "mailto:skip@example.com" {
+		t.Errorf("link[3] href: %v", links[3]["href"])
 	}
 }
 
@@ -3152,6 +3157,29 @@ func TestGmailLinks_MockServer(t *testing.T) {
 	}
 	if links[1]["tab_id"] != "t.0" {
 		t.Errorf("link[1] tab_id: %v", links[1]["tab_id"])
+	}
+}
+
+// TestCollectHTMLParts_RawBase64 verifies that unpadded base64url (RawURLEncoding)
+// is decoded correctly, matching Gmail's wire format which may omit padding.
+func TestCollectHTMLParts_RawBase64(t *testing.T) {
+	htmlBody := "<p>raw</p>"
+	// Encode without padding to simulate Gmail's unpadded base64url.
+	rawData := base64.RawURLEncoding.EncodeToString([]byte(htmlBody))
+
+	payload := &gmail.MessagePart{
+		MimeType: "text/html",
+		Body:     &gmail.MessagePartBody{Data: rawData},
+	}
+
+	var collected []string
+	collectHTMLParts(payload, &collected)
+
+	if len(collected) != 1 {
+		t.Fatalf("expected 1 HTML body, got %d", len(collected))
+	}
+	if collected[0] != htmlBody {
+		t.Errorf("unexpected body: %q", collected[0])
 	}
 }
 
