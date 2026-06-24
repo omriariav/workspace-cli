@@ -2915,6 +2915,16 @@ func TestParseGoogleDocsURL(t *testing.T) {
 			wantQry: "usp=sharing",
 		},
 		{
+			name:   "docs host is case-insensitive",
+			href:   "https://DOCS.GOOGLE.COM/document/d/DOCID456/edit",
+			wantID: "DOCID456",
+		},
+		{
+			name:   "docs host with port",
+			href:   "https://docs.google.com:443/document/d/DOCID789/edit",
+			wantID: "DOCID789",
+		},
+		{
 			name:     "docs link with fragment",
 			href:     "https://docs.google.com/document/d/DOCID123/edit?usp=sharing#heading=h.abc",
 			wantID:   "DOCID123",

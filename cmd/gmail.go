@@ -2697,7 +2697,7 @@ func htmlNodeText(n *html.Node) string {
 // query, and tab_id. Returns nil for non-Docs URLs.
 func parseGoogleDocsURL(href string) map[string]interface{} {
 	u, err := url.Parse(href)
-	if err != nil || u.Host != "docs.google.com" {
+	if err != nil || !strings.EqualFold(u.Hostname(), "docs.google.com") {
 		return nil
 	}
 	// Expect path: /document/d/{docId}/...
