@@ -168,6 +168,132 @@ Usage: gws drive comments <file-id> [flags]
 
 ---
 
+## gws drive approvals
+
+Lists approvals on a Google Drive file.
+
+```
+Usage: gws drive approvals <file-id> [flags]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--max` | int | 100 | Maximum number of approvals |
+
+---
+
+## gws drive approval
+
+Gets a single approval on a Google Drive file.
+
+```
+Usage: gws drive approval <file-id> <approval-id>
+```
+
+No additional flags.
+
+---
+
+## gws drive start-approval
+
+Starts an approval workflow on a Google Drive file.
+
+```
+Usage: gws drive start-approval [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--reviewers` | string | | Yes | Comma-separated reviewer email addresses |
+| `--due-time` | string | | No | Approval due time (RFC3339) |
+| `--message` | string | | No | Message to send to reviewers |
+| `--lock-file` | bool | false | No | Lock the file while approval is in progress |
+
+---
+
+## gws drive approve
+
+Approves a file approval as the current reviewer.
+
+```
+Usage: gws drive approve [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--approval-id` | string | | Yes | Approval ID |
+| `--message` | string | | No | Optional reviewer message |
+
+---
+
+## gws drive decline
+
+Declines a file approval as the current reviewer.
+
+```
+Usage: gws drive decline [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--approval-id` | string | | Yes | Approval ID |
+| `--message` | string | | No | Optional reviewer message |
+
+---
+
+## gws drive reassign-approval
+
+Adds or replaces reviewers on an in-progress file approval.
+
+```
+Usage: gws drive reassign-approval [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--approval-id` | string | | Yes | Approval ID |
+| `--add-reviewer` | string | | No | Comma-separated reviewer emails to add |
+| `--replace-reviewer` | string | | No | Comma-separated replacements in `old@example.com=new@example.com` form |
+| `--message` | string | | No | Message to send to reviewers |
+
+---
+
+## gws drive cancel-approval
+
+Cancels a file approval.
+
+```
+Usage: gws drive cancel-approval [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--approval-id` | string | | Yes | Approval ID |
+| `--message` | string | | No | Optional cancellation message |
+
+---
+
+## gws drive comment-approval
+
+Adds a comment to a file approval.
+
+```
+Usage: gws drive comment-approval [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--file-id` | string | | Yes | File ID |
+| `--approval-id` | string | | Yes | Approval ID |
+| `--message` | string | | Yes | Approval comment text |
+
+---
+
 ## gws drive convert
 
 Converts a Microsoft Office file to its Google Workspace equivalent. Creates a new file.

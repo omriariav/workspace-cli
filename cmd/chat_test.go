@@ -111,6 +111,121 @@ func TestChatSendCommand_Help(t *testing.T) {
 	}
 }
 
+func TestChatSendCommand_QuoteAndNotifyFlags(t *testing.T) {
+	cmd := findSubcommand(chatCmd, "send")
+	if cmd == nil {
+		t.Fatal("chat send command not found")
+	}
+	for _, name := range []string{"quote", "quote-type", "notify"} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag", name)
+		}
+	}
+}
+
+func TestChatSendOptionHelpers(t *testing.T) {
+	if got := ensureMessageName("spaces/AAAA", "msg1"); got != "spaces/AAAA/messages/msg1" {
+		t.Errorf("bare message id normalized to %q", got)
+	}
+	if got := ensureMessageName("spaces/AAAA", "messages/msg1"); got != "spaces/AAAA/messages/msg1" {
+		t.Errorf("message resource normalized to %q", got)
+	}
+	if got := ensureMessageName("spaces/AAAA", "spaces/BBBB/messages/msg2"); got != "spaces/BBBB/messages/msg2" {
+		t.Errorf("full message resource normalized to %q", got)
+	}
+
+	qt, err := normalizeChatQuoteType("forward")
+	if err != nil || qt != "FORWARD" {
+		t.Fatalf("normalizeChatQuoteType(forward) = %q, %v", qt, err)
+	}
+	nt, err := chatNotificationType("silent")
+	if err != nil || nt != "NOTIFICATION_TYPE_SILENT" {
+		t.Fatalf("chatNotificationType(silent) = %q, %v", nt, err)
+	}
+	if _, err := chatNotificationType("loud"); err == nil {
+		t.Fatal("expected invalid notification type error")
+	}
+}
+
+func TestChatSendWithQuoteAndNotify_MockServer(t *testing.T) {
+	var sawQuoteGet bool
+	var sawCreate bool
+
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/spaces/AAAA/messages/msg1": func(w http.ResponseWriter, r *http.Request) {
+			sawQuoteGet = true
+			if r.Method != "GET" {
+				t.Errorf("expected quote GET, got %s", r.Method)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"name":           "spaces/AAAA/messages/msg1",
+				"createTime":     "2026-01-01T10:00:00Z",
+				"lastUpdateTime": "2026-01-01T11:00:00Z",
+			})
+		},
+		"/v1/spaces/AAAA/messages": func(w http.ResponseWriter, r *http.Request) {
+			sawCreate = true
+			if r.Method != "POST" {
+				t.Errorf("expected message POST, got %s", r.Method)
+			}
+			gotNotify := r.URL.Query().Get("createMessageNotificationOptions.notificationType")
+			if gotNotify != "NOTIFICATION_TYPE_SILENT" {
+				t.Errorf("notification query = %q, want NOTIFICATION_TYPE_SILENT", gotNotify)
+			}
+			var payload struct {
+				Text                  string `json:"text"`
+				QuotedMessageMetadata struct {
+					Name           string `json:"name"`
+					LastUpdateTime string `json:"lastUpdateTime"`
+					QuoteType      string `json:"quoteType"`
+				} `json:"quotedMessageMetadata"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("failed to decode create payload: %v", err)
+			}
+			if payload.Text != "hello" {
+				t.Errorf("text = %q, want hello", payload.Text)
+			}
+			if payload.QuotedMessageMetadata.Name != "spaces/AAAA/messages/msg1" {
+				t.Errorf("quote name = %q", payload.QuotedMessageMetadata.Name)
+			}
+			if payload.QuotedMessageMetadata.LastUpdateTime != "2026-01-01T11:00:00Z" {
+				t.Errorf("quote timestamp = %q", payload.QuotedMessageMetadata.LastUpdateTime)
+			}
+			if payload.QuotedMessageMetadata.QuoteType != "FORWARD" {
+				t.Errorf("quote type = %q", payload.QuotedMessageMetadata.QuoteType)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"name":       "spaces/AAAA/messages/new",
+				"createTime": "2026-01-01T11:05:00Z",
+			})
+		},
+	}
+
+	server := mockChatServer(t, handlers)
+	defer server.Close()
+
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	call, err := buildChatSendCall(context.Background(), svc, "spaces/AAAA", "hello", "msg1", "forward", "silent")
+	if err != nil {
+		t.Fatalf("buildChatSendCall failed: %v", err)
+	}
+	sent, err := call.Do()
+	if err != nil {
+		t.Fatalf("send failed: %v", err)
+	}
+	if sent.Name != "spaces/AAAA/messages/new" {
+		t.Errorf("sent name = %q", sent.Name)
+	}
+	if !sawQuoteGet || !sawCreate {
+		t.Fatalf("expected quote GET and create POST, saw get=%v create=%v", sawQuoteGet, sawCreate)
+	}
+}
+
 // mockChatServer creates a test server that mocks Chat API responses
 func mockChatServer(t *testing.T, handlers map[string]func(w http.ResponseWriter, r *http.Request)) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
