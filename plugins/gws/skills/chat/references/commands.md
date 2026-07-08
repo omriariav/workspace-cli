@@ -168,6 +168,9 @@ Usage: gws chat send [flags]
 |------|------|---------|----------|-------------|
 | `--space` | string | | Yes | Space ID or name |
 | `--text` | string | | Yes | Message text |
+| `--quote` | string | | No | Message resource name or ID to quote; timestamp is auto-resolved |
+| `--quote-type` | string | | No | Quote type: `reply` or `forward` |
+| `--notify` | string | `none` | No | Notification behavior: `none`, `force`, or `silent`; `force` and `silent` require Chat app authentication |
 
 ---
 

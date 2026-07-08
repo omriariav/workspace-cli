@@ -97,6 +97,150 @@ func TestBuildDriveSearchQuery(t *testing.T) {
 	}
 }
 
+func TestDriveApprovalsCommand_Flags(t *testing.T) {
+	for _, name := range []string{
+		"approvals",
+		"approval",
+		"start-approval",
+		"approve",
+		"decline",
+		"reassign-approval",
+		"cancel-approval",
+		"comment-approval",
+	} {
+		if cmd := findSubcommand(driveCmd, name); cmd == nil {
+			t.Fatalf("drive %s command not found", name)
+		}
+	}
+
+	start := findSubcommand(driveCmd, "start-approval")
+	for _, flag := range []string{"file-id", "reviewers", "due-time", "message", "lock-file"} {
+		if start.Flags().Lookup(flag) == nil {
+			t.Errorf("start-approval missing --%s", flag)
+		}
+	}
+	reassign := findSubcommand(driveCmd, "reassign-approval")
+	for _, flag := range []string{"file-id", "approval-id", "add-reviewer", "replace-reviewer", "message"} {
+		if reassign.Flags().Lookup(flag) == nil {
+			t.Errorf("reassign-approval missing --%s", flag)
+		}
+	}
+}
+
+func TestDriveApprovalHelpers(t *testing.T) {
+	got := splitCommaValues("a@example.com, b@example.com,, ")
+	if len(got) != 2 || got[0] != "a@example.com" || got[1] != "b@example.com" {
+		t.Fatalf("splitCommaValues returned %#v", got)
+	}
+
+	added := buildAddReviewers(got)
+	if len(added) != 2 || added[1].AddedReviewerEmail != "b@example.com" {
+		t.Fatalf("buildAddReviewers returned %#v", added)
+	}
+
+	replacements, err := buildReplaceReviewers("old@example.com=new@example.com")
+	if err != nil {
+		t.Fatalf("buildReplaceReviewers failed: %v", err)
+	}
+	if len(replacements) != 1 || replacements[0].RemovedReviewerEmail != "old@example.com" || replacements[0].AddedReviewerEmail != "new@example.com" {
+		t.Fatalf("unexpected replacements: %#v", replacements)
+	}
+	if _, err := buildReplaceReviewers("bad-entry"); err == nil {
+		t.Fatal("expected invalid replacement error")
+	}
+}
+
+func TestDriveApprovals_ListAndStart_MockServer(t *testing.T) {
+	var sawList bool
+	var sawStart bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/files/file-123/approvals" && r.Method == "GET":
+			sawList = true
+			if got := r.URL.Query().Get("pageSize"); got != "10" {
+				t.Errorf("pageSize = %q, want 10", got)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items": []map[string]interface{}{
+					{
+						"approvalId":   "approval-1",
+						"targetFileId": "file-123",
+						"status":       "IN_PROGRESS",
+						"reviewerResponses": []map[string]interface{}{
+							{
+								"response": "NO_RESPONSE",
+								"reviewer": map[string]interface{}{
+									"displayName":  "Reviewer",
+									"emailAddress": "reviewer@example.com",
+								},
+							},
+						},
+					},
+				},
+			})
+		case r.URL.Path == "/files/file-123/approvals:start" && r.Method == "POST":
+			sawStart = true
+			var payload map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("failed to decode start payload: %v", err)
+			}
+			reviewers, ok := payload["reviewerEmails"].([]interface{})
+			if !ok || len(reviewers) != 2 || reviewers[0] != "a@example.com" {
+				t.Fatalf("unexpected reviewerEmails payload: %#v", payload["reviewerEmails"])
+			}
+			if payload["message"] != "please review" {
+				t.Errorf("message = %v", payload["message"])
+			}
+			if payload["lockFile"] != true {
+				t.Errorf("lockFile = %v", payload["lockFile"])
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"approvalId":   "approval-2",
+				"targetFileId": "file-123",
+				"status":       "IN_PROGRESS",
+			})
+		default:
+			t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	approvals, err := listDriveApprovals(context.Background(), svc, "file-123", 10)
+	if err != nil {
+		t.Fatalf("listDriveApprovals failed: %v", err)
+	}
+	if len(approvals) != 1 || approvals[0].ApprovalId != "approval-1" {
+		t.Fatalf("unexpected approvals: %#v", approvals)
+	}
+	serialized := serializeDriveApproval(approvals[0])
+	if serialized["approval_id"] != "approval-1" || serialized["approval_status"] != "IN_PROGRESS" {
+		t.Fatalf("unexpected serialized approval: %#v", serialized)
+	}
+
+	started, err := svc.Approvals.Start("file-123", &drive.StartApprovalRequest{
+		ReviewerEmails: []string{"a@example.com", "b@example.com"},
+		Message:        "please review",
+		LockFile:       true,
+	}).Do()
+	if err != nil {
+		t.Fatalf("start approval failed: %v", err)
+	}
+	if started.ApprovalId != "approval-2" {
+		t.Errorf("started approval id = %q", started.ApprovalId)
+	}
+	if !sawList || !sawStart {
+		t.Fatalf("expected list and start requests, saw list=%v start=%v", sawList, sawStart)
+	}
+}
+
 // mockDriveServer creates a test server that mocks Drive API responses
 func mockDriveServer(t *testing.T, fileResp *drive.File, commentsResp *drive.CommentList) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
