@@ -1,15 +1,5 @@
 # Releases
 
-## v1.41.0
-
-**Workspace API Refresh, Chat Send Controls, Drive Approvals**
-
-- Bumped `google.golang.org/api` to `v0.287.1` and raised the project baseline to Go 1.25.
-- `gws chat send` now supports quoted messages with `--quote` and optional `--quote-type reply|forward`; the CLI fetches the quoted message to send the current create/update timestamp.
-- `gws chat send` now supports notification control with `--notify none|force|silent`.
-- `gws drive` now exposes file approval workflows:
-  - `approvals`, `approval`, `start-approval`, `approve`, `decline`, `reassign-approval`, `cancel-approval`, `comment-approval`.
-
 ## v1.18.1
 
 **Chat Member Name Resolution**

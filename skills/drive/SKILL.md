@@ -1,7 +1,7 @@
 ---
 name: gws-drive
 version: 2.0.0
-description: "Google Drive CLI operations via gws. Use when users need to list, search, upload, download, manage files/folders, permissions, approvals, revisions, comments, shared drives, and more. Triggers: drive, files, upload, download, folders, google drive, file management, permissions, approvals, share, shared drives."
+description: "Google Drive CLI operations via gws. Use when users need to list, search, upload, download, manage files/folders, permissions, revisions, comments, shared drives, and more. Triggers: drive, files, upload, download, folders, google drive, file management, permissions, share, shared drives."
 metadata:
   short-description: Google Drive CLI operations
   compatibility: claude-code, codex-cli
@@ -73,18 +73,6 @@ For initial setup, see the `gws-auth` skill.
 | Reply to comment | `gws drive reply --file-id <id> --comment-id <cid> --content "Thanks!"` |
 | Get reply | `gws drive get-reply --file-id <id> --comment-id <cid> --reply-id <rid>` |
 | Delete reply | `gws drive delete-reply --file-id <id> --comment-id <cid> --reply-id <rid>` |
-
-### Approvals
-| Task | Command |
-|------|---------|
-| List approvals | `gws drive approvals <file-id>` |
-| Get approval | `gws drive approval <file-id> <approval-id>` |
-| Start approval | `gws drive start-approval --file-id <id> --reviewers reviewer@example.com` |
-| Approve | `gws drive approve --file-id <id> --approval-id <approval-id>` |
-| Decline | `gws drive decline --file-id <id> --approval-id <approval-id>` |
-| Reassign reviewers | `gws drive reassign-approval --file-id <id> --approval-id <approval-id> --add-reviewer reviewer@example.com` |
-| Cancel approval | `gws drive cancel-approval --file-id <id> --approval-id <approval-id>` |
-| Comment on approval | `gws drive comment-approval --file-id <id> --approval-id <approval-id> --message "Looks good"` |
 
 ### Revisions
 | Task | Command |
@@ -392,70 +380,6 @@ gws drive get-reply --file-id <id> --comment-id <cid> --reply-id <rid>
 
 ```bash
 gws drive delete-reply --file-id <id> --comment-id <cid> --reply-id <rid>
-```
-
-### approvals — List file approvals
-
-```bash
-gws drive approvals <file-id> [flags]
-```
-
-**Flags:**
-- `--max int` — Maximum number of approvals (default 100)
-
-### approval — Get an approval
-
-```bash
-gws drive approval <file-id> <approval-id>
-```
-
-### start-approval — Start an approval workflow
-
-```bash
-gws drive start-approval --file-id <id> --reviewers reviewer@example.com [flags]
-```
-
-**Flags:**
-- `--file-id string` — File ID (required)
-- `--reviewers string` — Comma-separated reviewer email addresses (required)
-- `--due-time string` — Approval due time (RFC3339)
-- `--message string` — Message to send to reviewers
-- `--lock-file` — Lock the file while approval is in progress
-
-### approve — Approve a file approval
-
-```bash
-gws drive approve --file-id <id> --approval-id <approval-id> [--message "Approved"]
-```
-
-### decline — Decline a file approval
-
-```bash
-gws drive decline --file-id <id> --approval-id <approval-id> [--message "Needs changes"]
-```
-
-### reassign-approval — Reassign approval reviewers
-
-```bash
-gws drive reassign-approval --file-id <id> --approval-id <approval-id> --add-reviewer new@example.com
-gws drive reassign-approval --file-id <id> --approval-id <approval-id> --replace-reviewer old@example.com=new@example.com
-```
-
-**Flags:**
-- `--add-reviewer string` — Comma-separated reviewer emails to add
-- `--replace-reviewer string` — Comma-separated replacements in `old@example.com=new@example.com` form
-- `--message string` — Message to send to reviewers
-
-### cancel-approval — Cancel an approval
-
-```bash
-gws drive cancel-approval --file-id <id> --approval-id <approval-id> [--message "Cancelling"]
-```
-
-### comment-approval — Comment on an approval
-
-```bash
-gws drive comment-approval --file-id <id> --approval-id <approval-id> --message "Please review"
 ```
 
 ### revisions — List revisions

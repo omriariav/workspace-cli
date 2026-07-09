@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/omriariav/workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/omriariav/workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8.svg" alt="Go Version"></a>
+  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.23+-00ADD8.svg" alt="Go Version"></a>
 </p>
 
 `gws` gives developers and AI agents a structured, token-efficient interface to 10+ Google Workspace services. Every command returns consistent JSON (or YAML or human-readable text), making it ideal for scripting, automation, and agent toolchains.
@@ -188,14 +188,6 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws drive move <id>` | Move file to folder (`--to`) |
 | `gws drive delete <id>` | Delete file (`--permanent` for hard delete) |
 | `gws drive comments <id>` | List comments and replies (`--include-resolved`, `--include-deleted`) |
-| `gws drive approvals <id>` | List file approvals (`--max`) |
-| `gws drive approval <id> <approval-id>` | Get a file approval |
-| `gws drive start-approval` | Start approval workflow (`--file-id`, `--reviewers`, `--due-time`, `--message`, `--lock-file`) |
-| `gws drive approve` | Approve a file approval (`--file-id`, `--approval-id`, `--message`) |
-| `gws drive decline` | Decline a file approval (`--file-id`, `--approval-id`, `--message`) |
-| `gws drive reassign-approval` | Add or replace approval reviewers (`--add-reviewer`, `--replace-reviewer`) |
-| `gws drive cancel-approval` | Cancel a file approval (`--file-id`, `--approval-id`, `--message`) |
-| `gws drive comment-approval` | Comment on a file approval (`--file-id`, `--approval-id`, `--message`) |
 | `gws drive permissions` | List permissions on a file (`--file-id`) |
 | `gws drive share` | Share file (`--file-id`, `--type`, `--role`, `--email`, `--domain`) |
 | `gws drive unshare` | Remove permission (`--file-id`, `--permission-id`) |
@@ -363,7 +355,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat messages list` | List messages by `parent` via `--params` (programmatic path) |
 | `gws chat members [space]` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`, `--raw`, `--params`; space may be supplied via `--params parent`) |
 | `gws chat members list` | List members by `parent` via `--params` (programmatic path) |
-| `gws chat send` | Send message (`--space`, `--text`, `--quote`, `--quote-type`, `--notify`; `force`/`silent` notification modes require Chat app authentication) |
+| `gws chat send` | Send message (`--space`, `--text`) |
 | `gws chat get <message>` | Get a single message (`--resolve-senders`) |
 | `gws chat update <message>` | Update message text (`--text`) |
 | `gws chat delete <message>` | Delete a message (`--force`) |

@@ -60,7 +60,6 @@ For initial setup, see the `gws-auth` skill.
 | Recap recent messages | `gws chat recent --since 2h` |
 | Recap last 7 days | `gws chat recent --since 7d --max 1000` |
 | Send a message | `gws chat send --space <space-id> --text "Hello"` |
-| Quote a message | `gws chat send --space <space-id> --text "Reply" --quote <message-id>` |
 | Get a single message | `gws chat get <message-name>` |
 | Update a message | `gws chat update <message-name> --text "New text"` |
 | Delete a message | `gws chat delete <message-name>` |
@@ -196,9 +195,6 @@ gws chat send --space <space-id> --text <message>
 **Flags:**
 - `--space string` — Space ID or name (required)
 - `--text string` — Message text (required)
-- `--quote string` — Message resource name or ID to quote; the CLI fetches the quoted message and sends its current create/update timestamp.
-- `--quote-type string` — Quote type: `reply` or `forward` (default API behavior is reply).
-- `--notify string` — Notification behavior: `none`, `force`, or `silent` (default `none`). `force` and `silent` require Chat app authentication.
 
 ### get — Get a single message
 
