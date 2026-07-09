@@ -1228,6 +1228,28 @@ func listDriveApprovals(ctx context.Context, svc *drive.Service, fileID string, 
 	return approvals, nil
 }
 
+func getDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Get(fileID, approvalID).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get approval: %w", err)
+	}
+
+	return serializeDriveApproval(approval), nil
+}
+
+func validateDriveApprovalDueTime(dueTime string) error {
+	if dueTime == "" {
+		return nil
+	}
+	if _, err := time.Parse(time.RFC3339, dueTime); err != nil {
+		return fmt.Errorf("--due-time must be RFC3339: %w", err)
+	}
+	return nil
+}
+
 func startDriveApproval(ctx context.Context, svc *drive.Service, fileID string, reviewers []string, dueTime, message string, lockFile bool) (map[string]interface{}, error) {
 	req := &drive.StartApprovalRequest{
 		ReviewerEmails: reviewers,
@@ -1339,15 +1361,12 @@ func runDriveApproval(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	approval, err := svc.Approvals.Get(args[0], args[1]).
-		Fields(googleapi.Field(driveApprovalFields)).
-		Context(ctx).
-		Do()
+	result, err := getDriveApproval(ctx, svc, args[0], args[1])
 	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to get approval: %w", err))
+		return p.PrintError(err)
 	}
 
-	return p.Print(serializeDriveApproval(approval))
+	return p.Print(result)
 }
 
 func runDriveStartApproval(cmd *cobra.Command, args []string) error {
@@ -1373,6 +1392,9 @@ func runDriveStartApproval(cmd *cobra.Command, args []string) error {
 	reviewers := splitCommaValues(reviewersRaw)
 	if len(reviewers) == 0 {
 		return usageErrorf("--reviewers must include at least one email address")
+	}
+	if err := validateDriveApprovalDueTime(dueTime); err != nil {
+		return usageErrorf("%v", err)
 	}
 
 	result, err := startDriveApproval(ctx, svc, fileID, reviewers, dueTime, message, lockFile)

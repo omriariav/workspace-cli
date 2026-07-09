@@ -179,6 +179,9 @@ func TestDriveApprovals_ListAndMutations_MockServer(t *testing.T) {
 					},
 				},
 			})
+		case r.URL.Path == "/files/file-123/approvals/approval-123" && r.Method == "GET":
+			saw["get"] = true
+			encodeApprovalResponse(t, w, "approval-123", "IN_PROGRESS")
 		case r.URL.Path == "/files/file-123/approvals:start" && r.Method == "POST":
 			saw["start"] = true
 			var payload struct {
@@ -274,6 +277,14 @@ func TestDriveApprovals_ListAndMutations_MockServer(t *testing.T) {
 		t.Fatalf("unexpected serialized approval: %#v", serialized)
 	}
 
+	got, err := getDriveApproval(context.Background(), svc, "file-123", "approval-123")
+	if err != nil {
+		t.Fatalf("getDriveApproval failed: %v", err)
+	}
+	if got["approval_id"] != "approval-123" || got["approval_status"] != "IN_PROGRESS" {
+		t.Fatalf("unexpected approval get result: %#v", got)
+	}
+
 	started, err := startDriveApproval(context.Background(), svc, "file-123", []string{"a@example.com", "b@example.com"}, "2026-01-02T15:04:05Z", "please review", true)
 	if err != nil {
 		t.Fatalf("start approval failed: %v", err)
@@ -346,10 +357,22 @@ func TestDriveApprovals_ListAndMutations_MockServer(t *testing.T) {
 		})
 	}
 
-	for _, name := range []string{"list", "start", "approve", "decline", "reassign", "cancel", "comment"} {
+	for _, name := range []string{"list", "get", "start", "approve", "decline", "reassign", "cancel", "comment"} {
 		if !saw[name] {
 			t.Fatalf("expected %s request", name)
 		}
+	}
+}
+
+func TestDriveApprovalDueTimeValidation(t *testing.T) {
+	if err := validateDriveApprovalDueTime(""); err != nil {
+		t.Fatalf("empty due time should be valid: %v", err)
+	}
+	if err := validateDriveApprovalDueTime("2026-01-02T15:04:05Z"); err != nil {
+		t.Fatalf("valid due time rejected: %v", err)
+	}
+	if err := validateDriveApprovalDueTime("tomorrow"); err == nil {
+		t.Fatal("expected invalid due time error")
 	}
 }
 
