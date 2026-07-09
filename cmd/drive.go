@@ -1228,6 +1228,103 @@ func listDriveApprovals(ctx context.Context, svc *drive.Service, fileID string, 
 	return approvals, nil
 }
 
+func startDriveApproval(ctx context.Context, svc *drive.Service, fileID string, reviewers []string, dueTime, message string, lockFile bool) (map[string]interface{}, error) {
+	req := &drive.StartApprovalRequest{
+		ReviewerEmails: reviewers,
+		DueTime:        dueTime,
+		Message:        message,
+		LockFile:       lockFile,
+	}
+
+	approval, err := svc.Approvals.Start(fileID, req).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to start approval: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "started"
+	return result, nil
+}
+
+func approveDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID, message string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Approve(fileID, approvalID, &drive.ApproveApprovalRequest{Message: message}).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to approve: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "approved"
+	return result, nil
+}
+
+func declineDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID, message string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Decline(fileID, approvalID, &drive.DeclineApprovalRequest{Message: message}).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to decline: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "declined"
+	return result, nil
+}
+
+func reassignDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID string, addReviewers []*drive.AddReviewer, replaceReviewers []*drive.ReplaceReviewer, message string) (map[string]interface{}, error) {
+	req := &drive.ReassignApprovalRequest{
+		AddReviewers:     addReviewers,
+		ReplaceReviewers: replaceReviewers,
+		Message:          message,
+	}
+
+	approval, err := svc.Approvals.Reassign(fileID, approvalID, req).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to reassign approval: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "reassigned"
+	return result, nil
+}
+
+func cancelDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID, message string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Cancel(fileID, approvalID, &drive.CancelApprovalRequest{Message: message}).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to cancel approval: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "cancelled"
+	return result, nil
+}
+
+func commentDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID, message string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Comment(fileID, approvalID, &drive.CommentApprovalRequest{Message: message}).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to comment on approval: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "commented"
+	return result, nil
+}
+
 func runDriveApproval(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 	ctx := context.Background()
@@ -1278,23 +1375,11 @@ func runDriveStartApproval(cmd *cobra.Command, args []string) error {
 		return usageErrorf("--reviewers must include at least one email address")
 	}
 
-	req := &drive.StartApprovalRequest{
-		ReviewerEmails: reviewers,
-		DueTime:        dueTime,
-		Message:        message,
-		LockFile:       lockFile,
-	}
-
-	approval, err := svc.Approvals.Start(fileID, req).
-		Fields(googleapi.Field(driveApprovalFields)).
-		Context(ctx).
-		Do()
+	result, err := startDriveApproval(ctx, svc, fileID, reviewers, dueTime, message, lockFile)
 	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to start approval: %w", err))
+		return p.PrintError(err)
 	}
 
-	result := serializeDriveApproval(approval)
-	result["status"] = "started"
 	return p.Print(result)
 }
 
@@ -1316,16 +1401,11 @@ func runDriveApprove(cmd *cobra.Command, args []string) error {
 	approvalID, _ := cmd.Flags().GetString("approval-id")
 	message, _ := cmd.Flags().GetString("message")
 
-	approval, err := svc.Approvals.Approve(fileID, approvalID, &drive.ApproveApprovalRequest{Message: message}).
-		Fields(googleapi.Field(driveApprovalFields)).
-		Context(ctx).
-		Do()
+	result, err := approveDriveApproval(ctx, svc, fileID, approvalID, message)
 	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to approve: %w", err))
+		return p.PrintError(err)
 	}
 
-	result := serializeDriveApproval(approval)
-	result["status"] = "approved"
 	return p.Print(result)
 }
 
@@ -1347,16 +1427,11 @@ func runDriveDecline(cmd *cobra.Command, args []string) error {
 	approvalID, _ := cmd.Flags().GetString("approval-id")
 	message, _ := cmd.Flags().GetString("message")
 
-	approval, err := svc.Approvals.Decline(fileID, approvalID, &drive.DeclineApprovalRequest{Message: message}).
-		Fields(googleapi.Field(driveApprovalFields)).
-		Context(ctx).
-		Do()
+	result, err := declineDriveApproval(ctx, svc, fileID, approvalID, message)
 	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to decline: %w", err))
+		return p.PrintError(err)
 	}
 
-	result := serializeDriveApproval(approval)
-	result["status"] = "declined"
 	return p.Print(result)
 }
 
@@ -1380,30 +1455,20 @@ func runDriveReassignApproval(cmd *cobra.Command, args []string) error {
 	replaceRaw, _ := cmd.Flags().GetString("replace-reviewer")
 	message, _ := cmd.Flags().GetString("message")
 
-	req := &drive.ReassignApprovalRequest{
-		AddReviewers:     buildAddReviewers(splitCommaValues(addRaw)),
-		ReplaceReviewers: nil,
-		Message:          message,
-	}
 	replacements, err := buildReplaceReviewers(replaceRaw)
 	if err != nil {
 		return usageErrorf("%v", err)
 	}
-	req.ReplaceReviewers = replacements
-	if len(req.AddReviewers) == 0 && len(req.ReplaceReviewers) == 0 {
+	addReviewers := buildAddReviewers(splitCommaValues(addRaw))
+	if len(addReviewers) == 0 && len(replacements) == 0 {
 		return usageErrorf("provide --add-reviewer or --replace-reviewer")
 	}
 
-	approval, err := svc.Approvals.Reassign(fileID, approvalID, req).
-		Fields(googleapi.Field(driveApprovalFields)).
-		Context(ctx).
-		Do()
+	result, err := reassignDriveApproval(ctx, svc, fileID, approvalID, addReviewers, replacements, message)
 	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to reassign approval: %w", err))
+		return p.PrintError(err)
 	}
 
-	result := serializeDriveApproval(approval)
-	result["status"] = "reassigned"
 	return p.Print(result)
 }
 
@@ -1425,16 +1490,11 @@ func runDriveCancelApproval(cmd *cobra.Command, args []string) error {
 	approvalID, _ := cmd.Flags().GetString("approval-id")
 	message, _ := cmd.Flags().GetString("message")
 
-	approval, err := svc.Approvals.Cancel(fileID, approvalID, &drive.CancelApprovalRequest{Message: message}).
-		Fields(googleapi.Field(driveApprovalFields)).
-		Context(ctx).
-		Do()
+	result, err := cancelDriveApproval(ctx, svc, fileID, approvalID, message)
 	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to cancel approval: %w", err))
+		return p.PrintError(err)
 	}
 
-	result := serializeDriveApproval(approval)
-	result["status"] = "cancelled"
 	return p.Print(result)
 }
 
@@ -1456,16 +1516,11 @@ func runDriveCommentApproval(cmd *cobra.Command, args []string) error {
 	approvalID, _ := cmd.Flags().GetString("approval-id")
 	message, _ := cmd.Flags().GetString("message")
 
-	approval, err := svc.Approvals.Comment(fileID, approvalID, &drive.CommentApprovalRequest{Message: message}).
-		Fields(googleapi.Field(driveApprovalFields)).
-		Context(ctx).
-		Do()
+	result, err := commentDriveApproval(ctx, svc, fileID, approvalID, message)
 	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to comment on approval: %w", err))
+		return p.PrintError(err)
 	}
 
-	result := serializeDriveApproval(approval)
-	result["status"] = "commented"
 	return p.Print(result)
 }
 

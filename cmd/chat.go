@@ -418,7 +418,7 @@ func init() {
 	chatSendCmd.Flags().String("text", "", "Message text (required)")
 	chatSendCmd.Flags().String("quote", "", "Message resource name or ID to quote")
 	chatSendCmd.Flags().String("quote-type", "", "Quote type: reply or forward (default: reply)")
-	chatSendCmd.Flags().String("notify", "none", "Notification behavior: none, force, or silent")
+	chatSendCmd.Flags().String("notify", "none", "Notification behavior: none; force/silent require unsupported Chat app authentication")
 	chatSendCmd.MarkFlagRequired("space")
 	chatSendCmd.MarkFlagRequired("text")
 
@@ -549,9 +549,9 @@ func chatNotificationType(value string) (string, error) {
 	case "", "none":
 		return "", nil
 	case "force":
-		return "NOTIFICATION_TYPE_FORCE_NOTIFY", nil
+		return "", fmt.Errorf("--notify force requires Chat app authentication, which gws chat send does not support yet")
 	case "silent":
-		return "NOTIFICATION_TYPE_SILENT", nil
+		return "", fmt.Errorf("--notify silent requires Chat app authentication, which gws chat send does not support yet")
 	default:
 		return "", fmt.Errorf("invalid --notify value %q (want none|force|silent)", value)
 	}

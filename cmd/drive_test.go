@@ -150,15 +150,14 @@ func TestDriveApprovalHelpers(t *testing.T) {
 	}
 }
 
-func TestDriveApprovals_ListAndStart_MockServer(t *testing.T) {
-	var sawList bool
-	var sawStart bool
+func TestDriveApprovals_ListAndMutations_MockServer(t *testing.T) {
+	saw := map[string]bool{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/files/file-123/approvals" && r.Method == "GET":
-			sawList = true
+			saw["list"] = true
 			if got := r.URL.Query().Get("pageSize"); got != "10" {
 				t.Errorf("pageSize = %q, want 10", got)
 			}
@@ -181,26 +180,76 @@ func TestDriveApprovals_ListAndStart_MockServer(t *testing.T) {
 				},
 			})
 		case r.URL.Path == "/files/file-123/approvals:start" && r.Method == "POST":
-			sawStart = true
-			var payload map[string]interface{}
+			saw["start"] = true
+			var payload struct {
+				ReviewerEmails []string `json:"reviewerEmails"`
+				DueTime        string   `json:"dueTime"`
+				Message        string   `json:"message"`
+				LockFile       bool     `json:"lockFile"`
+			}
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("failed to decode start payload: %v", err)
 			}
-			reviewers, ok := payload["reviewerEmails"].([]interface{})
-			if !ok || len(reviewers) != 2 || reviewers[0] != "a@example.com" {
-				t.Fatalf("unexpected reviewerEmails payload: %#v", payload["reviewerEmails"])
+			if len(payload.ReviewerEmails) != 2 || payload.ReviewerEmails[0] != "a@example.com" || payload.ReviewerEmails[1] != "b@example.com" {
+				t.Fatalf("unexpected reviewerEmails payload: %#v", payload.ReviewerEmails)
 			}
-			if payload["message"] != "please review" {
-				t.Errorf("message = %v", payload["message"])
+			if payload.Message != "please review" {
+				t.Errorf("message = %q, want please review", payload.Message)
 			}
-			if payload["lockFile"] != true {
-				t.Errorf("lockFile = %v", payload["lockFile"])
+			if payload.DueTime != "2026-01-02T15:04:05Z" {
+				t.Errorf("dueTime = %q, want 2026-01-02T15:04:05Z", payload.DueTime)
+			}
+			if !payload.LockFile {
+				t.Errorf("lockFile = %v, want true", payload.LockFile)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"approvalId":   "approval-2",
 				"targetFileId": "file-123",
 				"status":       "IN_PROGRESS",
 			})
+		case r.URL.Path == "/files/file-123/approvals/approval-123:approve" && r.Method == "POST":
+			saw["approve"] = true
+			assertApprovalMessagePayload(t, r, "approve msg")
+			encodeApprovalResponse(t, w, "approval-123", "APPROVED")
+		case r.URL.Path == "/files/file-123/approvals/approval-123:decline" && r.Method == "POST":
+			saw["decline"] = true
+			assertApprovalMessagePayload(t, r, "decline msg")
+			encodeApprovalResponse(t, w, "approval-123", "DECLINED")
+		case r.URL.Path == "/files/file-123/approvals/approval-123:reassign" && r.Method == "POST":
+			saw["reassign"] = true
+			var payload struct {
+				AddReviewers []struct {
+					AddedReviewerEmail string `json:"addedReviewerEmail"`
+				} `json:"addReviewers"`
+				ReplaceReviewers []struct {
+					RemovedReviewerEmail string `json:"removedReviewerEmail"`
+					AddedReviewerEmail   string `json:"addedReviewerEmail"`
+				} `json:"replaceReviewers"`
+				Message string `json:"message"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("failed to decode reassign payload: %v", err)
+			}
+			if len(payload.AddReviewers) != 1 || payload.AddReviewers[0].AddedReviewerEmail != "new@example.com" {
+				t.Fatalf("unexpected addReviewers payload: %#v", payload.AddReviewers)
+			}
+			if len(payload.ReplaceReviewers) != 1 ||
+				payload.ReplaceReviewers[0].RemovedReviewerEmail != "old@example.com" ||
+				payload.ReplaceReviewers[0].AddedReviewerEmail != "replacement@example.com" {
+				t.Fatalf("unexpected replaceReviewers payload: %#v", payload.ReplaceReviewers)
+			}
+			if payload.Message != "reassign msg" {
+				t.Errorf("message = %q, want reassign msg", payload.Message)
+			}
+			encodeApprovalResponse(t, w, "approval-123", "IN_PROGRESS")
+		case r.URL.Path == "/files/file-123/approvals/approval-123:cancel" && r.Method == "POST":
+			saw["cancel"] = true
+			assertApprovalMessagePayload(t, r, "cancel msg")
+			encodeApprovalResponse(t, w, "approval-123", "CANCELLED")
+		case r.URL.Path == "/files/file-123/approvals/approval-123:comment" && r.Method == "POST":
+			saw["comment"] = true
+			assertApprovalMessagePayload(t, r, "comment msg")
+			encodeApprovalResponse(t, w, "approval-123", "IN_PROGRESS")
 		default:
 			t.Logf("Unexpected request: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -225,19 +274,106 @@ func TestDriveApprovals_ListAndStart_MockServer(t *testing.T) {
 		t.Fatalf("unexpected serialized approval: %#v", serialized)
 	}
 
-	started, err := svc.Approvals.Start("file-123", &drive.StartApprovalRequest{
-		ReviewerEmails: []string{"a@example.com", "b@example.com"},
-		Message:        "please review",
-		LockFile:       true,
-	}).Do()
+	started, err := startDriveApproval(context.Background(), svc, "file-123", []string{"a@example.com", "b@example.com"}, "2026-01-02T15:04:05Z", "please review", true)
 	if err != nil {
 		t.Fatalf("start approval failed: %v", err)
 	}
-	if started.ApprovalId != "approval-2" {
-		t.Errorf("started approval id = %q", started.ApprovalId)
+	if started["status"] != "started" || started["approval_id"] != "approval-2" {
+		t.Errorf("started result = %#v", started)
 	}
-	if !sawList || !sawStart {
-		t.Fatalf("expected list and start requests, saw list=%v start=%v", sawList, sawStart)
+
+	mutationChecks := []struct {
+		name string
+		run  func() (map[string]interface{}, error)
+		want string
+	}{
+		{
+			name: "approve",
+			run: func() (map[string]interface{}, error) {
+				return approveDriveApproval(context.Background(), svc, "file-123", "approval-123", "approve msg")
+			},
+			want: "approved",
+		},
+		{
+			name: "decline",
+			run: func() (map[string]interface{}, error) {
+				return declineDriveApproval(context.Background(), svc, "file-123", "approval-123", "decline msg")
+			},
+			want: "declined",
+		},
+		{
+			name: "reassign",
+			run: func() (map[string]interface{}, error) {
+				return reassignDriveApproval(
+					context.Background(),
+					svc,
+					"file-123",
+					"approval-123",
+					buildAddReviewers([]string{"new@example.com"}),
+					[]*drive.ReplaceReviewer{{
+						RemovedReviewerEmail: "old@example.com",
+						AddedReviewerEmail:   "replacement@example.com",
+					}},
+					"reassign msg",
+				)
+			},
+			want: "reassigned",
+		},
+		{
+			name: "cancel",
+			run: func() (map[string]interface{}, error) {
+				return cancelDriveApproval(context.Background(), svc, "file-123", "approval-123", "cancel msg")
+			},
+			want: "cancelled",
+		},
+		{
+			name: "comment",
+			run: func() (map[string]interface{}, error) {
+				return commentDriveApproval(context.Background(), svc, "file-123", "approval-123", "comment msg")
+			},
+			want: "commented",
+		},
+	}
+	for _, tt := range mutationChecks {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tt.run()
+			if err != nil {
+				t.Fatalf("%s approval failed: %v", tt.name, err)
+			}
+			if result["status"] != tt.want || result["approval_id"] != "approval-123" {
+				t.Fatalf("%s result = %#v, want status=%s approval-123", tt.name, result, tt.want)
+			}
+		})
+	}
+
+	for _, name := range []string{"list", "start", "approve", "decline", "reassign", "cancel", "comment"} {
+		if !saw[name] {
+			t.Fatalf("expected %s request", name)
+		}
+	}
+}
+
+func assertApprovalMessagePayload(t *testing.T, r *http.Request, want string) {
+	t.Helper()
+	var payload struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		t.Fatalf("failed to decode message payload: %v", err)
+	}
+	if payload.Message != want {
+		t.Fatalf("message = %q, want %q", payload.Message, want)
+	}
+}
+
+func encodeApprovalResponse(t *testing.T, w http.ResponseWriter, approvalID, status string) {
+	t.Helper()
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		"approvalId":   approvalID,
+		"targetFileId": "file-123",
+		"status":       status,
+	}); err != nil {
+		t.Fatalf("failed to encode approval response: %v", err)
 	}
 }
 

@@ -197,7 +197,7 @@ gws chat send --space <space-id> --text <message>
 - `--text string` — Message text (required)
 - `--quote string` — Message resource name or ID to quote; the CLI fetches the quoted message and sends its current create/update timestamp.
 - `--quote-type string` — Quote type: `reply` or `forward` (default API behavior is reply).
-- `--notify string` — Notification behavior: `none`, `force`, or `silent` (default `none`). `force` and `silent` require Chat app authentication.
+- `--notify string` — Notification behavior: `none`, `force`, or `silent` (default `none`). `force` and `silent` are rejected until Chat app authentication is supported.
 
 ### get — Get a single message
 

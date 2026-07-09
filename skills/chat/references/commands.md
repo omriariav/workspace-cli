@@ -170,7 +170,7 @@ Usage: gws chat send [flags]
 | `--text` | string | | Yes | Message text |
 | `--quote` | string | | No | Message resource name or ID to quote; timestamp is auto-resolved |
 | `--quote-type` | string | | No | Quote type: `reply` or `forward` |
-| `--notify` | string | `none` | No | Notification behavior: `none`, `force`, or `silent`; `force` and `silent` require Chat app authentication |
+| `--notify` | string | `none` | No | Notification behavior: `none`, `force`, or `silent`; `force` and `silent` are rejected until Chat app authentication is supported |
 
 ---
 

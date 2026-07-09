@@ -138,9 +138,12 @@ func TestChatSendOptionHelpers(t *testing.T) {
 	if err != nil || qt != "FORWARD" {
 		t.Fatalf("normalizeChatQuoteType(forward) = %q, %v", qt, err)
 	}
-	nt, err := chatNotificationType("silent")
-	if err != nil || nt != "NOTIFICATION_TYPE_SILENT" {
-		t.Fatalf("chatNotificationType(silent) = %q, %v", nt, err)
+	nt, err := chatNotificationType("none")
+	if err != nil || nt != "" {
+		t.Fatalf("chatNotificationType(none) = %q, %v", nt, err)
+	}
+	if _, err := chatNotificationType("silent"); err == nil || !strings.Contains(err.Error(), "requires Chat app authentication") {
+		t.Fatalf("expected app-auth error for silent notification, got %v", err)
 	}
 	if _, err := chatNotificationType("loud"); err == nil {
 		t.Fatal("expected invalid notification type error")
@@ -168,9 +171,8 @@ func TestChatSendWithQuoteAndNotify_MockServer(t *testing.T) {
 			if r.Method != "POST" {
 				t.Errorf("expected message POST, got %s", r.Method)
 			}
-			gotNotify := r.URL.Query().Get("createMessageNotificationOptions.notificationType")
-			if gotNotify != "NOTIFICATION_TYPE_SILENT" {
-				t.Errorf("notification query = %q, want NOTIFICATION_TYPE_SILENT", gotNotify)
+			if gotNotify := r.URL.Query().Get("createMessageNotificationOptions.notificationType"); gotNotify != "" {
+				t.Errorf("notification query = %q, want empty", gotNotify)
 			}
 			var payload struct {
 				Text                  string `json:"text"`
@@ -210,7 +212,7 @@ func TestChatSendWithQuoteAndNotify_MockServer(t *testing.T) {
 		t.Fatalf("failed to create chat service: %v", err)
 	}
 
-	call, err := buildChatSendCall(context.Background(), svc, "spaces/AAAA", "hello", "msg1", "forward", "silent")
+	call, err := buildChatSendCall(context.Background(), svc, "spaces/AAAA", "hello", "msg1", "forward", "none")
 	if err != nil {
 		t.Fatalf("buildChatSendCall failed: %v", err)
 	}
@@ -223,6 +225,20 @@ func TestChatSendWithQuoteAndNotify_MockServer(t *testing.T) {
 	}
 	if !sawQuoteGet || !sawCreate {
 		t.Fatalf("expected quote GET and create POST, saw get=%v create=%v", sawQuoteGet, sawCreate)
+	}
+}
+
+func TestChatSendRejectsAppAuthNotificationModes(t *testing.T) {
+	svc, err := chat.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint("http://example.invalid"))
+	if err != nil {
+		t.Fatalf("failed to create chat service: %v", err)
+	}
+
+	for _, notify := range []string{"force", "silent"} {
+		_, err := buildChatSendCall(context.Background(), svc, "spaces/AAAA", "hello", "", "", notify)
+		if err == nil || !strings.Contains(err.Error(), "requires Chat app authentication") {
+			t.Fatalf("buildChatSendCall notify=%s error = %v, want app-auth error", notify, err)
+		}
 	}
 }
 

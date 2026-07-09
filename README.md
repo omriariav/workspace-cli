@@ -363,7 +363,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws chat messages list` | List messages by `parent` via `--params` (programmatic path) |
 | `gws chat members [space]` | List members with display names + emails via People API (`--max`, `--filter`, `--show-groups`, `--show-invited`, `--raw`, `--params`; space may be supplied via `--params parent`) |
 | `gws chat members list` | List members by `parent` via `--params` (programmatic path) |
-| `gws chat send` | Send message (`--space`, `--text`, `--quote`, `--quote-type`, `--notify`; `force`/`silent` notification modes require Chat app authentication) |
+| `gws chat send` | Send message (`--space`, `--text`, `--quote`, `--quote-type`, `--notify`; `force`/`silent` are rejected until Chat app authentication is supported) |
 | `gws chat get <message>` | Get a single message (`--resolve-senders`) |
 | `gws chat update <message>` | Update message text (`--text`) |
 | `gws chat delete <message>` | Delete a message (`--force`) |
