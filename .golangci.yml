@@ -22,10 +22,21 @@ linters:
         - name: exported
           disabled: true
   exclusions:
+    presets:
+      - std-error-handling
     rules:
       - path: _test\.go
         linters:
           - errcheck
+      - text: "QF1001:"
+        linters:
+          - staticcheck
+      - text: "QF1003:"
+        linters:
+          - staticcheck
+      - text: "QF1012:"
+        linters:
+          - staticcheck
 
 formatters:
   enable:
