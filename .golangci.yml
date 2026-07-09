@@ -1,30 +1,43 @@
+version: "2"
+
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
     - misspell
-    - gofmt
     - revive
-
-linters-settings:
-  errcheck:
-    exclude-functions:
-      - (*github.com/spf13/cobra.Command).MarkFlagRequired
-      - (*github.com/spf13/viper.Viper).BindPFlag
-      - github.com/spf13/viper.BindPFlag
-      - fmt.Fprintf
-      - fmt.Fprintln
-  revive:
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*github.com/spf13/cobra.Command).MarkFlagRequired
+        - (*github.com/spf13/viper.Viper).BindPFlag
+        - github.com/spf13/viper.BindPFlag
+        - fmt.Fprintf
+        - fmt.Fprintln
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    presets:
+      - std-error-handling
     rules:
-      - name: exported
-        disabled: true
+      - path: _test\.go
+        linters:
+          - errcheck
+      - text: "QF1001:"
+        linters:
+          - staticcheck
+      - text: "QF1003:"
+        linters:
+          - staticcheck
+      - text: "QF1012:"
+        linters:
+          - staticcheck
 
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+formatters:
+  enable:
+    - gofmt

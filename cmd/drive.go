@@ -66,6 +66,66 @@ since filtering happens after fetching from the API.`,
 	RunE: runDriveComments,
 }
 
+// --- Approvals ---
+
+var driveApprovalsCmd = &cobra.Command{
+	Use:   "approvals <file-id>",
+	Short: "List approvals on a file",
+	Long:  "Lists approval workflows associated with a Google Drive file.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runDriveApprovals,
+}
+
+var driveApprovalCmd = &cobra.Command{
+	Use:   "approval <file-id> <approval-id>",
+	Short: "Get approval details",
+	Long:  "Gets a single Drive file approval by ID.",
+	Args:  cobra.ExactArgs(2),
+	RunE:  runDriveApproval,
+}
+
+var driveStartApprovalCmd = &cobra.Command{
+	Use:   "start-approval",
+	Short: "Start an approval workflow",
+	Long:  "Starts a Drive approval workflow for a file.",
+	RunE:  runDriveStartApproval,
+}
+
+var driveApproveCmd = &cobra.Command{
+	Use:   "approve",
+	Short: "Approve a file approval",
+	Long:  "Approves a Drive file approval as the current reviewer.",
+	RunE:  runDriveApprove,
+}
+
+var driveDeclineCmd = &cobra.Command{
+	Use:   "decline",
+	Short: "Decline a file approval",
+	Long:  "Declines a Drive file approval as the current reviewer.",
+	RunE:  runDriveDecline,
+}
+
+var driveReassignApprovalCmd = &cobra.Command{
+	Use:   "reassign-approval",
+	Short: "Reassign approval reviewers",
+	Long:  "Adds or replaces reviewers on an in-progress Drive file approval.",
+	RunE:  runDriveReassignApproval,
+}
+
+var driveCancelApprovalCmd = &cobra.Command{
+	Use:   "cancel-approval",
+	Short: "Cancel a file approval",
+	Long:  "Cancels a Drive file approval.",
+	RunE:  runDriveCancelApproval,
+}
+
+var driveCommentApprovalCmd = &cobra.Command{
+	Use:   "comment-approval",
+	Short: "Comment on a file approval",
+	Long:  "Adds a comment to a Drive file approval.",
+	RunE:  runDriveCommentApproval,
+}
+
 var driveUploadCmd = &cobra.Command{
 	Use:   "upload <local-file>",
 	Short: "Upload a file to Drive",
@@ -468,6 +528,14 @@ func init() {
 	driveCmd.AddCommand(driveReplyCmd)
 	driveCmd.AddCommand(driveGetReplyCmd)
 	driveCmd.AddCommand(driveDeleteReplyCmd)
+	driveCmd.AddCommand(driveApprovalsCmd)
+	driveCmd.AddCommand(driveApprovalCmd)
+	driveCmd.AddCommand(driveStartApprovalCmd)
+	driveCmd.AddCommand(driveApproveCmd)
+	driveCmd.AddCommand(driveDeclineCmd)
+	driveCmd.AddCommand(driveReassignApprovalCmd)
+	driveCmd.AddCommand(driveCancelApprovalCmd)
+	driveCmd.AddCommand(driveCommentApprovalCmd)
 	driveCmd.AddCommand(driveCommentCmd)
 	driveCmd.AddCommand(driveAddCommentCmd)
 	driveCmd.AddCommand(driveDeleteCommentCmd)
@@ -555,6 +623,40 @@ func init() {
 	driveDeleteReplyCmd.MarkFlagRequired("file-id")
 	driveDeleteReplyCmd.MarkFlagRequired("comment-id")
 	driveDeleteReplyCmd.MarkFlagRequired("reply-id")
+
+	// Approval flags
+	driveApprovalsCmd.Flags().Int64("max", 100, "Maximum number of approvals")
+
+	driveStartApprovalCmd.Flags().String("file-id", "", "File ID (required)")
+	driveStartApprovalCmd.Flags().String("reviewers", "", "Comma-separated reviewer email addresses (required)")
+	driveStartApprovalCmd.Flags().String("due-time", "", "Approval due time (RFC3339)")
+	driveStartApprovalCmd.Flags().String("message", "", "Message to send to reviewers")
+	driveStartApprovalCmd.Flags().Bool("lock-file", false, "Lock the file while approval is in progress")
+	driveStartApprovalCmd.MarkFlagRequired("file-id")
+	driveStartApprovalCmd.MarkFlagRequired("reviewers")
+
+	for _, c := range []*cobra.Command{driveApproveCmd, driveDeclineCmd, driveCancelApprovalCmd} {
+		c.Flags().String("file-id", "", "File ID (required)")
+		c.Flags().String("approval-id", "", "Approval ID (required)")
+		c.Flags().String("message", "", "Optional message")
+		c.MarkFlagRequired("file-id")
+		c.MarkFlagRequired("approval-id")
+	}
+
+	driveReassignApprovalCmd.Flags().String("file-id", "", "File ID (required)")
+	driveReassignApprovalCmd.Flags().String("approval-id", "", "Approval ID (required)")
+	driveReassignApprovalCmd.Flags().String("add-reviewer", "", "Comma-separated reviewer emails to add")
+	driveReassignApprovalCmd.Flags().String("replace-reviewer", "", "Comma-separated replacements in old@example.com=new@example.com form")
+	driveReassignApprovalCmd.Flags().String("message", "", "Message to send to reviewers")
+	driveReassignApprovalCmd.MarkFlagRequired("file-id")
+	driveReassignApprovalCmd.MarkFlagRequired("approval-id")
+
+	driveCommentApprovalCmd.Flags().String("file-id", "", "File ID (required)")
+	driveCommentApprovalCmd.Flags().String("approval-id", "", "Approval ID (required)")
+	driveCommentApprovalCmd.Flags().String("message", "", "Approval comment text (required)")
+	driveCommentApprovalCmd.MarkFlagRequired("file-id")
+	driveCommentApprovalCmd.MarkFlagRequired("approval-id")
+	driveCommentApprovalCmd.MarkFlagRequired("message")
 
 	// Comment flags
 	driveCommentCmd.Flags().String("file-id", "", "File ID (required)")
@@ -1053,6 +1155,502 @@ func runDriveComments(cmd *cobra.Command, args []string) error {
 	}
 
 	return p.Print(result)
+}
+
+const driveApprovalFields = "approvalId,targetFileId,status,dueTime,createTime,modifyTime,completeTime,initiator(displayName,emailAddress,permissionId),reviewerResponses(response,reviewer(displayName,emailAddress,permissionId))"
+
+func runDriveApprovals(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID := args[0]
+	maxResults, _ := cmd.Flags().GetInt64("max")
+	if maxResults <= 0 {
+		return usageErrorf("--max must be greater than 0")
+	}
+
+	approvals, err := listDriveApprovals(ctx, svc, fileID, maxResults)
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to list approvals: %w", err))
+	}
+
+	results := make([]map[string]interface{}, 0, len(approvals))
+	for _, approval := range approvals {
+		results = append(results, serializeDriveApproval(approval))
+	}
+
+	return p.Print(map[string]interface{}{
+		"file_id":   fileID,
+		"approvals": results,
+		"count":     len(results),
+	})
+}
+
+func listDriveApprovals(ctx context.Context, svc *drive.Service, fileID string, maxResults int64) ([]*drive.Approval, error) {
+	var approvals []*drive.Approval
+	var pageToken string
+	for int64(len(approvals)) < maxResults {
+		remaining := maxResults - int64(len(approvals))
+		pageSize := remaining
+		if pageSize > 100 {
+			pageSize = 100
+		}
+		call := svc.Approvals.List(fileID).
+			PageSize(pageSize).
+			Fields(googleapi.Field("nextPageToken,items(" + driveApprovalFields + ")")).
+			Context(ctx)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+		resp, err := call.Do()
+		if err != nil {
+			return nil, err
+		}
+		approvals = append(approvals, resp.Items...)
+		if resp.NextPageToken == "" {
+			break
+		}
+		pageToken = resp.NextPageToken
+	}
+	if int64(len(approvals)) > maxResults {
+		approvals = approvals[:maxResults]
+	}
+	return approvals, nil
+}
+
+func getDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Get(fileID, approvalID).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get approval: %w", err)
+	}
+
+	return serializeDriveApproval(approval), nil
+}
+
+func validateDriveApprovalDueTime(dueTime string) error {
+	if dueTime == "" {
+		return nil
+	}
+	if _, err := time.Parse(time.RFC3339, dueTime); err != nil {
+		return fmt.Errorf("--due-time must be RFC3339: %w", err)
+	}
+	return nil
+}
+
+func startDriveApproval(ctx context.Context, svc *drive.Service, fileID string, reviewers []string, dueTime, message string, lockFile bool) (map[string]interface{}, error) {
+	req := &drive.StartApprovalRequest{
+		ReviewerEmails: reviewers,
+		DueTime:        dueTime,
+		Message:        message,
+		LockFile:       lockFile,
+	}
+
+	approval, err := svc.Approvals.Start(fileID, req).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to start approval: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "started"
+	return result, nil
+}
+
+func approveDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID, message string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Approve(fileID, approvalID, &drive.ApproveApprovalRequest{Message: message}).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to approve: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "approved"
+	return result, nil
+}
+
+func declineDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID, message string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Decline(fileID, approvalID, &drive.DeclineApprovalRequest{Message: message}).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to decline: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "declined"
+	return result, nil
+}
+
+func reassignDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID string, addReviewers []*drive.AddReviewer, replaceReviewers []*drive.ReplaceReviewer, message string) (map[string]interface{}, error) {
+	req := &drive.ReassignApprovalRequest{
+		AddReviewers:     addReviewers,
+		ReplaceReviewers: replaceReviewers,
+		Message:          message,
+	}
+
+	approval, err := svc.Approvals.Reassign(fileID, approvalID, req).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to reassign approval: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "reassigned"
+	return result, nil
+}
+
+func cancelDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID, message string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Cancel(fileID, approvalID, &drive.CancelApprovalRequest{Message: message}).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to cancel approval: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "cancelled"
+	return result, nil
+}
+
+func commentDriveApproval(ctx context.Context, svc *drive.Service, fileID, approvalID, message string) (map[string]interface{}, error) {
+	approval, err := svc.Approvals.Comment(fileID, approvalID, &drive.CommentApprovalRequest{Message: message}).
+		Fields(googleapi.Field(driveApprovalFields)).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to comment on approval: %w", err)
+	}
+
+	result := serializeDriveApproval(approval)
+	result["status"] = "commented"
+	return result, nil
+}
+
+func runDriveApproval(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	result, err := getDriveApproval(ctx, svc, args[0], args[1])
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return p.Print(result)
+}
+
+func runDriveStartApproval(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	reviewersRaw, _ := cmd.Flags().GetString("reviewers")
+	dueTime, _ := cmd.Flags().GetString("due-time")
+	message, _ := cmd.Flags().GetString("message")
+	lockFile, _ := cmd.Flags().GetBool("lock-file")
+
+	reviewers := splitCommaValues(reviewersRaw)
+	if len(reviewers) == 0 {
+		return usageErrorf("--reviewers must include at least one email address")
+	}
+	if err := validateDriveApprovalDueTime(dueTime); err != nil {
+		return usageErrorf("%v", err)
+	}
+
+	result, err := startDriveApproval(ctx, svc, fileID, reviewers, dueTime, message, lockFile)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return p.Print(result)
+}
+
+func runDriveApprove(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	approvalID, _ := cmd.Flags().GetString("approval-id")
+	message, _ := cmd.Flags().GetString("message")
+
+	result, err := approveDriveApproval(ctx, svc, fileID, approvalID, message)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return p.Print(result)
+}
+
+func runDriveDecline(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	approvalID, _ := cmd.Flags().GetString("approval-id")
+	message, _ := cmd.Flags().GetString("message")
+
+	result, err := declineDriveApproval(ctx, svc, fileID, approvalID, message)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return p.Print(result)
+}
+
+func runDriveReassignApproval(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	approvalID, _ := cmd.Flags().GetString("approval-id")
+	addRaw, _ := cmd.Flags().GetString("add-reviewer")
+	replaceRaw, _ := cmd.Flags().GetString("replace-reviewer")
+	message, _ := cmd.Flags().GetString("message")
+
+	replacements, err := buildReplaceReviewers(replaceRaw)
+	if err != nil {
+		return usageErrorf("%v", err)
+	}
+	addReviewers := buildAddReviewers(splitCommaValues(addRaw))
+	if len(addReviewers) == 0 && len(replacements) == 0 {
+		return usageErrorf("provide --add-reviewer or --replace-reviewer")
+	}
+
+	result, err := reassignDriveApproval(ctx, svc, fileID, approvalID, addReviewers, replacements, message)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return p.Print(result)
+}
+
+func runDriveCancelApproval(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	approvalID, _ := cmd.Flags().GetString("approval-id")
+	message, _ := cmd.Flags().GetString("message")
+
+	result, err := cancelDriveApproval(ctx, svc, fileID, approvalID, message)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return p.Print(result)
+}
+
+func runDriveCommentApproval(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	approvalID, _ := cmd.Flags().GetString("approval-id")
+	message, _ := cmd.Flags().GetString("message")
+
+	result, err := commentDriveApproval(ctx, svc, fileID, approvalID, message)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return p.Print(result)
+}
+
+func splitCommaValues(value string) []string {
+	parts := strings.Split(value, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			values = append(values, part)
+		}
+	}
+	return values
+}
+
+func buildAddReviewers(emails []string) []*drive.AddReviewer {
+	reviewers := make([]*drive.AddReviewer, 0, len(emails))
+	for _, email := range emails {
+		reviewers = append(reviewers, &drive.AddReviewer{AddedReviewerEmail: email})
+	}
+	return reviewers
+}
+
+func buildReplaceReviewers(value string) ([]*drive.ReplaceReviewer, error) {
+	parts := splitCommaValues(value)
+	replacements := make([]*drive.ReplaceReviewer, 0, len(parts))
+	for _, part := range parts {
+		removed, added, ok := strings.Cut(part, "=")
+		if !ok {
+			return nil, fmt.Errorf("--replace-reviewer must use old@example.com=new@example.com entries")
+		}
+		removed = strings.TrimSpace(removed)
+		added = strings.TrimSpace(added)
+		if removed == "" || added == "" {
+			return nil, fmt.Errorf("--replace-reviewer entries must include both removed and added reviewer emails")
+		}
+		replacements = append(replacements, &drive.ReplaceReviewer{
+			RemovedReviewerEmail: removed,
+			AddedReviewerEmail:   added,
+		})
+	}
+	return replacements, nil
+}
+
+func serializeDriveApproval(a *drive.Approval) map[string]interface{} {
+	result := map[string]interface{}{}
+	if a == nil {
+		return result
+	}
+	if a.ApprovalId != "" {
+		result["approval_id"] = a.ApprovalId
+	}
+	if a.TargetFileId != "" {
+		result["file_id"] = a.TargetFileId
+	}
+	if a.Status != "" {
+		result["approval_status"] = a.Status
+	}
+	if a.DueTime != "" {
+		result["due_time"] = a.DueTime
+	}
+	if a.CreateTime != "" {
+		result["created"] = a.CreateTime
+	}
+	if a.ModifyTime != "" {
+		result["modified"] = a.ModifyTime
+	}
+	if a.CompleteTime != "" {
+		result["completed"] = a.CompleteTime
+	}
+	if a.Initiator != nil {
+		result["initiator"] = serializeDriveUser(a.Initiator)
+	}
+	if len(a.ReviewerResponses) > 0 {
+		reviewers := make([]map[string]interface{}, 0, len(a.ReviewerResponses))
+		for _, response := range a.ReviewerResponses {
+			if response == nil {
+				continue
+			}
+			r := map[string]interface{}{}
+			if response.Response != "" {
+				r["response"] = response.Response
+			}
+			if response.Reviewer != nil {
+				r["reviewer"] = serializeDriveUser(response.Reviewer)
+			}
+			reviewers = append(reviewers, r)
+		}
+		result["reviewer_responses"] = reviewers
+	}
+	return result
+}
+
+func serializeDriveUser(user *drive.User) map[string]interface{} {
+	out := map[string]interface{}{}
+	if user.DisplayName != "" {
+		out["name"] = user.DisplayName
+	}
+	if user.EmailAddress != "" {
+		out["email"] = user.EmailAddress
+	}
+	if user.PermissionId != "" {
+		out["permission_id"] = user.PermissionId
+	}
+	if user.Me {
+		out["me"] = user.Me
+	}
+	return out
 }
 
 func runDriveUpload(cmd *cobra.Command, args []string) error {

@@ -21,7 +21,7 @@
 | `gmail` | list, read, links, thread, send, reply, forward, labels, label, archive, trash, event-id, untrash, delete, batch-modify, batch-delete, trash-thread, untrash-thread, delete-thread, label-info, create-label, update-label, delete-label, drafts, draft, create-draft, update-draft, send-draft, delete-draft, attachment |
 | `calendar` | list, events, create, update, delete, rsvp, get, quick-add, instances, move, get-calendar, create-calendar, update-calendar, delete-calendar, clear, subscribe, unsubscribe, calendar-info, update-subscription, acl, share, unshare, update-acl, freebusy, colors, settings |
 | `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, move, clear |
-| `drive` | list, search, info, download, upload, create-folder, move, delete, copy, convert, comments, permissions, share, unshare, permission, update-permission, revisions, revision, delete-revision, replies, reply, get-reply, delete-reply, comment, add-comment, delete-comment, resolve-comment, unresolve-comment, export, empty-trash, update, shared-drives, shared-drive, create-drive, delete-drive, update-drive, about, changes, activity |
+| `drive` | list, search, info, download, upload, create-folder, move, delete, copy, convert, comments, approvals, approval, start-approval, approve, decline, reassign-approval, cancel-approval, comment-approval, permissions, share, unshare, permission, update-permission, revisions, revision, delete-revision, replies, reply, get-reply, delete-reply, comment, add-comment, delete-comment, resolve-comment, unresolve-comment, export, empty-trash, update, shared-drives, shared-drive, create-drive, delete-drive, update-drive, about, changes, activity |
 | `docs` | read, info, create, append, insert, replace, replace-content, delete, add-table, format, set-paragraph-style, add-list, remove-list, trash, add-tab, delete-tab, rename-tab, add-image, insert-table-row, delete-table-row, insert-table-col, delete-table-col, merge-cells, unmerge-cells, pin-rows, page-break, section-break, add-header, delete-header, add-footer, delete-footer, add-named-range, delete-named-range, add-footnote, delete-object, replace-image, replace-named-range, update-style, update-section-style, update-table-cell-style, update-table-col-properties, update-table-row-style |
 | `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze, copy-to, batch-read, batch-write, add-named-range, list-named-ranges, delete-named-range, add-filter, clear-filter, add-filter-view, add-chart, list-charts, delete-chart, add-conditional-format, list-conditional-formats, delete-conditional-format |
 | `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides, thumbnail |
@@ -50,7 +50,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.40.1** - Gmail HTML link extraction via `gws gmail links <message-id>`, including read-only `text/html` MIME traversal, attachment-backed HTML bodies, deterministic JSON link output, and Google Docs metadata parsing.
+**v1.41.0** - Google API SDK and Go 1.25 baseline bump, Chat quoted-message and notification controls on `gws chat send`, and Drive file approval commands for list/get/start/approve/decline/reassign/cancel/comment workflows.
 
 ## Roadmap
 
@@ -85,22 +85,38 @@ Every feature/fix follows this flow:
 
 ## Release Checklist
 
-Run these steps only after all review feedback is resolved and the final code is on main. Do not start the version bump until the code is ready — post-bump fix commits create a messy history.
+Release changes are PR-only. Never push release commits, version bumps, tags, or GitHub releases directly from local `main`.
+
+Hard gates before publishing any release:
+- Release PR exists and contains the version bump, release notes/docs, and related issue links.
+- GitHub Actions are green on the latest PR commit.
+- Codex has posted its PR review comment for the latest PR commit, and all actionable feedback is resolved.
+- `make release-check` passes locally on the release branch or merged result.
+- No local tag, remote tag, draft release, or published release already exists for `vX.Y.Z`.
+- The release PR is merged, and the tag will point at the merged commit on `main`.
+
+If any gate is missing, do not run `make release`. If release automation already started from an unreviewed commit, stop it, delete any draft release/tag it created, restore `main` with a revert if needed, and route the release through a PR.
 
 ```
-1. git checkout main && git pull --rebase
-2. Edit Makefile: bump VERSION (e.g. 1.27.0 → 1.28.0)
+1. git checkout -b release/vX.Y.Z main
+2. Edit Makefile: bump VERSION (e.g. 1.27.0 -> 1.28.0)
 3. Edit CLAUDE.md: update "Current Version" line
-4. git add Makefile CLAUDE.md
-5. git commit -m "release: vX.Y.Z — <short description>"
-6. git push
-7. make release VERSION=X.Y.Z
+4. Update release notes/docs and issue links
+5. git add Makefile CLAUDE.md RELEASES.md <docs>
+6. git commit -m "Release vX.Y.Z"
+7. git push -u origin release/vX.Y.Z
+8. Open a PR against main
+9. Wait for green GitHub Actions and the Codex PR review comment; fix issues only by pushing to the PR branch
+10. Merge the PR only after the gates above are satisfied
+11. git checkout main && git pull --ff-only
+12. Verify the release tag/release does not already exist
+13. make release VERSION=X.Y.Z
    — runs fmt/vet/test, checks clean tree, tags, cross-compiles, uploads binaries, verifies
    — creates a DRAFT release — edit notes and publish:
    gh release edit vX.Y.Z --draft=false --notes "<release notes>"
-8. make install
+14. make install
    — installs to $GOPATH/bin with correct version embedded
-9. /tweet about the release (optional, comms step)
+15. /tweet about the release (optional, comms step)
 ```
 
 ### Makefile targets

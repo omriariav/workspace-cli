@@ -416,6 +416,9 @@ func init() {
 	// Send flags
 	chatSendCmd.Flags().String("space", "", "Space ID or name (required)")
 	chatSendCmd.Flags().String("text", "", "Message text (required)")
+	chatSendCmd.Flags().String("quote", "", "Message resource name or ID to quote")
+	chatSendCmd.Flags().String("quote-type", "", "Quote type: reply or forward (default: reply)")
+	chatSendCmd.Flags().String("notify", "none", "Notification behavior: none; force/silent require unsupported Chat app authentication")
 	chatSendCmd.MarkFlagRequired("space")
 	chatSendCmd.MarkFlagRequired("text")
 
@@ -515,6 +518,43 @@ func ensureSpaceName(s string) string {
 		return "spaces/" + s
 	}
 	return s
+}
+
+// ensureMessageName normalizes a message identifier to its full resource name.
+func ensureMessageName(spaceName, messageRef string) string {
+	if strings.HasPrefix(messageRef, "spaces/") {
+		return messageRef
+	}
+	if strings.HasPrefix(messageRef, "messages/") {
+		return strings.TrimRight(spaceName, "/") + "/" + messageRef
+	}
+	return strings.TrimRight(spaceName, "/") + "/messages/" + messageRef
+}
+
+func normalizeChatQuoteType(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "":
+		return "", nil
+	case "reply":
+		return "REPLY", nil
+	case "forward":
+		return "FORWARD", nil
+	default:
+		return "", fmt.Errorf("invalid --quote-type value %q (want reply|forward)", value)
+	}
+}
+
+func chatNotificationType(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "none":
+		return "", nil
+	case "force":
+		return "", fmt.Errorf("--notify force requires Chat app authentication, which gws chat send does not support yet")
+	case "silent":
+		return "", fmt.Errorf("--notify silent requires Chat app authentication, which gws chat send does not support yet")
+	default:
+		return "", fmt.Errorf("invalid --notify value %q (want none|force|silent)", value)
+	}
 }
 
 // serializeChatAttachments converts a Message.Attachment slice into a JSON-friendly
@@ -1217,14 +1257,21 @@ func runChatSend(cmd *cobra.Command, args []string) error {
 
 	spaceID, _ := cmd.Flags().GetString("space")
 	text, _ := cmd.Flags().GetString("text")
+	quoteRef, _ := cmd.Flags().GetString("quote")
+	quoteType, _ := cmd.Flags().GetString("quote-type")
+	notify, _ := cmd.Flags().GetString("notify")
 
 	spaceName := ensureSpaceName(spaceID)
 
-	msg := &chat.Message{
-		Text: text,
+	call, err := buildChatSendCall(ctx, svc, spaceName, text, quoteRef, quoteType, notify)
+	if err != nil {
+		if errors.Is(err, errChatSendUsage) {
+			return usageErrorf("%s", strings.TrimPrefix(err.Error(), errChatSendUsage.Error()+": "))
+		}
+		return p.PrintError(err)
 	}
 
-	sent, err := svc.Spaces.Messages.Create(spaceName, msg).Do()
+	sent, err := call.Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to send message: %w", err))
 	}
@@ -1234,6 +1281,57 @@ func runChatSend(cmd *cobra.Command, args []string) error {
 		"name":        sent.Name,
 		"create_time": sent.CreateTime,
 	})
+}
+
+var errChatSendUsage = errors.New("chat send usage")
+
+func chatSendUsageErrorf(format string, args ...interface{}) error {
+	return fmt.Errorf("%w: %s", errChatSendUsage, fmt.Sprintf(format, args...))
+}
+
+func buildChatSendCall(ctx context.Context, svc *chat.Service, spaceName, text, quoteRef, quoteType, notify string) (*chat.SpacesMessagesCreateCall, error) {
+	if quoteRef == "" && strings.TrimSpace(quoteType) != "" {
+		return nil, chatSendUsageErrorf("--quote-type requires --quote")
+	}
+	notificationType, err := chatNotificationType(notify)
+	if err != nil {
+		return nil, chatSendUsageErrorf("%v", err)
+	}
+
+	msg := &chat.Message{Text: text}
+	if quoteRef != "" {
+		normalizedQuoteType, err := normalizeChatQuoteType(quoteType)
+		if err != nil {
+			return nil, chatSendUsageErrorf("%v", err)
+		}
+
+		quotedName := ensureMessageName(spaceName, quoteRef)
+		quoted, err := svc.Spaces.Messages.Get(quotedName).Context(ctx).Do()
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch quoted message: %w", err)
+		}
+		timestamp := quoted.LastUpdateTime
+		if timestamp == "" {
+			timestamp = quoted.CreateTime
+		}
+		if timestamp == "" {
+			return nil, fmt.Errorf("failed to fetch quoted message timestamp: %s has no createTime or lastUpdateTime", quotedName)
+		}
+
+		msg.QuotedMessageMetadata = &chat.QuotedMessageMetadata{
+			Name:           quotedName,
+			LastUpdateTime: timestamp,
+		}
+		if normalizedQuoteType != "" {
+			msg.QuotedMessageMetadata.QuoteType = normalizedQuoteType
+		}
+	}
+
+	call := svc.Spaces.Messages.Create(spaceName, msg).Context(ctx)
+	if notificationType != "" {
+		call = call.CreateMessageNotificationOptionsNotificationType(notificationType)
+	}
+	return call, nil
 }
 
 func runChatGet(cmd *cobra.Command, args []string) error {

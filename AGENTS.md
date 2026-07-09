@@ -31,6 +31,12 @@
 - PRs should include a clear description, the rationale, and testing notes.
 - Link related issues if applicable; include screenshots only for user-visible CLI output changes.
 
+## Release Safety
+- Release work is PR-only. Do not push release commits, version bumps, tags, or GitHub releases directly from local `main`.
+- Before a release is merged or published, capture evidence for the PR URL, green GitHub checks on the latest PR commit, and the Codex PR review comment.
+- Run `make release VERSION=x.y.z` only from a clean, up-to-date `main` after the release PR has merged. The release tag must point at the merged PR commit on `main`.
+- If a release starts from an unreviewed commit or missing CI/review evidence, stop immediately, delete any draft release/tag that was created, restore `main` with a revert if needed, and reopen the release through a PR.
+
 ## Security & Configuration Notes
 - Credentials live outside the repo in `~/.config/gws/config.yaml` and `~/.config/gws/token.json`.
 - Do not commit secrets; prefer `GWS_CLIENT_ID`/`GWS_CLIENT_SECRET` env vars for local runs.
