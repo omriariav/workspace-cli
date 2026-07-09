@@ -1,3 +1,5 @@
+version: "2"
+
 linters:
   enable:
     - errcheck
@@ -9,22 +11,20 @@ linters:
     - misspell
     - gofmt
     - revive
-
-linters-settings:
-  errcheck:
-    exclude-functions:
-      - (*github.com/spf13/cobra.Command).MarkFlagRequired
-      - (*github.com/spf13/viper.Viper).BindPFlag
-      - github.com/spf13/viper.BindPFlag
-      - fmt.Fprintf
-      - fmt.Fprintln
-  revive:
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*github.com/spf13/cobra.Command).MarkFlagRequired
+        - (*github.com/spf13/viper.Viper).BindPFlag
+        - github.com/spf13/viper.BindPFlag
+        - fmt.Fprintf
+        - fmt.Fprintln
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
     rules:
-      - name: exported
-        disabled: true
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+      - path: _test\.go
+        linters:
+          - errcheck

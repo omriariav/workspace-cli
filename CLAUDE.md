@@ -85,22 +85,38 @@ Every feature/fix follows this flow:
 
 ## Release Checklist
 
-Run these steps only after all review feedback is resolved and the final code is on main. Do not start the version bump until the code is ready — post-bump fix commits create a messy history.
+Release changes are PR-only. Never push release commits, version bumps, tags, or GitHub releases directly from local `main`.
+
+Hard gates before publishing any release:
+- Release PR exists and contains the version bump, release notes/docs, and related issue links.
+- GitHub Actions are green on the latest PR commit.
+- Codex has posted its PR review comment for the latest PR commit, and all actionable feedback is resolved.
+- `make release-check` passes locally on the release branch or merged result.
+- No local tag, remote tag, draft release, or published release already exists for `vX.Y.Z`.
+- The release PR is merged, and the tag will point at the merged commit on `main`.
+
+If any gate is missing, do not run `make release`. If release automation already started from an unreviewed commit, stop it, delete any draft release/tag it created, restore `main` with a revert if needed, and route the release through a PR.
 
 ```
-1. git checkout main && git pull --rebase
-2. Edit Makefile: bump VERSION (e.g. 1.27.0 → 1.28.0)
+1. git checkout -b release/vX.Y.Z main
+2. Edit Makefile: bump VERSION (e.g. 1.27.0 -> 1.28.0)
 3. Edit CLAUDE.md: update "Current Version" line
-4. git add Makefile CLAUDE.md
-5. git commit -m "release: vX.Y.Z — <short description>"
-6. git push
-7. make release VERSION=X.Y.Z
+4. Update release notes/docs and issue links
+5. git add Makefile CLAUDE.md RELEASES.md <docs>
+6. git commit -m "Release vX.Y.Z"
+7. git push -u origin release/vX.Y.Z
+8. Open a PR against main
+9. Wait for green GitHub Actions and the Codex PR review comment; fix issues only by pushing to the PR branch
+10. Merge the PR only after the gates above are satisfied
+11. git checkout main && git pull --ff-only
+12. Verify the release tag/release does not already exist
+13. make release VERSION=X.Y.Z
    — runs fmt/vet/test, checks clean tree, tags, cross-compiles, uploads binaries, verifies
    — creates a DRAFT release — edit notes and publish:
    gh release edit vX.Y.Z --draft=false --notes "<release notes>"
-8. make install
+14. make install
    — installs to $GOPATH/bin with correct version embedded
-9. /tweet about the release (optional, comms step)
+15. /tweet about the release (optional, comms step)
 ```
 
 ### Makefile targets
