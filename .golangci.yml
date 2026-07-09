@@ -9,7 +9,6 @@ linters:
     - staticcheck
     - unused
     - misspell
-    - gofmt
     - revive
   settings:
     errcheck:
@@ -28,3 +27,7 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+
+formatters:
+  enable:
+    - gofmt
