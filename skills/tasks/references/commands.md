@@ -160,7 +160,7 @@ Usage: gws tasks create [flags]
 
 ## gws tasks update
 
-Updates an existing task's title, notes, or due date.
+Updates an existing task's title, notes, or due date while preserving its current completion status.
 
 ```
 Usage: gws tasks update <tasklist-id> <task-id> [flags]
@@ -233,6 +233,24 @@ Usage: gws tasks complete <tasklist-id> <task-id>
 ```
 
 No additional flags. Both the task list ID and task ID are required positional arguments.
+
+---
+
+## gws tasks reopen
+
+Reopens a completed task by setting its status to `needsAction`.
+
+```
+Usage: gws tasks reopen <tasklist-id> <task-id>
+```
+
+No additional flags. Both the task list ID and task ID are required positional arguments.
+
+### Output Fields (JSON)
+
+- `status` — Always `"reopened"`
+- `id` — Task ID
+- `title` — Task title
 
 ---
 

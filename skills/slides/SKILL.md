@@ -398,7 +398,7 @@ gws slides add-line <presentation-id> [flags]
 **Flags:**
 - `--slide-number int` — Slide number (1-indexed)
 - `--slide-id string` — Slide object ID
-- `--type string` — Line type (default: "STRAIGHT_CONNECTOR_1")
+- `--type string` — Line category: `STRAIGHT`, `BENT`, or `CURVED` (default: "STRAIGHT")
 - `--start-x float` — Start X position in points
 - `--start-y float` — Start Y position in points
 - `--end-x float` — End X position in points (default: 200)
@@ -406,7 +406,7 @@ gws slides add-line <presentation-id> [flags]
 - `--color string` — Line color as hex `#RRGGBB`
 - `--weight float` — Line thickness in points (default: 1)
 
-**Line categories:** Prefix determines routing: `STRAIGHT_*` for straight lines, `BENT_*` for bent connectors, `CURVED_*` for curved connectors.
+**Supported line values:** `STRAIGHT`, `BENT`, and `CURVED`. Values are trimmed and normalized to uppercase. Any other value is rejected rather than falling back to `STRAIGHT`.
 
 ### group — Group elements together
 
@@ -415,7 +415,7 @@ gws slides group <presentation-id> --object-ids <ids>
 ```
 
 **Flags:**
-- `--object-ids string` — Comma-separated element IDs to group (required, minimum 2)
+- `--object-ids string` — Comma-separated element IDs to group (required, minimum 2; whitespace is trimmed and blank entries are rejected)
 
 ### ungroup — Ungroup elements
 
@@ -424,7 +424,7 @@ gws slides ungroup <presentation-id> --group-id <id>
 ```
 
 **Flags:**
-- `--group-id string` — Object ID of the group to ungroup (required)
+- `--group-id string` — Object ID of the group to ungroup (required; must not be blank or whitespace only)
 
 ### thumbnail — Get slide page thumbnail
 

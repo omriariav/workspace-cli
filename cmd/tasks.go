@@ -55,7 +55,7 @@ var tasksCreateCmd = &cobra.Command{
 var tasksUpdateCmd = &cobra.Command{
 	Use:   "update <tasklist-id> <task-id>",
 	Short: "Update a task",
-	Long: `Updates an existing task's title, notes, or due date.
+	Long: `Updates an existing task's title, notes, or due date while preserving its current completion status.
 
 At least one of --title, --notes, or --due is required.
 
@@ -72,6 +72,14 @@ var tasksCompleteCmd = &cobra.Command{
 	Long:  "Marks a specific task as completed.",
 	Args:  cobra.ExactArgs(2),
 	RunE:  runTasksComplete,
+}
+
+var tasksReopenCmd = &cobra.Command{
+	Use:   "reopen <tasklist-id> <task-id>",
+	Short: "Reopen a completed task",
+	Long:  "Marks a specific task as needing action again.",
+	Args:  cobra.ExactArgs(2),
+	RunE:  runTasksReopen,
 }
 
 var tasksListInfoCmd = &cobra.Command{
@@ -149,6 +157,7 @@ func init() {
 	tasksCmd.AddCommand(tasksCreateCmd)
 	tasksCmd.AddCommand(tasksUpdateCmd)
 	tasksCmd.AddCommand(tasksCompleteCmd)
+	tasksCmd.AddCommand(tasksReopenCmd)
 	tasksCmd.AddCommand(tasksListInfoCmd)
 	tasksCmd.AddCommand(tasksCreateListCmd)
 	tasksCmd.AddCommand(tasksUpdateListCmd)
@@ -352,7 +361,8 @@ func runTasksUpdate(cmd *cobra.Command, args []string) error {
 		return p.PrintError(fmt.Errorf("failed to get task: %w", err))
 	}
 
-	// Apply updates (only for flags that were explicitly set)
+	// Apply updates (only for flags that were explicitly set). Because this is
+	// the full task returned by the API, its Status and other fields are kept.
 	if titleChanged {
 		title, _ := cmd.Flags().GetString("title")
 		task.Title = title
@@ -697,4 +707,52 @@ func runTasksComplete(cmd *cobra.Command, args []string) error {
 		"id":     updated.Id,
 		"title":  updated.Title,
 	})
+}
+
+func runTasksReopen(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Tasks()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	tasklistID := args[0]
+	taskID := args[1]
+
+	updated, err := reopenTask(svc, tasklistID, taskID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	return p.Print(map[string]interface{}{
+		"status": "reopened",
+		"id":     updated.Id,
+		"title":  updated.Title,
+	})
+}
+
+func reopenTask(svc *tasks.Service, tasklistID, taskID string) (*tasks.Task, error) {
+	// Get the task first so its title, notes, due date, and other fields are
+	// preserved when reopening it.
+	task, err := svc.Tasks.Get(tasklistID, taskID).Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get task: %w", err)
+	}
+
+	task.Status = "needsAction"
+	task.Completed = nil
+
+	updated, err := svc.Tasks.Update(tasklistID, taskID, task).Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to reopen task: %w", err)
+	}
+
+	return updated, nil
 }

@@ -69,7 +69,7 @@ When adding new commands:
 3. Add tests to `cmd/{service}_test.go` using `httptest.Server`
 4. Add command name to `TestXxxCommands` in `cmd/commands_test.go`
 5. Update README.md command table
-6. Bump version in Makefile
+6. Do not bump Makefile VERSION or CLAUDE.md Current Version in feature PRs; update both in the dedicated release PR after all feature PRs merge
 
 ## Development Workflow
 
