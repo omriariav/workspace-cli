@@ -2960,51 +2960,9 @@ func runSlidesAddLine(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	// Calculate size and position from start/end coordinates
-	width := endX - startX
-	height := endY - startY
-
-	// Handle negative dimensions by adjusting position
-	translateX := startX
-	translateY := startY
-	scaleX := 1.0
-	scaleY := 1.0
-	if width < 0 {
-		width = -width
-		translateX = endX
-		scaleX = -1.0
-	}
-	if height < 0 {
-		height = -height
-		translateY = endY
-		scaleY = -1.0
-	}
-
-	requests := []*slides.Request{
-		{
-			CreateLine: &slides.CreateLineRequest{
-				Category: category,
-				ElementProperties: &slides.PageElementProperties{
-					PageObjectId: slideID,
-					Size: &slides.Size{
-						Width:  &slides.Dimension{Magnitude: width, Unit: "PT"},
-						Height: &slides.Dimension{Magnitude: height, Unit: "PT"},
-					},
-					Transform: &slides.AffineTransform{
-						ScaleX:     scaleX,
-						ScaleY:     scaleY,
-						TranslateX: translateX,
-						TranslateY: translateY,
-						Unit:       "PT",
-					},
-				},
-			},
-		},
-	}
-
-	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
-		Requests: requests,
-	}).Do()
+	resp, err := svc.Presentations.BatchUpdate(presentationID, slidesAddLineRequest(
+		slideID, category, startX, startY, endX, endY,
+	)).Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to add line: %w", err))
 	}
@@ -3097,17 +3055,7 @@ func runSlidesGroup(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	requests := []*slides.Request{
-		{
-			GroupObjects: &slides.GroupObjectsRequest{
-				ChildrenObjectIds: objectIDs,
-			},
-		},
-	}
-
-	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
-		Requests: requests,
-	}).Do()
+	resp, err := svc.Presentations.BatchUpdate(presentationID, slidesGroupRequest(objectIDs)).Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to group objects: %w", err))
 	}
@@ -3146,17 +3094,7 @@ func runSlidesUngroup(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	requests := []*slides.Request{
-		{
-			UngroupObjects: &slides.UngroupObjectsRequest{
-				ObjectIds: []string{groupID},
-			},
-		},
-	}
-
-	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
-		Requests: requests,
-	}).Do()
+	_, err = svc.Presentations.BatchUpdate(presentationID, slidesUngroupRequest(groupID)).Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to ungroup objects: %w", err))
 	}
@@ -3166,6 +3104,57 @@ func runSlidesUngroup(cmd *cobra.Command, args []string) error {
 		"presentation_id": presentationID,
 		"group_id":        groupID,
 	})
+}
+
+func slidesAddLineRequest(slideID, category string, startX, startY, endX, endY float64) *slides.BatchUpdatePresentationRequest {
+	width := endX - startX
+	height := endY - startY
+	translateX := startX
+	translateY := startY
+	scaleX := 1.0
+	scaleY := 1.0
+	if width < 0 {
+		width = -width
+		translateX = endX
+		scaleX = -1.0
+	}
+	if height < 0 {
+		height = -height
+		translateY = endY
+		scaleY = -1.0
+	}
+
+	return &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
+		CreateLine: &slides.CreateLineRequest{
+			Category: category,
+			ElementProperties: &slides.PageElementProperties{
+				PageObjectId: slideID,
+				Size: &slides.Size{
+					Width:  &slides.Dimension{Magnitude: width, Unit: "PT"},
+					Height: &slides.Dimension{Magnitude: height, Unit: "PT"},
+				},
+				Transform: &slides.AffineTransform{
+					ScaleX:     scaleX,
+					ScaleY:     scaleY,
+					TranslateX: translateX,
+					TranslateY: translateY,
+					Unit:       "PT",
+				},
+			},
+		},
+	}}}
+}
+
+func slidesGroupRequest(objectIDs []string) *slides.BatchUpdatePresentationRequest {
+	return &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
+		GroupObjects: &slides.GroupObjectsRequest{ChildrenObjectIds: objectIDs},
+	}}}
+}
+
+func slidesUngroupRequest(groupID string) *slides.BatchUpdatePresentationRequest {
+	return &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
+		UngroupObjects: &slides.UngroupObjectsRequest{ObjectIds: []string{groupID}},
+	}}}
 }
 
 var slidesLineCategories = map[string]string{

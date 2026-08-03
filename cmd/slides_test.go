@@ -2850,15 +2850,9 @@ func TestSlidesAddLine_Request(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new Slides service: %v", err)
 	}
-	_, err = svc.Presentations.BatchUpdate("presentation-1", &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
-		CreateLine: &slides.CreateLineRequest{
-			Category: category,
-			ElementProperties: &slides.PageElementProperties{
-				PageObjectId: "slide-1",
-				Size:         &slides.Size{Width: &slides.Dimension{Magnitude: 100, Unit: "PT"}, Height: &slides.Dimension{Magnitude: 50, Unit: "PT"}},
-			},
-		},
-	}}}).Do()
+	_, err = svc.Presentations.BatchUpdate("presentation-1", slidesAddLineRequest(
+		"slide-1", category, 10, 20, 110, 70,
+	)).Do()
 	if err != nil {
 		t.Fatalf("create line: %v", err)
 	}
@@ -2890,9 +2884,7 @@ func TestSlidesGroup_Request(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new Slides service: %v", err)
 	}
-	_, err = svc.Presentations.BatchUpdate("presentation-1", &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
-		GroupObjects: &slides.GroupObjectsRequest{ChildrenObjectIds: objectIDs},
-	}}}).Do()
+	_, err = svc.Presentations.BatchUpdate("presentation-1", slidesGroupRequest(objectIDs)).Do()
 	if err != nil {
 		t.Fatalf("group objects: %v", err)
 	}
@@ -2924,9 +2916,7 @@ func TestSlidesUngroup_Request(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new Slides service: %v", err)
 	}
-	_, err = svc.Presentations.BatchUpdate("presentation-1", &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
-		UngroupObjects: &slides.UngroupObjectsRequest{ObjectIds: []string{groupID}},
-	}}}).Do()
+	_, err = svc.Presentations.BatchUpdate("presentation-1", slidesUngroupRequest(groupID)).Do()
 	if err != nil {
 		t.Fatalf("ungroup objects: %v", err)
 	}
