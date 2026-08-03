@@ -346,7 +346,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws slides reorder-slides <id>` | Reorder slides (`--slide-ids`, `--to`) |
 | `gws slides update-slide-background <id>` | Set slide background (`--slide-id/--slide-number`, `--color` or `--image-url`) |
 | `gws slides list-layouts <id>` | List available layouts from presentation masters |
-| `gws slides add-line <id>` | Add line/connector (`--slide-id/--slide-number`, `--type` accepts `STRAIGHT`/`BENT`/`CURVED` or supported connector types, `--start-x/y`, `--end-x/y`) |
+| `gws slides add-line <id>` | Add line/connector (`--slide-id/--slide-number`, `--type` accepts `STRAIGHT`/`BENT`/`CURVED`, `--start-x/y`, `--end-x/y`) |
 | `gws slides group <id>` | Group elements (`--object-ids`; comma-separated IDs with no blank entries) |
 | `gws slides ungroup <id>` | Ungroup elements (`--group-id`; must not be blank) |
 | `gws slides thumbnail <id>` | Get slide thumbnail (`--slide`, `--size`, `--download`) |

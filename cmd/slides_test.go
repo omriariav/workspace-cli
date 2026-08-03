@@ -2672,16 +2672,6 @@ func TestSlidesLineCategory(t *testing.T) {
 		{lineType: "STRAIGHT", category: "STRAIGHT"},
 		{lineType: "BENT", category: "BENT"},
 		{lineType: "CURVED", category: "CURVED"},
-		{lineType: "STRAIGHT_CONNECTOR_1", category: "STRAIGHT"},
-		{lineType: "BENT_CONNECTOR_2", category: "BENT"},
-		{lineType: "BENT_CONNECTOR_3", category: "BENT"},
-		{lineType: "BENT_CONNECTOR_4", category: "BENT"},
-		{lineType: "BENT_CONNECTOR_5", category: "BENT"},
-		{lineType: "CURVED_CONNECTOR_2", category: "CURVED"},
-		{lineType: "CURVED_CONNECTOR_3", category: "CURVED"},
-		{lineType: "CURVED_CONNECTOR_4", category: "CURVED"},
-		{lineType: "CURVED_CONNECTOR_5", category: "CURVED"},
-		{lineType: "STRAIGHT_LINE", category: "STRAIGHT"},
 	}
 	if len(slidesLineCategories) != len(tests) {
 		t.Fatalf("allowlist has %d entries, but tests enumerate %d", len(slidesLineCategories), len(tests))
@@ -2699,12 +2689,16 @@ func TestSlidesLineCategory(t *testing.T) {
 		})
 	}
 
-	for _, value := range []string{" bent_connector_5 ", "BENTHILL", ""} {
-		_, _, err := slidesLineCategory(value)
-		if value == " bent_connector_5 " && err != nil {
-			t.Errorf("slidesLineCategory(%q) returned error: %v", value, err)
-		}
-		if value != " bent_connector_5 " && err == nil {
+	gotType, gotCategory, err := slidesLineCategory(" bent ")
+	if err != nil {
+		t.Fatalf("slidesLineCategory with trimmed lowercase value returned error: %v", err)
+	}
+	if gotType != "BENT" || gotCategory != "BENT" {
+		t.Errorf("trimmed lowercase BENT = (%q, %q), want (BENT, BENT)", gotType, gotCategory)
+	}
+
+	for _, value := range []string{"BENT_CONNECTOR_5", "BENTHILL", ""} {
+		if _, _, err := slidesLineCategory(value); err == nil {
 			t.Errorf("slidesLineCategory(%q) returned nil error", value)
 		}
 	}
@@ -2818,12 +2812,12 @@ func TestSlidesListLayouts_Request(t *testing.T) {
 }
 
 func TestSlidesAddLine_Request(t *testing.T) {
-	lineType, category, err := slidesLineCategory("BENT_CONNECTOR_3")
+	lineType, category, err := slidesLineCategory("BENT")
 	if err != nil {
 		t.Fatalf("slidesLineCategory returned error: %v", err)
 	}
-	if lineType != "BENT_CONNECTOR_3" {
-		t.Fatalf("line type = %q, want BENT_CONNECTOR_3", lineType)
+	if lineType != "BENT" {
+		t.Fatalf("line type = %q, want BENT", lineType)
 	}
 
 	server := mockSlidesServer(t, map[string]func(w http.ResponseWriter, r *http.Request){

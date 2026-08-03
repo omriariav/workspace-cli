@@ -398,7 +398,7 @@ gws slides add-line <presentation-id> [flags]
 **Flags:**
 - `--slide-number int` — Slide number (1-indexed)
 - `--slide-id string` — Slide object ID
-- `--type string` — Line category or supported type (default: "STRAIGHT")
+- `--type string` — Line category: `STRAIGHT`, `BENT`, or `CURVED` (default: "STRAIGHT")
 - `--start-x float` — Start X position in points
 - `--start-y float` — Start Y position in points
 - `--end-x float` — End X position in points (default: 200)
@@ -406,7 +406,7 @@ gws slides add-line <presentation-id> [flags]
 - `--color string` — Line color as hex `#RRGGBB`
 - `--weight float` — Line thickness in points (default: 1)
 
-**Supported line values:** Categories `STRAIGHT`, `BENT`, and `CURVED`; types `STRAIGHT_CONNECTOR_1`, `BENT_CONNECTOR_2` through `BENT_CONNECTOR_5`, `CURVED_CONNECTOR_2` through `CURVED_CONNECTOR_5`, and `STRAIGHT_LINE`. Values are trimmed and normalized to uppercase. Any other value is rejected rather than falling back to `STRAIGHT`.
+**Supported line values:** `STRAIGHT`, `BENT`, and `CURVED`. Values are trimmed and normalized to uppercase. Any other value is rejected rather than falling back to `STRAIGHT`.
 
 ### group — Group elements together
 

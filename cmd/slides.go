@@ -257,7 +257,7 @@ var slidesListLayoutsCmd = &cobra.Command{
 var slidesAddLineCmd = &cobra.Command{
 	Use:   "add-line <presentation-id>",
 	Short: "Add a line to a slide",
-	Long:  "Creates a line or connector on a slide.\n\nLine categories: STRAIGHT, BENT, CURVED.\nYou can also use connector names like STRAIGHT_CONNECTOR_1 (the category is extracted from the prefix).",
+	Long:  "Creates a line or connector on a slide.\n\nLine categories: STRAIGHT, BENT, CURVED.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runSlidesAddLine,
 }
@@ -495,7 +495,7 @@ func init() {
 	// Add-line flags
 	slidesAddLineCmd.Flags().String("slide-id", "", "Slide object ID")
 	slidesAddLineCmd.Flags().Int("slide-number", 0, "Slide number (1-indexed)")
-	slidesAddLineCmd.Flags().String("type", "STRAIGHT", "Line category (STRAIGHT, BENT, CURVED) or supported connector type")
+	slidesAddLineCmd.Flags().String("type", "STRAIGHT", "Line category (STRAIGHT, BENT, CURVED)")
 	slidesAddLineCmd.Flags().Float64("start-x", 0, "Start X position in points")
 	slidesAddLineCmd.Flags().Float64("start-y", 0, "Start Y position in points")
 	slidesAddLineCmd.Flags().Float64("end-x", 200, "End X position in points")
@@ -3158,28 +3158,18 @@ func slidesUngroupRequest(groupID string) *slides.BatchUpdatePresentationRequest
 }
 
 var slidesLineCategories = map[string]string{
-	"STRAIGHT":             "STRAIGHT",
-	"BENT":                 "BENT",
-	"CURVED":               "CURVED",
-	"STRAIGHT_CONNECTOR_1": "STRAIGHT",
-	"BENT_CONNECTOR_2":     "BENT",
-	"BENT_CONNECTOR_3":     "BENT",
-	"BENT_CONNECTOR_4":     "BENT",
-	"BENT_CONNECTOR_5":     "BENT",
-	"CURVED_CONNECTOR_2":   "CURVED",
-	"CURVED_CONNECTOR_3":   "CURVED",
-	"CURVED_CONNECTOR_4":   "CURVED",
-	"CURVED_CONNECTOR_5":   "CURVED",
-	"STRAIGHT_LINE":        "STRAIGHT",
+	"STRAIGHT": "STRAIGHT",
+	"BENT":     "BENT",
+	"CURVED":   "CURVED",
 }
 
-// slidesLineCategory validates supported Google Slides line categories and
-// types, returning the API category that CreateLine accepts.
+// slidesLineCategory validates the categories accepted by Google Slides
+// CreateLineRequest.
 func slidesLineCategory(lineType string) (string, string, error) {
 	normalized := strings.ToUpper(strings.TrimSpace(lineType))
 	category, ok := slidesLineCategories[normalized]
 	if !ok {
-		return "", "", fmt.Errorf("unsupported line type %q; use STRAIGHT, BENT, CURVED, or a supported connector type", lineType)
+		return "", "", fmt.Errorf("unsupported line category %q; use STRAIGHT, BENT, or CURVED", lineType)
 	}
 	return normalized, category, nil
 }
