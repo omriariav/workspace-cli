@@ -10,7 +10,7 @@ LDFLAGS := -ldflags "-X github.com/omriariav/workspace-cli/cmd.Version=$(VERSION
 	-X github.com/omriariav/workspace-cli/cmd.Commit=$(COMMIT) \
 	-X github.com/omriariav/workspace-cli/cmd.BuildDate=$(BUILD_DATE)"
 
-.PHONY: build test lint vet fmt tidy clean run help install release-check release
+.PHONY: build test lint vet fmt tidy clean run help install release-check release ci
 
 ## Build
 
@@ -36,6 +36,8 @@ vet: ## Run go vet
 
 lint: ## Run golangci-lint
 	golangci-lint run ./...
+
+ci: build lint test ## Run the GitHub CI build, lint, and test checks
 
 fmt: ## Format code
 	gofmt -s -w .

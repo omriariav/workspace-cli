@@ -166,12 +166,13 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws tasks list-info <id>` | Get task list details |
 | `gws tasks create` | Create task (`--title`, `--tasklist`, `--due`); accepts YYYY-MM-DD dates |
 | `gws tasks create-list` | Create a task list (`--title`) |
-| `gws tasks update <list> <task>` | Update task (`--title`, `--notes`, `--due`) |
+| `gws tasks update <list> <task>` | Update task (`--title`, `--notes`, `--due`); preserves its existing completion status |
 | `gws tasks update-list <id>` | Update task list title (`--title`) |
 | `gws tasks delete-list <id>` | Delete a task list |
 | `gws tasks get <list> <task>` | Get task details |
 | `gws tasks delete <list> <task>` | Delete a task |
 | `gws tasks complete <list> <task>` | Mark task as done |
+| `gws tasks reopen <list> <task>` | Reopen task (sets status to `needsAction`) |
 | `gws tasks move <list> <task>` | Move/reorder task (`--parent`, `--previous`, `--destination-list`) |
 | `gws tasks clear <id>` | Clear completed tasks from a list |
 
@@ -345,9 +346,9 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws slides reorder-slides <id>` | Reorder slides (`--slide-ids`, `--to`) |
 | `gws slides update-slide-background <id>` | Set slide background (`--slide-id/--slide-number`, `--color` or `--image-url`) |
 | `gws slides list-layouts <id>` | List available layouts from presentation masters |
-| `gws slides add-line <id>` | Add line/connector (`--slide-id/--slide-number`, `--type`, `--start-x/y`, `--end-x/y`) |
-| `gws slides group <id>` | Group elements (`--object-ids`) |
-| `gws slides ungroup <id>` | Ungroup elements (`--group-id`) |
+| `gws slides add-line <id>` | Add line/connector (`--slide-id/--slide-number`, `--type` accepts `STRAIGHT`/`BENT`/`CURVED` or supported connector types, `--start-x/y`, `--end-x/y`) |
+| `gws slides group <id>` | Group elements (`--object-ids`; comma-separated IDs with no blank entries) |
+| `gws slides ungroup <id>` | Ungroup elements (`--group-id`; must not be blank) |
 | `gws slides thumbnail <id>` | Get slide thumbnail (`--slide`, `--size`, `--download`) |
 
 ### Chat

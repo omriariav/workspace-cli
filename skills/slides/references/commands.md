@@ -499,7 +499,7 @@ Usage: gws slides add-line <presentation-id> [flags]
 |------|------|---------|----------|-------------|
 | `--slide-number` | int | | | Slide number (1-indexed) |
 | `--slide-id` | string | | | Slide object ID |
-| `--type` | string | `STRAIGHT_CONNECTOR_1` | No | Line type |
+| `--type` | string | `STRAIGHT` | No | Line category or supported type |
 | `--start-x` | float | 0 | No | Start X position in points |
 | `--start-y` | float | 0 | No | Start Y position in points |
 | `--end-x` | float | 200 | No | End X position in points |
@@ -507,7 +507,7 @@ Usage: gws slides add-line <presentation-id> [flags]
 | `--color` | string | | No | Line color as hex `#RRGGBB` |
 | `--weight` | float | 1 | No | Line thickness in points |
 
-One of `--slide-number` or `--slide-id` is required. Line category is determined from the type prefix: `STRAIGHT_*`, `BENT_*`, or `CURVED_*`.
+One of `--slide-number` or `--slide-id` is required. Supported values are categories `STRAIGHT`, `BENT`, and `CURVED`; types `STRAIGHT_CONNECTOR_1`, `BENT_CONNECTOR_2` through `BENT_CONNECTOR_5`, `CURVED_CONNECTOR_2` through `CURVED_CONNECTOR_5`, and `STRAIGHT_LINE`. Values are trimmed and normalized to uppercase. Other values are rejected rather than falling back to `STRAIGHT`.
 
 ---
 
@@ -521,7 +521,7 @@ Usage: gws slides group <presentation-id> [flags]
 
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
-| `--object-ids` | string | | Yes | Comma-separated element IDs to group (minimum 2) |
+| `--object-ids` | string | | Yes | Comma-separated element IDs to group (minimum 2; whitespace is trimmed and blank entries are rejected) |
 
 ---
 
@@ -535,7 +535,7 @@ Usage: gws slides ungroup <presentation-id> [flags]
 
 | Flag | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
-| `--group-id` | string | | Yes | Object ID of the group to ungroup |
+| `--group-id` | string | | Yes | Object ID of the group to ungroup (must not be blank or whitespace only) |
 
 ---
 
