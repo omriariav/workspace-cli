@@ -19,35 +19,41 @@ var hooksCmd = &cobra.Command{
 	Use:   "hooks",
 	Short: "Configure opt-in agent context hooks",
 	Long:  "Configure the opt-in, read-only GWS context hooks. Configuration changes are previewed by default and require --apply to write.",
+	Args:  cobra.NoArgs,
 }
 
 var hooksStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Inspect effective hook configuration",
+	Args:  cobra.NoArgs,
 	RunE:  runHooksStatus,
 }
 
 var hooksEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Preview or enable one or more context providers",
+	Args:  cobra.NoArgs,
 	RunE:  runHooksEnable,
 }
 
 var hooksConfigureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Preview or change hook preferences",
+	Args:  cobra.NoArgs,
 	RunE:  runHooksConfigure,
 }
 
 var hooksDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Preview or disable all hook fetching",
+	Args:  cobra.NoArgs,
 	RunE:  runHooksDisable,
 }
 
 var hooksTestCmd = &cobra.Command{
 	Use:   "test",
 	Short: "Run a safe, on-demand hook health check",
+	Args:  cobra.NoArgs,
 	RunE:  runHooksTest,
 }
 
@@ -55,6 +61,7 @@ var hooksRunCmd = &cobra.Command{
 	Use:    "run",
 	Short:  "Run a packaged host hook",
 	Hidden: true,
+	Args:   cobra.NoArgs,
 	RunE:   runHooksRun,
 }
 
@@ -105,7 +112,7 @@ func runHooksStatus(cmd *cobra.Command, args []string) error {
 		return usageErrorf("unable to load hook configuration: %v", err)
 	}
 	home, _ := os.UserHomeDir()
-	return writeHookJSON(cmd, map[string]any{
+	return writeHookOutput(map[string]any{
 		"enabled":                  cfg.Enabled,
 		"providers":                cfg.Providers,
 		"sources":                  cfg.Sources,
@@ -288,7 +295,7 @@ func previewHookUpdate(cmd *cobra.Command, patch map[string]any) error {
 			return fmt.Errorf("update hook configuration: %w", err)
 		}
 	}
-	return writeHookJSON(cmd, map[string]any{
+	return writeHookOutput(map[string]any{
 		"action":  map[bool]string{true: "applied", false: "preview"}[apply],
 		"scope":   scope,
 		"path":    path,
@@ -309,10 +316,10 @@ func runHooksTest(cmd *cobra.Command, args []string) error {
 	}
 	cfg, err := loadHookConfig(cwd)
 	if err != nil {
-		return writeHookJSON(cmd, map[string]any{"healthy": false, "diagnostic": "Hook configuration could not be loaded: " + err.Error()})
+		return writeHookOutput(map[string]any{"healthy": false, "diagnostic": "Hook configuration could not be loaded: " + err.Error()})
 	}
 	rendered := renderHook(cmd.Context(), event, cfg, cwd)
-	return writeHookJSON(cmd, hookHealthReport(cfg, rendered))
+	return writeHookOutput(hookHealthReport(cfg, rendered))
 }
 
 func hookHealthReport(cfg pluginhooks.Config, rendered pluginhooks.RenderedContext) map[string]any {
@@ -516,6 +523,6 @@ func writeHookEnvelope(cmd *cobra.Command, event, context string) error {
 	})
 }
 
-func writeHookJSON(cmd *cobra.Command, value any) error {
-	return json.NewEncoder(cmd.OutOrStdout()).Encode(value)
+func writeHookOutput(value any) error {
+	return GetPrinter().Print(value)
 }

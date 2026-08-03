@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -122,6 +123,31 @@ func TestHookHealthReportReflectsAuthAndSourceOutcomes(t *testing.T) {
 	}
 }
 
+func TestHooksStatusUsesStandardFormatsAndQuiet(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	runStatus := func() error { return runHooksStatus(&cobra.Command{}, nil) }
+	if output := captureHookCommandOutput(t, "text", false, runStatus); !strings.Contains(output, "enabled:") || strings.HasPrefix(strings.TrimSpace(output), "{") {
+		t.Fatalf("text format was not applied: %q", output)
+	}
+	if output := captureHookCommandOutput(t, "yaml", false, runStatus); !strings.Contains(output, "enabled: false") {
+		t.Fatalf("yaml format was not applied: %q", output)
+	}
+	if output := captureHookCommandOutput(t, "json", true, runStatus); output != "" {
+		t.Fatalf("quiet output must be empty, got %q", output)
+	}
+}
+
+func TestHooksCommandsRejectPositionalArguments(t *testing.T) {
+	commands := []*cobra.Command{hooksCmd, hooksStatusCmd, hooksEnableCmd, hooksConfigureCmd, hooksDisableCmd, hooksTestCmd, hooksRunCmd}
+	for _, command := range commands {
+		t.Run(command.Name(), func(t *testing.T) {
+			if err := command.Args(command, []string{"unexpected"}); err == nil {
+				t.Fatalf("%s accepted a positional argument", command.CommandPath())
+			}
+		})
+	}
+}
+
 func TestHookAdaptersAreSilentAndNonblockingWithoutWorkingGWS(t *testing.T) {
 	paths := []string{
 		filepath.Join("..", "hooks", "claude-hook.sh"),
@@ -165,6 +191,40 @@ func TestHookRunIsSilentForInvalidHostInvocation(t *testing.T) {
 	if output.Len() != 0 {
 		t.Fatalf("invalid hook invocation must not emit a diagnostic envelope: %q", output.String())
 	}
+}
+
+func captureHookCommandOutput(t *testing.T, outputFormat string, quietValue bool, run func() error) string {
+	t.Helper()
+	formatFlag := rootCmd.PersistentFlags().Lookup("format")
+	if formatFlag == nil {
+		t.Fatal("root --format flag is not registered")
+	}
+	oldFormat, oldQuiet, oldStdout := formatFlag.Value.String(), quiet, os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rootCmd.PersistentFlags().Set("format", outputFormat); err != nil {
+		t.Fatal(err)
+	}
+	quiet, os.Stdout = quietValue, writer
+	defer func() {
+		_ = rootCmd.PersistentFlags().Set("format", oldFormat)
+		quiet, os.Stdout = oldQuiet, oldStdout
+		_ = reader.Close()
+		_ = writer.Close()
+	}()
+	if err := run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	output, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(output)
 }
 
 func newHookConfigureTestCommand() *cobra.Command {
