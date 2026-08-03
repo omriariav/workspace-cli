@@ -676,26 +676,46 @@ func TestTasksUpdate_MockServer(t *testing.T) {
 }
 
 func TestTasksReopen_MockServer(t *testing.T) {
+	completed := "2026-08-03T07:00:00.000Z"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/tasks/v1/lists/@default/tasks/task-123" && r.Method == http.MethodGet:
 			json.NewEncoder(w).Encode(&tasks.Task{
-				Id:     "task-123",
-				Title:  "Completed task",
-				Notes:  "Keep these notes",
-				Status: "completed",
+				Id:        "task-123",
+				Title:     "Completed task",
+				Notes:     "Keep these notes",
+				Due:       "2026-08-04T00:00:00.000Z",
+				Status:    "completed",
+				Completed: &completed,
 			})
 		case r.URL.Path == "/tasks/v1/lists/@default/tasks/task-123" && r.Method == http.MethodPut:
-			var task tasks.Task
-			if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+			var body map[string]json.RawMessage
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatalf("decode task: %v", err)
+			}
+			if _, ok := body["completed"]; ok {
+				t.Error("reopen request must omit completed")
+			}
+			data, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal task body: %v", err)
+			}
+			var task tasks.Task
+			if err := json.Unmarshal(data, &task); err != nil {
+				t.Fatalf("decode task body: %v", err)
 			}
 			if task.Status != "needsAction" {
 				t.Errorf("status = %q, want needsAction", task.Status)
 			}
+			if task.Completed != nil {
+				t.Errorf("completed = %q, want nil", *task.Completed)
+			}
 			if task.Notes != "Keep these notes" {
 				t.Errorf("notes = %q, want preserved notes", task.Notes)
+			}
+			if task.Due != "2026-08-04T00:00:00.000Z" {
+				t.Errorf("due = %q, want preserved due date", task.Due)
 			}
 			json.NewEncoder(w).Encode(&task)
 		default:
@@ -708,12 +728,7 @@ func TestTasksReopen_MockServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new Tasks service: %v", err)
 	}
-	task, err := svc.Tasks.Get("@default", "task-123").Do()
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
-	task.Status = "needsAction"
-	updated, err := svc.Tasks.Update("@default", "task-123", task).Do()
+	updated, err := reopenTask(svc, "@default", "task-123")
 	if err != nil {
 		t.Fatalf("reopen task: %v", err)
 	}

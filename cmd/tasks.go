@@ -726,18 +726,9 @@ func runTasksReopen(cmd *cobra.Command, args []string) error {
 	tasklistID := args[0]
 	taskID := args[1]
 
-	// Get the task first so its title, notes, due date, and other fields are
-	// preserved when only the status changes.
-	task, err := svc.Tasks.Get(tasklistID, taskID).Do()
+	updated, err := reopenTask(svc, tasklistID, taskID)
 	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to get task: %w", err))
-	}
-
-	task.Status = "needsAction"
-
-	updated, err := svc.Tasks.Update(tasklistID, taskID, task).Do()
-	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to reopen task: %w", err))
+		return p.PrintError(err)
 	}
 
 	return p.Print(map[string]interface{}{
@@ -745,4 +736,23 @@ func runTasksReopen(cmd *cobra.Command, args []string) error {
 		"id":     updated.Id,
 		"title":  updated.Title,
 	})
+}
+
+func reopenTask(svc *tasks.Service, tasklistID, taskID string) (*tasks.Task, error) {
+	// Get the task first so its title, notes, due date, and other fields are
+	// preserved when reopening it.
+	task, err := svc.Tasks.Get(tasklistID, taskID).Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get task: %w", err)
+	}
+
+	task.Status = "needsAction"
+	task.Completed = nil
+
+	updated, err := svc.Tasks.Update(tasklistID, taskID, task).Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to reopen task: %w", err)
+	}
+
+	return updated, nil
 }
