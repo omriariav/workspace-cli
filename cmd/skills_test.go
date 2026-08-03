@@ -120,29 +120,26 @@ func TestMarketplaceJSON_Valid(t *testing.T) {
 		t.Errorf("expected plugin name 'gws', got '%v'", gwsPlugin["name"])
 	}
 
-	// Validate skills array lists all expected skill paths
-	skills, ok := gwsPlugin["skills"].([]interface{})
-	if !ok {
-		t.Fatal("plugin skills is not an array")
+	// Components belong to plugin.json so the marketplace does not duplicate them.
+	for _, component := range []string{"skills", "hooks"} {
+		if _, ok := gwsPlugin[component]; ok {
+			t.Errorf("marketplace gws entry must not duplicate %s owned by plugin.json", component)
+		}
 	}
 
-	if len(skills) != len(expectedSkills) {
-		t.Errorf("expected %d skills in marketplace.json, got %d", len(expectedSkills), len(skills))
+	pluginData, err := os.ReadFile(filepath.Join(pluginDir(t), "plugin.json"))
+	if err != nil {
+		t.Fatalf("failed to read plugin.json: %v", err)
 	}
-
-	// Verify each expected skill has a path entry
-	for _, expected := range expectedSkills {
-		expectedPath := "./skills/" + expected
-		found := false
-		for _, s := range skills {
-			if s.(string) == expectedPath {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("marketplace.json missing skill path: %s", expectedPath)
-		}
+	var pluginManifest map[string]interface{}
+	if err := json.Unmarshal(pluginData, &pluginManifest); err != nil {
+		t.Fatalf("plugin.json is not valid JSON: %v", err)
+	}
+	if skills, ok := pluginManifest["skills"].([]interface{}); !ok || len(skills) != 1 || skills[0] != "./skills" {
+		t.Errorf("plugin.json must own the canonical skills component ./skills, got %v", pluginManifest["skills"])
+	}
+	if hooks, ok := pluginManifest["hooks"].(string); !ok || hooks != "./hooks/hooks.json" {
+		t.Errorf("plugin.json must own the canonical hooks component ./hooks/hooks.json, got %v", pluginManifest["hooks"])
 	}
 }
 

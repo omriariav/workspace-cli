@@ -13,24 +13,7 @@
       "name": "gws",
       "description": "Unofficial Google Workspace CLI — manage Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, and Search from the terminal. Not affiliated with Google.",
       "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/gmail",
-        "./skills/calendar",
-        "./skills/drive",
-        "./skills/docs",
-        "./skills/sheets",
-        "./skills/slides",
-        "./skills/tasks",
-        "./skills/chat",
-        "./skills/forms",
-        "./skills/search",
-        "./skills/auth",
-        "./skills/contacts",
-        "./skills/groups",
-        "./skills/keep",
-        "./skills/gws-setup"
-      ]
+      "strict": false
     }
   ]
 }
