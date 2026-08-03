@@ -1,0 +1,27 @@
+{
+  "description": "Optional GWS context hooks. The Go runtime remains disabled until the user explicitly applies hook configuration.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/claude-hook.sh\" SessionStart",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/claude-hook.sh\" UserPromptSubmit",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

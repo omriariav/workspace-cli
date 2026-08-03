@@ -1,0 +1,16 @@
+{
+  "name": "gws",
+  "version": "1.41.0",
+  "description": "Unofficial Google Workspace CLI skills and optional read-only session context hooks.",
+  "author": {
+    "name": "Omri Ariav",
+    "email": "omriariav@gmail.com",
+    "url": "https://github.com/omriariav"
+  },
+  "repository": "https://github.com/omriariav/workspace-cli",
+  "license": "MIT",
+  "skills": [
+    "./skills"
+  ],
+  "hooks": "./hooks/hooks.json"
+}

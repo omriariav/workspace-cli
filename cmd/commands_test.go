@@ -62,7 +62,7 @@ func TestRootCommand_HasSubcommands(t *testing.T) {
 	}
 
 	// Check for expected subcommands
-	expected := []string{"auth", "gmail", "calendar", "tasks", "drive", "docs", "sheets", "slides", "chat", "forms", "search", "contacts", "groups", "keep"}
+	expected := []string{"auth", "gmail", "calendar", "tasks", "drive", "docs", "sheets", "slides", "chat", "forms", "search", "contacts", "groups", "keep", "hooks"}
 	for _, name := range expected {
 		found := false
 		for _, cmd := range subcommands {
@@ -105,6 +105,23 @@ func TestAuthCommands(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("expected auth subcommand '%s' not found", name)
+		}
+	}
+}
+
+func TestHooksCommands(t *testing.T) {
+	if hooksCmd == nil {
+		t.Fatal("hooks command not registered")
+	}
+	for _, name := range []string{"status", "enable", "configure", "disable", "test", "run"} {
+		if command := findSubcommand(hooksCmd, name); command == nil {
+			t.Errorf("expected hooks subcommand %q", name)
+		}
+	}
+	configure := findSubcommand(hooksCmd, "configure")
+	for _, flag := range []string{"enabled", "time", "workspace", "calendar", "gmail", "sent-mail", "tasks", "chat", "refresh-minutes"} {
+		if configure.Flags().Lookup(flag) == nil {
+			t.Errorf("hooks configure missing --%s", flag)
 		}
 	}
 }

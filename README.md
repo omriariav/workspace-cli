@@ -90,6 +90,16 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws auth status` | Show current auth status and email |
 | `gws auth logout` | Remove stored credentials |
 
+### Hooks
+
+| Command | Description |
+|---------|-------------|
+| `gws hooks status` | Show safe effective hook state, auth readiness, source gaps, and duplicate time injectors; never prints cached context or tokens |
+| `gws hooks enable --time --workspace --scope user` | Preview enabling one or both opt-in providers; add `--apply` only after approval |
+| `gws hooks configure` | Preview preferences; `--enabled`, `--time`, and `--workspace` are user-scope-only consent controls, while workspace scope is limited to source, timezone, and TTL preferences |
+| `gws hooks test --event UserPromptSubmit` | Run an on-demand, read-only health check with metadata-only output |
+| `gws hooks disable --scope user` | Preview disabling hook fetching without changing normal GWS commands or authentication |
+
 ### Gmail
 
 | Command | Description |
@@ -558,13 +568,41 @@ gws auth logout && gws auth login
 /install-plugin omriariav/workspace-cli
 ```
 
-The plugin includes 14 skills (one per Google service + auth setup), each with quick reference tables, detailed flag documentation, and AI agent tips.
+The plugin includes 15 skills (one per Google service + auth setup, plus `gws-setup`), each with quick reference tables, detailed flag documentation, and AI agent tips.
 
 ## Codex Plugin
 
 `gws` also ships with a repo-local Codex plugin under `plugins/gws`, registered through `.agents/plugins/marketplace.json`. It mirrors the Claude Code skills with Codex-valid `SKILL.md` frontmatter and `agents/openai.yaml` metadata, so Codex can invoke skills such as `$gws-gmail`, `$gws-calendar`, and `$gws-drive`.
 
 The Codex plugin is intentionally self-contained: its skill docs live under `plugins/gws/skills/`, while the original Claude Code skill docs remain under `skills/`.
+
+## Optional Session Context Hooks
+
+The Claude Code and Codex plugins package the same optional hook workflow. Installing or updating either plugin remains inert: hooks are disabled by default, must be reviewed and trusted by the host, and make no Workspace API calls until a user explicitly enables a provider.
+
+Use `/gws-setup` in Claude Code or `$gws-setup` in Codex to inspect and preview setup. The underlying CLI is also available directly:
+
+```bash
+# Inspect only. It never prints tokens, secrets, or cached context.
+gws hooks status
+
+# Preview provider selection. No files change without --apply.
+gws hooks enable --time --workspace --scope user
+
+# Apply only after reviewing and approving that exact preview.
+gws hooks enable --time --workspace --scope user --apply
+
+# Verify with a read-only, on-demand event invocation.
+gws hooks test --event UserPromptSubmit
+```
+
+Applying this configuration does not itself activate lifecycle hooks. In Codex, use `/hooks` to inspect the `gws` `SessionStart` and `UserPromptSubmit` entries and explicitly approve them as a separate host-level action. Until that review/approval is complete, the GWS hook configuration remains inert.
+
+`time` and `workspace` are independent providers. Time is recomputed for every hook event using an explicit configured timezone or a portable system-local fallback, and it never needs Google authentication. Workspace context refreshes only on `SessionStart` or the first prompt after its configured TTL, never on a background timer. Its allowlisted sources are read-only Calendar, Gmail, sent-mail, Tasks, and explicit Chat-space reads; per-source and overall time bounds keep hook failures nonblocking.
+
+Preferences use this precedence: built-in defaults, user config `~/.config/gws/hooks.json`, workspace config `.gws/hooks.json`, then `GWS_HOOKS_ENABLED` and `GWS_HOOKS_TIMEZONE`. User scope exclusively owns the global hook gate and both provider enablement settings. A repository `.gws/hooks.json` may contain only consent-free preferences such as timezone, Workspace refresh TTL, and source selection or limits; it cannot enable hooks, a provider, or private Workspace reads. Writes are atomic, merge-only, and mode-restricted. Workspace configuration never accepts credentials, tokens, or cached content. Private, volatile snapshots live outside the repository with restrictive permissions, and a degraded refresh retains a more useful previous snapshot instead of clobbering it.
+
+Enable or disable hooks and providers only with `--scope user`. After a user has authorized the Workspace provider, a repository may preview consent-free source, limit, TTL, timezone, task-list, or Chat-space preferences with `gws hooks configure --scope workspace`, then repeat the exact command with `--apply` after approval. To stop all hook fetches without changing normal `gws` commands or authentication, preview and then apply `gws hooks disable --scope user`. Status detects likely personal time injectors such as `~/.codex/hooks/inject-time.sh`; it reports them but never silently modifies them.
 
 ## License
 
