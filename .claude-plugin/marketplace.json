@@ -28,7 +28,8 @@
         "./skills/auth",
         "./skills/contacts",
         "./skills/groups",
-        "./skills/keep"
+        "./skills/keep",
+        "./skills/gws-setup"
       ]
     }
   ]

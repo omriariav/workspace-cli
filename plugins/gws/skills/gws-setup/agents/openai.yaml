@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Setup"
+  short_description: "Safely configure optional GWS context hooks"
+  default_prompt: "Use $gws-setup to inspect and preview optional GWS time or Workspace context hooks."

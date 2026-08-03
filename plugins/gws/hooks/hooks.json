@@ -1,0 +1,29 @@
+{
+  "description": "Optional, user-reviewed read-only GWS context hooks. Disabled by default until gws hooks enable is explicitly applied.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/hooks/codex-hook.sh\" SessionStart",
+            "timeout": 10,
+            "additionalContextLimit": 4000
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/hooks/codex-hook.sh\" UserPromptSubmit",
+            "timeout": 10,
+            "additionalContextLimit": 4000
+          }
+        ]
+      }
+    ]
+  }
+}

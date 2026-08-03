@@ -207,7 +207,7 @@ func TestCodexPluginJSON_Valid(t *testing.T) {
 		t.Fatalf("Codex plugin.json is not valid JSON: %v", err)
 	}
 
-	requiredFields := []string{"name", "version", "description", "author", "repository", "license", "skills", "interface"}
+	requiredFields := []string{"name", "version", "description", "author", "repository", "license", "skills", "hooks", "interface"}
 	for _, field := range requiredFields {
 		if _, ok := manifest[field]; !ok {
 			t.Errorf("Codex plugin.json missing required field: %s", field)
@@ -220,6 +220,78 @@ func TestCodexPluginJSON_Valid(t *testing.T) {
 	if skills, ok := manifest["skills"].(string); !ok || skills != "./skills/" {
 		t.Errorf("expected Codex plugin skills path './skills/', got '%v'", manifest["skills"])
 	}
+	if hooks, ok := manifest["hooks"].(string); !ok || hooks != "./hooks/hooks.json" {
+		t.Errorf("expected Codex hook manifest './hooks/hooks.json', got '%v'", manifest["hooks"])
+	}
+}
+
+func TestPluginHookManifestsUseOneEntrypointPerEvent(t *testing.T) {
+	codexHooksPath := filepath.Join(codexPluginDir(t), "hooks", "hooks.json")
+	codexData, err := os.ReadFile(codexHooksPath)
+	if err != nil {
+		t.Fatalf("failed to read Codex hooks manifest: %v", err)
+	}
+	claudePluginPath := filepath.Join(pluginDir(t), "plugin.json")
+	claudePluginData, err := os.ReadFile(claudePluginPath)
+	if err != nil {
+		t.Fatalf("failed to read Claude plugin manifest: %v", err)
+	}
+	var claudePlugin map[string]interface{}
+	if err := json.Unmarshal(claudePluginData, &claudePlugin); err != nil {
+		t.Fatalf("Claude plugin manifest is not valid JSON: %v", err)
+	}
+	if hooks, ok := claudePlugin["hooks"].(string); !ok || hooks != "./hooks/hooks.json" {
+		t.Fatalf("Claude plugin hooks must reference ./hooks/hooks.json, got %v", claudePlugin["hooks"])
+	}
+	claudeHooksPath := filepath.Join("..", "hooks", "hooks.json")
+	claudeData, err := os.ReadFile(claudeHooksPath)
+	if err != nil {
+		t.Fatalf("failed to read Claude hooks manifest: %v", err)
+	}
+
+	for name, data := range map[string][]byte{"codex": codexData, "claude": claudeData} {
+		var manifest map[string]interface{}
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			t.Fatalf("%s hook manifest is not valid JSON: %v", name, err)
+		}
+		hooks, ok := manifest["hooks"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s manifest missing hooks object", name)
+		}
+		for _, event := range []string{"SessionStart", "UserPromptSubmit"} {
+			entries, ok := hooks[event].([]interface{})
+			if !ok || len(entries) != 1 {
+				t.Errorf("%s %s must have one compositional entrypoint", name, event)
+				continue
+			}
+			entry, ok := entries[0].(map[string]interface{})
+			if !ok {
+				t.Errorf("%s %s entry must be an object", name, event)
+				continue
+			}
+			commands, ok := entry["hooks"].([]interface{})
+			if !ok || len(commands) != 1 {
+				t.Errorf("%s %s must have one command adapter", name, event)
+				continue
+			}
+			command, ok := commands[0].(map[string]interface{})
+			if !ok {
+				t.Errorf("%s %s command must be an object", name, event)
+				continue
+			}
+			if name == "claude" {
+				if command["command"] != "sh" {
+					t.Errorf("Claude %s adapter must invoke sh directly", event)
+				}
+				args, ok := command["args"].([]interface{})
+				if !ok || len(args) != 2 || args[0] != "${CLAUDE_PLUGIN_ROOT}/hooks/claude-hook.sh" || args[1] != event {
+					t.Errorf("Claude %s adapter args are invalid: %v", event, command["args"])
+				}
+			} else if value, ok := command["command"].(string); !ok || !strings.Contains(value, "${PLUGIN_ROOT}/hooks/codex-hook.sh") {
+				t.Errorf("Codex %s adapter command is invalid: %v", event, command["command"])
+			}
+		}
+	}
 }
 
 // --- Skill Directory Structure Tests ---
@@ -227,7 +299,7 @@ func TestCodexPluginJSON_Valid(t *testing.T) {
 var expectedSkills = []string{
 	"gmail", "calendar", "drive", "docs", "sheets",
 	"slides", "tasks", "chat", "forms", "search", "auth",
-	"contacts", "groups", "keep",
+	"contacts", "groups", "keep", "gws-setup",
 }
 
 func TestCodexSkills_MirrorClaudeSkills(t *testing.T) {
@@ -462,7 +534,7 @@ func TestSKILLmd_HasYAMLFrontmatter(t *testing.T) {
 			}
 
 			// Verify name follows gws-{service} pattern
-			expectedName := "gws-" + skill
+			expectedName := expectedSkillName(skill)
 			if !strings.Contains(frontmatter, "name: "+expectedName) {
 				t.Errorf("expected frontmatter name '%s'", expectedName)
 			}
@@ -496,8 +568,9 @@ func TestCodexSKILLmd_HasCodexFrontmatter(t *testing.T) {
 			}
 
 			frontmatter := content[4 : 4+secondDash]
-			if !strings.Contains(frontmatter, "name: gws-"+skill) {
-				t.Errorf("expected Codex frontmatter name 'gws-%s'", skill)
+			expectedName := expectedSkillName(skill)
+			if !strings.Contains(frontmatter, "name: "+expectedName) {
+				t.Errorf("expected Codex frontmatter name %q", expectedName)
 			}
 			if !strings.Contains(frontmatter, "description:") {
 				t.Error("Codex SKILL.md frontmatter missing description")
@@ -507,6 +580,13 @@ func TestCodexSKILLmd_HasCodexFrontmatter(t *testing.T) {
 			}
 		})
 	}
+}
+
+func expectedSkillName(skill string) string {
+	if skill == "gws-setup" {
+		return skill
+	}
+	return "gws-" + skill
 }
 
 func TestSkillFiles_NoUnexpectedCodexSkills(t *testing.T) {
@@ -990,7 +1070,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		count++
 	}
 
-	expectedTotal := 29 // 1 marketplace.json + 14 SKILL.md + 13 commands.md + 1 setup-guide.md
+	expectedTotal := 30 // 1 marketplace.json + 15 SKILL.md + 13 commands.md + 1 setup-guide.md
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}
