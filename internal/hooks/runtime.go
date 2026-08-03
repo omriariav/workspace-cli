@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -125,6 +126,7 @@ type Runtime struct {
 type RenderedContext struct {
 	AdditionalContext string
 	Refreshed         bool
+	WorkspaceDegraded bool
 	Diagnostics       []string
 	ResolvedTimezone  string
 	Sources           []SourceStatus
@@ -175,15 +177,18 @@ func (r Runtime) Render(ctx context.Context, event Event, cfg Config) RenderedCo
 	}
 
 	refreshed := false
+	workspaceDegraded := false
 	workspace := Snapshot{}
 	if cfg.Providers.Workspace.Enabled {
 		var didRefresh bool
+		var degraded bool
 		var diagnostic string
-		workspace, didRefresh, diagnostic = r.workspace(ctx, event, cfg, now)
+		workspace, didRefresh, degraded, diagnostic = r.workspace(ctx, event, cfg, now)
 		if workspace.Context != "" {
 			sections = append(sections, workspace.Context)
 		}
 		refreshed = didRefresh
+		workspaceDegraded = degraded
 		if diagnostic != "" {
 			diagnostics = append(diagnostics, diagnostic)
 		}
@@ -194,6 +199,7 @@ func (r Runtime) Render(ctx context.Context, event Event, cfg Config) RenderedCo
 	return RenderedContext{
 		AdditionalContext: strings.Join(sections, "\n\n"),
 		Refreshed:         refreshed,
+		WorkspaceDegraded: workspaceDegraded,
 		Diagnostics:       diagnostics,
 		ResolvedTimezone:  resolvedTimezone,
 		Sources:           sourceStatuses(workspace.Sources),
@@ -201,7 +207,7 @@ func (r Runtime) Render(ctx context.Context, event Event, cfg Config) RenderedCo
 	}
 }
 
-func (r Runtime) workspace(ctx context.Context, event Event, cfg Config, now time.Time) (Snapshot, bool, string) {
+func (r Runtime) workspace(ctx context.Context, event Event, cfg Config, now time.Time) (Snapshot, bool, bool, string) {
 	previous := Snapshot{}
 	cacheDiagnostic := ""
 	workspaceKey := r.cacheWorkspaceKey()
@@ -218,7 +224,7 @@ func (r Runtime) workspace(ctx context.Context, event Event, cfg Config, now tim
 	refreshAfter := time.Duration(cfg.Providers.Workspace.RefreshMinutes) * time.Minute
 	needsRefresh := event == EventSessionStart || previous.UpdatedAt.IsZero() || now.Sub(previous.UpdatedAt) >= refreshAfter
 	if !needsRefresh {
-		return previous, false, ""
+		return previous, false, false, ""
 	}
 
 	refreshCtx, cancel := context.WithTimeout(ctx, r.OverallTimeout)
@@ -228,20 +234,20 @@ func (r Runtime) workspace(ctx context.Context, event Event, cfg Config, now tim
 	fresh.WorkspaceKey = workspaceKey
 	fresh.SourceConfigKey = sourceConfigKey
 	if fresh.UsefulSources() == 0 && previous.Context != "" {
-		return previous, false, "Workspace refresh failed; retained the previous context"
+		return previous, false, true, "Workspace refresh failed; retained the previous context"
 	}
 	if previous.Context != "" && refreshLostUsefulSource(previous, fresh, cfg) {
-		return previous, false, "Workspace refresh was less complete; retained the previous context"
+		return previous, false, true, "Workspace refresh was less complete; retained the previous context"
 	}
 	if r.Store != nil {
 		if err := r.Store.Save(fresh); err != nil {
 			if cacheDiagnostic != "" {
-				return fresh, true, cacheDiagnostic + "; Workspace refreshed but its volatile cache could not be saved"
+				return fresh, true, false, cacheDiagnostic + "; Workspace refreshed but its volatile cache could not be saved"
 			}
-			return fresh, true, "Workspace refreshed but its volatile cache could not be saved"
+			return fresh, true, false, "Workspace refreshed but its volatile cache could not be saved"
 		}
 	}
-	return fresh, true, cacheDiagnostic
+	return fresh, true, false, cacheDiagnostic
 }
 
 func (r Runtime) cacheWorkspaceKey() string {
@@ -517,19 +523,47 @@ func boundedError(err error) string {
 // It is intentionally public so tests and future source additions must prove
 // their commands cannot mutate a Workspace account.
 func ReadOnlyArgs(args []string) bool {
-	if len(args) < 3 || args[0] != "--format" || args[1] != "json" {
+	if len(args) < 4 || args[0] != "--format" || args[1] != "json" {
 		return false
 	}
 	switch args[2] {
 	case "calendar":
-		return len(args) >= 4 && args[3] == "events"
+		return len(args) == 10 && args[3] == "events" && args[4] == "--from" && validHookDate(args[5]) && args[6] == "--days" && positiveHookInt(args[7]) && args[8] == "--max" && positiveHookInt(args[9])
 	case "gmail":
-		return len(args) >= 4 && args[3] == "list"
+		return len(args) == 8 && args[3] == "list" && args[4] == "--query" && validGmailHookQuery(args[5]) && args[6] == "--max" && positiveHookInt(args[7])
 	case "tasks":
-		return len(args) >= 4 && (args[3] == "lists" || args[3] == "list")
+		if len(args) == 4 && args[3] == "lists" {
+			return true
+		}
+		return len(args) == 7 && args[3] == "list" && validHookValue(args[4]) && args[5] == "--max" && positiveHookInt(args[6])
 	case "chat":
-		return len(args) >= 4 && args[3] == "unread"
+		return len(args) == 7 && args[3] == "unread" && validHookValue(args[4]) && args[5] == "--max" && positiveHookInt(args[6])
 	default:
 		return false
 	}
+}
+
+func validHookDate(value string) bool {
+	_, err := time.Parse("2006-01-02", value)
+	return err == nil
+}
+
+func positiveHookInt(value string) bool {
+	parsed, err := strconv.Atoi(value)
+	return err == nil && parsed > 0
+}
+
+func validHookValue(value string) bool {
+	return value != "" && !strings.HasPrefix(value, "-")
+}
+
+func validGmailHookQuery(value string) bool {
+	if value == "is:starred OR (is:important is:unread)" {
+		return true
+	}
+	const prefix = "in:sent newer_than:"
+	if !strings.HasPrefix(value, prefix) || !strings.HasSuffix(value, "d") {
+		return false
+	}
+	return positiveHookInt(strings.TrimSuffix(strings.TrimPrefix(value, prefix), "d"))
 }

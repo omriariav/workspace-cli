@@ -86,17 +86,17 @@ func TestWorkspaceTTLAndStaleRefresh(t *testing.T) {
 	}
 	cfg := enabledConfig()
 	first := runtime.Render(context.Background(), EventSessionStart, cfg)
-	if !first.Refreshed || calls != 1 {
+	if !first.Refreshed || first.WorkspaceDegraded || calls != 1 {
 		t.Fatalf("SessionStart refresh = %v, calls = %d", first.Refreshed, calls)
 	}
 	now = now.Add(4 * time.Minute)
 	insideTTL := runtime.Render(context.Background(), EventUserPromptSubmit, cfg)
-	if insideTTL.Refreshed || calls != 1 {
+	if insideTTL.Refreshed || insideTTL.WorkspaceDegraded || calls != 1 {
 		t.Fatalf("cache hit refreshed = %v, calls = %d", insideTTL.Refreshed, calls)
 	}
 	now = now.Add(2 * time.Minute)
 	stale := runtime.Render(context.Background(), EventUserPromptSubmit, cfg)
-	if !stale.Refreshed || calls != 2 {
+	if !stale.Refreshed || stale.WorkspaceDegraded || calls != 2 {
 		t.Fatalf("stale prompt refresh = %v, calls = %d", stale.Refreshed, calls)
 	}
 }
@@ -279,11 +279,45 @@ func TestDegradedRefreshRetainsMoreUsefulSnapshot(t *testing.T) {
 	if second.Refreshed {
 		t.Fatal("less-complete refresh should not replace the existing snapshot")
 	}
+	if !second.WorkspaceDegraded {
+		t.Fatalf("retained less-complete refresh must be marked degraded: %#v", second)
+	}
 	if !strings.Contains(second.AdditionalContext, first.AdditionalContext) {
 		t.Fatalf("degraded refresh clobbered snapshot\nwant preserved: %q\n got: %q", first.AdditionalContext, second.AdditionalContext)
 	}
 	if len(second.Diagnostics) == 0 || !strings.Contains(second.Diagnostics[0], "less complete") {
 		t.Fatalf("missing truthful degradation diagnostic: %#v", second.Diagnostics)
+	}
+}
+
+func TestFailedRefreshRetainsPreviousSnapshotAndMarksCurrentRefreshDegraded(t *testing.T) {
+	now := time.Date(2026, time.August, 3, 12, 0, 0, 0, time.UTC)
+	store := &memoryStore{}
+	failRefresh := false
+	runtime := Runtime{
+		Now:   func() time.Time { return now },
+		Local: time.UTC,
+		Store: store,
+		Run: func(context.Context, []string) ([]byte, error) {
+			if failRefresh {
+				return nil, errors.New("temporary network failure")
+			}
+			return []byte(`{"events":[{"id":"stable"}]}`), nil
+		},
+	}
+	first := runtime.Render(context.Background(), EventSessionStart, enabledConfig())
+	if !first.Refreshed || first.WorkspaceDegraded {
+		t.Fatalf("initial refresh must be healthy: %#v", first)
+	}
+
+	failRefresh = true
+	now = now.Add(6 * time.Minute)
+	second := runtime.Render(context.Background(), EventUserPromptSubmit, enabledConfig())
+	if second.Refreshed || !second.WorkspaceDegraded {
+		t.Fatalf("failed refresh must retain context and mark it degraded: %#v", second)
+	}
+	if !strings.Contains(second.AdditionalContext, first.AdditionalContext) || len(second.Diagnostics) == 0 || !strings.Contains(second.Diagnostics[0], "refresh failed") {
+		t.Fatalf("failed refresh did not retain prior context and diagnostics: %#v", second)
 	}
 }
 
@@ -321,6 +355,9 @@ func TestSameCountSourceLossRetainsPreviousSnapshot(t *testing.T) {
 	}
 	if len(second.Diagnostics) != 1 || !strings.Contains(second.Diagnostics[0], "less complete") {
 		t.Fatalf("missing source-loss diagnostic: %#v", second.Diagnostics)
+	}
+	if !second.WorkspaceDegraded {
+		t.Fatalf("retained source-loss refresh must be marked degraded: %#v", second)
 	}
 }
 
@@ -422,10 +459,10 @@ func TestEffectiveConfigPrecedenceAndReadOnlyAllowlist(t *testing.T) {
 	dir := t.TempDir()
 	userPath := filepath.Join(dir, "user.json")
 	workspacePath := filepath.Join(dir, "workspace.json")
-	if err := os.WriteFile(userPath, []byte(`{"enabled":true,"timezone":"America/Chicago"}`), 0600); err != nil {
+	if err := os.WriteFile(userPath, []byte(`{"enabled":true,"timezone":"America/Chicago","providers":{"time":{"enabled":true}}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(workspacePath, []byte(`{"timezone":"Europe/London","providers":{"time":{"enabled":true}}}`), 0600); err != nil {
+	if err := os.WriteFile(workspacePath, []byte(`{"timezone":"Europe/London","providers":{"workspace":{"refresh_minutes":7}}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := LoadEffective(userPath, workspacePath, func(key string) string {
@@ -437,28 +474,43 @@ func TestEffectiveConfigPrecedenceAndReadOnlyAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Enabled || !cfg.Providers.Time.Enabled || cfg.Timezone != "Asia/Tokyo" {
+	if !cfg.Enabled || !cfg.Providers.Time.Enabled || cfg.Providers.Workspace.RefreshMinutes != 7 || cfg.Timezone != "Asia/Tokyo" {
 		t.Fatalf("unexpected precedence result: %#v", cfg)
 	}
+}
+
+func TestReadOnlyArgsAcceptsExactRuntimeShapes(t *testing.T) {
 	for _, args := range [][]string{
-		{"--format", "json", "calendar", "events"},
-		{"--format", "json", "gmail", "list"},
+		{"--format", "json", "calendar", "events", "--from", "2026-08-02", "--days", "8", "--max", "8"},
+		{"--format", "json", "gmail", "list", "--query", "is:starred OR (is:important is:unread)", "--max", "8"},
+		{"--format", "json", "gmail", "list", "--query", "in:sent newer_than:7d", "--max", "5"},
 		{"--format", "json", "tasks", "lists"},
-		{"--format", "json", "tasks", "list", "id"},
-		{"--format", "json", "chat", "unread", "spaces/id"},
+		{"--format", "json", "tasks", "list", "id", "--max", "10"},
+		{"--format", "json", "chat", "unread", "spaces/id", "--max", "5"},
 	} {
 		if !ReadOnlyArgs(args) {
-			t.Fatalf("read-only command rejected: %#v", args)
+			t.Fatalf("production hook command rejected: %#v", args)
 		}
 	}
-	if ReadOnlyArgs([]string{"--format", "json", "gmail", "send"}) {
-		t.Fatal("mutating Gmail command was accepted")
+	for _, args := range [][]string{
+		{"--format", "json", "gmail", "send", "--to", "person@example.com"},
+		{"--format", "json", "calendar", "events", "--from", "2026-08-02", "--days", "8", "--max", "8", "--delete"},
+		{"--format", "json", "calendar", "events", "--days", "8", "--from", "2026-08-02", "--max", "8"},
+		{"--format", "json", "gmail", "list", "--max", "8", "--query", "is:starred OR (is:important is:unread)"},
+		{"--format", "json", "tasks", "list", "id", "--max", "10", "--unknown"},
+		{"--format", "json", "chat", "unread", "spaces/id", "--mark-read"},
+		{"--format", "json", "chat", "unread", "--mark-read", "--max", "5"},
+		{"--format", "json", "chat", "unread", "spaces/id", "--max", "5", "--unknown"},
+	} {
+		if ReadOnlyArgs(args) {
+			t.Fatalf("unsafe or non-production command accepted: %#v", args)
+		}
 	}
 }
 
 func TestWorkspaceConfigRejectsCredentialsAndCachedContent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hooks.json")
-	if err := os.WriteFile(path, []byte(`{"providers":{"time":{"enabled":true}},"oauth_token":"not allowed"}`), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"oauth_token":"not allowed"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := ValidateWorkspaceConfig(path); err == nil || !strings.Contains(err.Error(), "oauth_token") {
@@ -475,5 +527,63 @@ func TestWorkspaceConfigRejectsCredentialsAndCachedContent(t *testing.T) {
 	}
 	if err := ValidateWorkspaceConfig(path); err == nil || !strings.Contains(err.Error(), "unsupported preference") {
 		t.Fatalf("expected workspace preference allowlist rejection, got %v", err)
+	}
+}
+
+func TestWorkspaceConfigRejectsConsentKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hooks.json")
+	for name, contents := range map[string]string{
+		"global":             `{"enabled":true}`,
+		"time provider":      `{"providers":{"time":{"enabled":true}}}`,
+		"workspace provider": `{"providers":{"workspace":{"enabled":true}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := ValidateWorkspaceConfig(path); err == nil {
+				t.Fatalf("workspace config accepted consent key: %s", contents)
+			}
+		})
+	}
+}
+
+func TestUpdateWorkspaceFileWritesOnlyConsentFreeOverlay(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hooks.json")
+	patch := map[string]any{
+		"timezone": "America/New_York",
+		"providers": map[string]any{
+			"workspace": map[string]any{"refresh_minutes": 10},
+		},
+		"sources": map[string]any{
+			"calendar": map[string]any{"enabled": false, "limit": 4},
+		},
+	}
+	preview, err := UpdateWorkspaceFile(path, patch, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := preview["enabled"]; ok {
+		t.Fatalf("workspace preview inherited a global consent field: %#v", preview)
+	}
+	if providers := preview["providers"].(map[string]any); providers["workspace"].(map[string]any)["enabled"] != nil {
+		t.Fatalf("workspace preview inherited provider consent: %#v", preview)
+	}
+	if _, err := UpdateWorkspaceFile(path, patch, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateWorkspaceConfig(path); err != nil {
+		t.Fatalf("written workspace overlay must remain valid: %v", err)
+	}
+}
+
+func TestLoadEffectiveRejectsWorkspaceConsent(t *testing.T) {
+	dir := t.TempDir()
+	workspacePath := filepath.Join(dir, "hooks.json")
+	if err := os.WriteFile(workspacePath, []byte(`{"enabled":true}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadEffective("", workspacePath, nil); err == nil {
+		t.Fatal("workspace consent must be rejected before configuration is merged")
 	}
 }

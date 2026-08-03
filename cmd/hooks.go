@@ -18,7 +18,7 @@ import (
 var hooksCmd = &cobra.Command{
 	Use:   "hooks",
 	Short: "Configure opt-in agent context hooks",
-	Long:  "Configure the opt-in, read-only GWS context hooks. Configuration changes are previewed by default and require --apply to write.",
+	Long:  "Configure the opt-in, read-only GWS context hooks. Only user-scope configuration can enable hooks or providers; workspace configuration is limited to consent-free preferences. Configuration changes are previewed by default and require --apply to write.",
 	Args:  cobra.NoArgs,
 }
 
@@ -70,16 +70,16 @@ func init() {
 	hooksCmd.AddCommand(hooksStatusCmd, hooksEnableCmd, hooksConfigureCmd, hooksDisableCmd, hooksTestCmd, hooksRunCmd)
 
 	for _, command := range []*cobra.Command{hooksEnableCmd, hooksConfigureCmd, hooksDisableCmd} {
-		command.Flags().String("scope", "user", "configuration scope: user or workspace")
+		command.Flags().String("scope", "user", "configuration scope: user (consent) or workspace (preferences only)")
 		command.Flags().Bool("apply", false, "write the previewed configuration")
 	}
-	hooksEnableCmd.Flags().Bool("time", false, "enable the local current-time provider")
-	hooksEnableCmd.Flags().Bool("workspace", false, "enable the read-only Workspace provider")
+	hooksEnableCmd.Flags().Bool("time", false, "enable the local current-time provider (user scope only)")
+	hooksEnableCmd.Flags().Bool("workspace", false, "enable the read-only Workspace provider (user scope only)")
 
 	hooksConfigureCmd.Flags().String("timezone", "", "IANA timezone, for example America/New_York")
-	hooksConfigureCmd.Flags().Bool("enabled", false, "enable or disable hook fetching")
-	hooksConfigureCmd.Flags().Bool("time", false, "enable or disable the time provider")
-	hooksConfigureCmd.Flags().Bool("workspace", false, "enable or disable the Workspace provider")
+	hooksConfigureCmd.Flags().Bool("enabled", false, "enable or disable hook fetching (user scope only)")
+	hooksConfigureCmd.Flags().Bool("time", false, "enable or disable the time provider (user scope only)")
+	hooksConfigureCmd.Flags().Bool("workspace", false, "enable or disable the Workspace provider (user scope only)")
 	hooksConfigureCmd.Flags().Int("refresh-minutes", 0, "Workspace refresh TTL in minutes")
 	hooksConfigureCmd.Flags().Bool("calendar", false, "enable or disable Calendar context")
 	hooksConfigureCmd.Flags().Int("calendar-lookahead-days", 0, "calendar context lookahead in days")
@@ -127,6 +127,9 @@ func runHooksStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runHooksEnable(cmd *cobra.Command, args []string) error {
+	if err := requireUserConsentScope(cmd); err != nil {
+		return err
+	}
 	timeEnabled, _ := cmd.Flags().GetBool("time")
 	workspaceEnabled, _ := cmd.Flags().GetBool("workspace")
 	if !timeEnabled && !workspaceEnabled {
@@ -143,6 +146,11 @@ func runHooksEnable(cmd *cobra.Command, args []string) error {
 }
 
 func runHooksConfigure(cmd *cobra.Command, args []string) error {
+	if consentFlagsChanged(cmd) {
+		if err := requireUserConsentScope(cmd); err != nil {
+			return err
+		}
+	}
 	patch, err := configureHookPatch(cmd)
 	if err != nil {
 		return err
@@ -270,27 +278,51 @@ func sourceNumberPatch(cmd *cobra.Command, fields, flags []string) map[string]an
 }
 
 func runHooksDisable(cmd *cobra.Command, args []string) error {
+	if err := requireUserConsentScope(cmd); err != nil {
+		return err
+	}
 	return previewHookUpdate(cmd, map[string]any{"enabled": false})
+}
+
+func consentFlagsChanged(cmd *cobra.Command) bool {
+	for _, flag := range []string{"enabled", "time", "workspace"} {
+		if cmd.Flags().Changed(flag) {
+			return true
+		}
+	}
+	return false
+}
+
+func requireUserConsentScope(cmd *cobra.Command) error {
+	scope, _ := cmd.Flags().GetString("scope")
+	if scope != "user" {
+		return usageErrorf("hook and provider consent is user-scope only; workspace configuration cannot activate private reads")
+	}
+	return nil
 }
 
 func previewHookUpdate(cmd *cobra.Command, patch map[string]any) error {
 	scope, _ := cmd.Flags().GetString("scope")
+	if scope == "workspace" {
+		if err := pluginhooks.ValidateWorkspacePreferences(patch); err != nil {
+			return usageErrorf("invalid workspace hook configuration: %v", err)
+		}
+	}
 	path, err := hookConfigPath(scope)
 	if err != nil {
 		return usageErrorf("%v", err)
 	}
 	apply, _ := cmd.Flags().GetBool("apply")
-	planned, err := pluginhooks.UpdateFile(path, patch, false)
+	update := pluginhooks.UpdateFile
+	if scope == "workspace" {
+		update = pluginhooks.UpdateWorkspaceFile
+	}
+	_, err = update(path, patch, false)
 	if err != nil {
 		return fmt.Errorf("update hook configuration: %w", err)
 	}
-	if scope == "workspace" {
-		if err := pluginhooks.ValidateWorkspacePreferences(planned); err != nil {
-			return usageErrorf("invalid workspace hook configuration: %v", err)
-		}
-	}
 	if apply {
-		_, err = pluginhooks.UpdateFile(path, patch, true)
+		_, err = update(path, patch, true)
 		if err != nil {
 			return fmt.Errorf("update hook configuration: %w", err)
 		}
@@ -341,6 +373,7 @@ func hookHealthReportWithToken(cfg pluginhooks.Config, rendered pluginhooks.Rend
 		"source_status":       rendered.Sources,
 		"source_counts":       hookSourceCounts(cfg, rendered.Sources),
 		"workspace_refreshed": rendered.Refreshed,
+		"workspace_degraded":  rendered.WorkspaceDegraded,
 		"snapshot_updated_at": snapshotUpdatedAt,
 		"diagnostics":         rendered.Diagnostics,
 		"note":                "Health output contains state and diagnostics only; cached Workspace content is never printed.",
@@ -352,6 +385,9 @@ func hookHealthy(cfg pluginhooks.Config, rendered pluginhooks.RenderedContext, t
 		return true
 	}
 	if !tokenPresent {
+		return false
+	}
+	if rendered.WorkspaceDegraded {
 		return false
 	}
 	counts := hookSourceCounts(cfg, rendered.Sources)

@@ -52,6 +52,49 @@ func TestConfigureHookPatchRejectsNonpositiveLimits(t *testing.T) {
 	}
 }
 
+func TestWorkspaceScopeRejectsConsentPatches(t *testing.T) {
+	for name, patch := range map[string]map[string]any{
+		"global hook gate":   {"enabled": true},
+		"time provider":      {"providers": map[string]any{"time": map[string]any{"enabled": true}}},
+		"workspace provider": {"providers": map[string]any{"workspace": map[string]any{"enabled": true}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().String("scope", "workspace", "")
+			cmd.Flags().Bool("apply", false, "")
+			err := previewHookUpdate(cmd, patch)
+			if err == nil || !strings.Contains(err.Error(), "invalid workspace hook configuration") {
+				t.Fatalf("workspace scope accepted consent patch %#v: %v", patch, err)
+			}
+		})
+	}
+}
+
+func TestHookConsentCommandsRequireUserScope(t *testing.T) {
+	enable := &cobra.Command{}
+	enable.Flags().String("scope", "workspace", "")
+	enable.Flags().Bool("time", true, "")
+	enable.Flags().Bool("workspace", false, "")
+	if err := runHooksEnable(enable, nil); err == nil || !strings.Contains(err.Error(), "user-scope only") {
+		t.Fatalf("workspace-scoped enable was not rejected: %v", err)
+	}
+
+	disable := &cobra.Command{}
+	disable.Flags().String("scope", "workspace", "")
+	if err := runHooksDisable(disable, nil); err == nil || !strings.Contains(err.Error(), "user-scope only") {
+		t.Fatalf("workspace-scoped disable was not rejected: %v", err)
+	}
+
+	configure := newHookConfigureTestCommand()
+	configure.Flags().String("scope", "user", "")
+	if err := configure.Flags().Parse([]string{"--scope=workspace", "--enabled=true"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runHooksConfigure(configure, nil); err == nil || !strings.Contains(err.Error(), "user-scope only") {
+		t.Fatalf("workspace-scoped provider consent was not rejected: %v", err)
+	}
+}
+
 func TestHookHealthReportNeverContainsWorkspaceContext(t *testing.T) {
 	secretContext := "Calendar subject and message body must never appear here"
 	report := hookHealthReport(pluginhooks.DefaultConfig(), pluginhooks.RenderedContext{
@@ -113,6 +156,14 @@ func TestHookHealthReportReflectsAuthAndSourceOutcomes(t *testing.T) {
 	}, true)
 	if allAvailable["healthy"] != true {
 		t.Fatalf("ready auth and all configured sources available must be healthy: %#v", allAvailable)
+	}
+
+	retainedDegraded := hookHealthReportWithToken(workspace, pluginhooks.RenderedContext{
+		WorkspaceDegraded: true,
+		Sources:           []pluginhooks.SourceStatus{{Name: "Calendar", Available: true}},
+	}, true)
+	if retainedDegraded["healthy"] != false || retainedDegraded["workspace_degraded"] != true {
+		t.Fatalf("a retained degraded refresh must be unhealthy despite stale available sources: %#v", retainedDegraded)
 	}
 
 	timeOnly := pluginhooks.DefaultConfig()

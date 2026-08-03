@@ -96,7 +96,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 |---------|-------------|
 | `gws hooks status` | Show safe effective hook state, auth readiness, source gaps, and duplicate time injectors; never prints cached context or tokens |
 | `gws hooks enable --time --workspace --scope user` | Preview enabling one or both opt-in providers; add `--apply` only after approval |
-| `gws hooks configure` | Preview source, timezone, TTL, and provider settings; numeric limits must be positive |
+| `gws hooks configure` | Preview preferences; `--enabled`, `--time`, and `--workspace` are user-scope-only consent controls, while workspace scope is limited to source, timezone, and TTL preferences |
 | `gws hooks test --event UserPromptSubmit` | Run an on-demand, read-only health check with metadata-only output |
 | `gws hooks disable --scope user` | Preview disabling hook fetching without changing normal GWS commands or authentication |
 
@@ -599,9 +599,9 @@ Applying this configuration does not itself activate lifecycle hooks. In Codex, 
 
 `time` and `workspace` are independent providers. Time is recomputed for every hook event using an explicit configured timezone or a portable system-local fallback, and it never needs Google authentication. Workspace context refreshes only on `SessionStart` or the first prompt after its configured TTL, never on a background timer. Its allowlisted sources are read-only Calendar, Gmail, sent-mail, Tasks, and explicit Chat-space reads; per-source and overall time bounds keep hook failures nonblocking.
 
-Preferences use this precedence: built-in defaults, user config `~/.config/gws/hooks.json`, workspace config `.gws/hooks.json`, then `GWS_HOOKS_ENABLED` and `GWS_HOOKS_TIMEZONE`. Writes are atomic, merge-only, and mode-restricted. Workspace configuration accepts preferences only, never credentials, tokens, or cached content. Private, volatile snapshots live outside the repository with restrictive permissions, and a degraded refresh retains a more useful previous snapshot instead of clobbering it.
+Preferences use this precedence: built-in defaults, user config `~/.config/gws/hooks.json`, workspace config `.gws/hooks.json`, then `GWS_HOOKS_ENABLED` and `GWS_HOOKS_TIMEZONE`. User scope exclusively owns the global hook gate and both provider enablement settings. A repository `.gws/hooks.json` may contain only consent-free preferences such as timezone, Workspace refresh TTL, and source selection or limits; it cannot enable hooks, a provider, or private Workspace reads. Writes are atomic, merge-only, and mode-restricted. Workspace configuration never accepts credentials, tokens, or cached content. Private, volatile snapshots live outside the repository with restrictive permissions, and a degraded refresh retains a more useful previous snapshot instead of clobbering it.
 
-To adjust limits, sources, TTL, timezone, task lists, or Chat spaces, first preview with `gws hooks configure`, then repeat the exact command with `--apply` after approval. To stop all hook fetches without changing normal `gws` commands or authentication, preview and then apply `gws hooks disable --scope user`. Status detects likely personal time injectors such as `~/.codex/hooks/inject-time.sh`; it reports them but never silently modifies them.
+Enable or disable hooks and providers only with `--scope user`. After a user has authorized the Workspace provider, a repository may preview consent-free source, limit, TTL, timezone, task-list, or Chat-space preferences with `gws hooks configure --scope workspace`, then repeat the exact command with `--apply` after approval. To stop all hook fetches without changing normal `gws` commands or authentication, preview and then apply `gws hooks disable --scope user`. Status detects likely personal time injectors such as `~/.codex/hooks/inject-time.sh`; it reports them but never silently modifies them.
 
 ## License
 

@@ -38,7 +38,7 @@ Use `--format json` for structured automation, `--format yaml` for readable stru
 
 ## Scope and providers
 
-Configuration precedence is: built-in defaults, user config `~/.config/gws/hooks.json`, workspace config `.gws/hooks.json`, then `GWS_HOOKS_ENABLED` and `GWS_HOOKS_TIMEZONE` environment overrides. Workspace config contains allowlisted preferences only, never credentials, tokens, or cached content.
+Configuration precedence is: built-in defaults, user config `~/.config/gws/hooks.json`, workspace config `.gws/hooks.json`, then `GWS_HOOKS_ENABLED` and `GWS_HOOKS_TIMEZONE` environment overrides. The user config exclusively owns the global hook gate and both provider enablement settings. Workspace config contains only allowlisted, consent-free preferences such as timezone, Workspace refresh TTL, and source settings; it cannot activate a provider, private reads, credentials, tokens, or cached content.
 
 Ask the user to choose one or both providers:
 
@@ -51,7 +51,7 @@ Preview every mutation without `--apply`:
 
 ```bash
 gws hooks enable --time --scope user
-gws hooks enable --workspace --scope workspace
+gws hooks enable --workspace --scope user
 gws hooks enable --time --workspace --scope user
 gws hooks configure --scope user --enabled=true --time=true --workspace=false
 gws hooks configure --scope workspace --calendar=false --gmail=false --sent-mail=false --tasks=true --chat=false
@@ -68,7 +68,7 @@ gws hooks enable --time --workspace --scope user --apply
 gws hooks configure --scope workspace --timezone America/New_York --refresh-minutes 5 --apply
 ```
 
-Writes are atomic, merge-only, and mode-restricted. They never write secret material.
+Writes are atomic, merge-only, and mode-restricted. They never write secret material. Do not use workspace scope for `hooks enable`, `hooks disable`, or `hooks configure --enabled/--time/--workspace`: those consent controls are user-scope only.
 
 ## Host hook approval
 

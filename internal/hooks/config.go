@@ -108,19 +108,26 @@ func WorkspaceConfigPath(cwd string) string {
 
 // LoadEffective applies the documented precedence: defaults, user config,
 // workspace config, then the safe environment overrides. Missing config files
-// are normal and do not cause a hook to fail.
+// are normal and do not cause a hook to fail. The workspace overlay is
+// deliberately consent-free: only the user's configuration may enable hooks
+// or a provider.
 func LoadEffective(userPath, workspacePath string, getenv func(string) string) (Config, error) {
 	merged, err := configMap(DefaultConfig())
 	if err != nil {
 		return Config{}, err
 	}
-	for _, path := range []string{userPath, workspacePath} {
+	for index, path := range []string{userPath, workspacePath} {
 		if path == "" {
 			continue
 		}
 		file, err := readConfigMap(path)
 		if err != nil {
 			return Config{}, err
+		}
+		if index == 1 {
+			if err := ValidateWorkspacePreferences(file); err != nil {
+				return Config{}, err
+			}
 		}
 		deepMerge(merged, file)
 	}
@@ -198,6 +205,35 @@ func UpdateFile(path string, patch map[string]any, apply bool) (map[string]any, 
 		if err != nil {
 			return nil, err
 		}
+	}
+	deepMerge(current, patch)
+	if !apply {
+		return current, nil
+	}
+	if err := writeAtomicJSON(path, current); err != nil {
+		return nil, err
+	}
+	return current, nil
+}
+
+// UpdateWorkspaceFile updates the repository-scoped preferences overlay.
+// Unlike the user file, it does not seed defaults: defaults include consent
+// fields, which a workspace must never store or change. Both the existing
+// file and its patch are validated before a preview is returned or a write is
+// attempted.
+func UpdateWorkspaceFile(path string, patch map[string]any, apply bool) (map[string]any, error) {
+	if path == "" {
+		return nil, errors.New("hook configuration path is required")
+	}
+	current, err := readConfigMap(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateWorkspacePreferences(current); err != nil {
+		return nil, err
+	}
+	if err := ValidateWorkspacePreferences(patch); err != nil {
+		return nil, err
 	}
 	deepMerge(current, patch)
 	if !apply {
@@ -320,14 +356,9 @@ func ValidateWorkspacePreferences(value map[string]any) error {
 
 var workspacePreferenceSchema = map[string]any{
 	"version":  nil,
-	"enabled":  nil,
 	"timezone": nil,
 	"providers": map[string]any{
-		"time": map[string]any{
-			"enabled": nil,
-		},
 		"workspace": map[string]any{
-			"enabled":         nil,
 			"refresh_minutes": nil,
 		},
 	},
