@@ -1,6 +1,6 @@
 {
   "name": "gws",
-  "version": "1.40.0",
+  "version": "1.41.0",
   "description": "Unofficial Google Workspace CLI skills and optional read-only session context hooks.",
   "author": {
     "name": "Omri Ariav",

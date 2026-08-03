@@ -217,6 +217,9 @@ func TestCodexPluginJSON_Valid(t *testing.T) {
 	if name, ok := manifest["name"].(string); !ok || name != "gws" {
 		t.Errorf("expected Codex plugin name 'gws', got '%v'", manifest["name"])
 	}
+	if version, ok := manifest["version"].(string); !ok || version != "1.41.0" {
+		t.Errorf("expected Codex plugin version '1.41.0', got '%v'", manifest["version"])
+	}
 	if skills, ok := manifest["skills"].(string); !ok || skills != "./skills/" {
 		t.Errorf("expected Codex plugin skills path './skills/', got '%v'", manifest["skills"])
 	}
@@ -242,6 +245,9 @@ func TestPluginHookManifestsUseOneEntrypointPerEvent(t *testing.T) {
 	}
 	if hooks, ok := claudePlugin["hooks"].(string); !ok || hooks != "./hooks/hooks.json" {
 		t.Fatalf("Claude plugin hooks must reference ./hooks/hooks.json, got %v", claudePlugin["hooks"])
+	}
+	if version, ok := claudePlugin["version"].(string); !ok || version != "1.41.0" {
+		t.Fatalf("Claude plugin version must match the released 1.41.0 baseline, got %v", claudePlugin["version"])
 	}
 	claudeHooksPath := filepath.Join("..", "hooks", "hooks.json")
 	claudeData, err := os.ReadFile(claudeHooksPath)
@@ -280,12 +286,12 @@ func TestPluginHookManifestsUseOneEntrypointPerEvent(t *testing.T) {
 				continue
 			}
 			if name == "claude" {
-				if command["command"] != "sh" {
-					t.Errorf("Claude %s adapter must invoke sh directly", event)
+				want := "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/claude-hook.sh\" " + event
+				if command["command"] != want {
+					t.Errorf("Claude %s adapter command is invalid: %v", event, command["command"])
 				}
-				args, ok := command["args"].([]interface{})
-				if !ok || len(args) != 2 || args[0] != "${CLAUDE_PLUGIN_ROOT}/hooks/claude-hook.sh" || args[1] != event {
-					t.Errorf("Claude %s adapter args are invalid: %v", event, command["args"])
+				if _, ok := command["args"]; ok {
+					t.Errorf("Claude %s adapter must use one complete command string", event)
 				}
 			} else if value, ok := command["command"].(string); !ok || !strings.Contains(value, "${PLUGIN_ROOT}/hooks/codex-hook.sh") {
 				t.Errorf("Codex %s adapter command is invalid: %v", event, command["command"])

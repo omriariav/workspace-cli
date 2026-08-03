@@ -6,11 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/claude-hook.sh",
-              "SessionStart"
-            ],
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/claude-hook.sh\" SessionStart",
             "timeout": 10
           }
         ]
@@ -21,11 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/claude-hook.sh",
-              "UserPromptSubmit"
-            ],
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/claude-hook.sh\" UserPromptSubmit",
             "timeout": 10
           }
         ]

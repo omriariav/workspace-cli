@@ -74,6 +74,54 @@ func TestHookHealthReportNeverContainsWorkspaceContext(t *testing.T) {
 	}
 }
 
+func TestHookHealthReportReflectsAuthAndSourceOutcomes(t *testing.T) {
+	workspace := pluginhooks.DefaultConfig()
+	workspace.Enabled = true
+	workspace.Providers.Workspace.Enabled = true
+	workspace.Sources.Gmail.Enabled = false
+	workspace.Sources.SentMail.Enabled = false
+	workspace.Sources.Tasks.Enabled = false
+	workspace.Sources.Chat.Enabled = false
+
+	missingAuth := hookHealthReportWithToken(workspace, pluginhooks.RenderedContext{}, false)
+	if missingAuth["healthy"] != false || missingAuth["auth"].(map[string]any)["ready"] != false {
+		t.Fatalf("missing Workspace auth must be unhealthy: %#v", missingAuth)
+	}
+
+	allFailed := hookHealthReportWithToken(workspace, pluginhooks.RenderedContext{
+		Sources: []pluginhooks.SourceStatus{{Name: "Calendar", Diagnostic: "auth unavailable"}},
+	}, true)
+	if allFailed["healthy"] != false {
+		t.Fatalf("all configured sources failing must be unhealthy: %#v", allFailed)
+	}
+
+	degradedConfig := workspace
+	degradedConfig.Sources.Gmail.Enabled = true
+	degraded := hookHealthReportWithToken(degradedConfig, pluginhooks.RenderedContext{
+		Sources: []pluginhooks.SourceStatus{
+			{Name: "Calendar", Available: true},
+			{Name: "Gmail", Diagnostic: "temporary failure"},
+		},
+	}, true)
+	if degraded["healthy"] != false {
+		t.Fatalf("a degraded configured source set must be unhealthy: %#v", degraded)
+	}
+
+	allAvailable := hookHealthReportWithToken(workspace, pluginhooks.RenderedContext{
+		Sources: []pluginhooks.SourceStatus{{Name: "Calendar", Available: true}},
+	}, true)
+	if allAvailable["healthy"] != true {
+		t.Fatalf("ready auth and all configured sources available must be healthy: %#v", allAvailable)
+	}
+
+	timeOnly := pluginhooks.DefaultConfig()
+	timeOnly.Enabled = true
+	timeOnly.Providers.Time.Enabled = true
+	if report := hookHealthReportWithToken(timeOnly, pluginhooks.RenderedContext{}, false); report["healthy"] != true {
+		t.Fatalf("time-only hooks must remain healthy without Workspace auth: %#v", report)
+	}
+}
+
 func TestHookAdaptersAreSilentAndNonblockingWithoutWorkingGWS(t *testing.T) {
 	paths := []string{
 		filepath.Join("..", "hooks", "claude-hook.sh"),

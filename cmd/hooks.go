@@ -316,16 +316,20 @@ func runHooksTest(cmd *cobra.Command, args []string) error {
 }
 
 func hookHealthReport(cfg pluginhooks.Config, rendered pluginhooks.RenderedContext) map[string]any {
+	return hookHealthReportWithToken(cfg, rendered, auth.TokenExists())
+}
+
+func hookHealthReportWithToken(cfg pluginhooks.Config, rendered pluginhooks.RenderedContext, tokenPresent bool) map[string]any {
 	snapshotUpdatedAt := any(nil)
 	if !rendered.SnapshotUpdatedAt.IsZero() {
 		snapshotUpdatedAt = rendered.SnapshotUpdatedAt.Format("2006-01-02T15:04:05Z07:00")
 	}
 	return map[string]any{
-		"healthy":             true,
+		"healthy":             hookHealthy(cfg, rendered, tokenPresent),
 		"enabled":             cfg.Enabled,
 		"providers":           cfg.Providers,
 		"resolved_timezone":   rendered.ResolvedTimezone,
-		"auth":                hookAuthStatus(cfg),
+		"auth":                hookAuthStatusWithToken(cfg, tokenPresent),
 		"source_gaps":         hookSourceGaps(cfg),
 		"source_status":       rendered.Sources,
 		"source_counts":       hookSourceCounts(cfg, rendered.Sources),
@@ -334,6 +338,20 @@ func hookHealthReport(cfg pluginhooks.Config, rendered pluginhooks.RenderedConte
 		"diagnostics":         rendered.Diagnostics,
 		"note":                "Health output contains state and diagnostics only; cached Workspace content is never printed.",
 	}
+}
+
+func hookHealthy(cfg pluginhooks.Config, rendered pluginhooks.RenderedContext, tokenPresent bool) bool {
+	if !cfg.Enabled || !cfg.Providers.Workspace.Enabled {
+		return true
+	}
+	if !tokenPresent {
+		return false
+	}
+	counts := hookSourceCounts(cfg, rendered.Sources)
+	if counts["configured"] == 0 {
+		return true
+	}
+	return counts["observed"] == counts["configured"] && counts["available"] == counts["configured"]
 }
 
 func hookSourceCounts(cfg pluginhooks.Config, statuses []pluginhooks.SourceStatus) map[string]int {
@@ -456,8 +474,11 @@ func hookSnapshotPath() string {
 }
 
 func hookAuthStatus(cfg pluginhooks.Config) map[string]any {
+	return hookAuthStatusWithToken(cfg, auth.TokenExists())
+}
+
+func hookAuthStatusWithToken(cfg pluginhooks.Config, tokenPresent bool) map[string]any {
 	required := cfg.Enabled && cfg.Providers.Workspace.Enabled
-	tokenPresent := auth.TokenExists()
 	return map[string]any{
 		"required_for_workspace": required,
 		"token_present":          tokenPresent,
