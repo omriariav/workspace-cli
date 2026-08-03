@@ -20,17 +20,18 @@
 | `auth` | login, logout, status |
 | `gmail` | list, read, links, thread, send, reply, forward, labels, label, archive, trash, event-id, untrash, delete, batch-modify, batch-delete, trash-thread, untrash-thread, delete-thread, label-info, create-label, update-label, delete-label, drafts, draft, create-draft, update-draft, send-draft, delete-draft, attachment |
 | `calendar` | list, events, create, update, delete, rsvp, get, quick-add, instances, move, get-calendar, create-calendar, update-calendar, delete-calendar, clear, subscribe, unsubscribe, calendar-info, update-subscription, acl, share, unshare, update-acl, freebusy, colors, settings |
-| `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, move, clear |
+| `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, reopen, move, clear |
 | `drive` | list, search, info, download, upload, create-folder, move, delete, copy, convert, comments, approvals, approval, start-approval, approve, decline, reassign-approval, cancel-approval, comment-approval, permissions, share, unshare, permission, update-permission, revisions, revision, delete-revision, replies, reply, get-reply, delete-reply, comment, add-comment, delete-comment, resolve-comment, unresolve-comment, export, empty-trash, update, shared-drives, shared-drive, create-drive, delete-drive, update-drive, about, changes, activity |
 | `docs` | read, info, create, append, insert, replace, replace-content, delete, add-table, format, set-paragraph-style, add-list, remove-list, trash, add-tab, delete-tab, rename-tab, add-image, insert-table-row, delete-table-row, insert-table-col, delete-table-col, merge-cells, unmerge-cells, pin-rows, page-break, section-break, add-header, delete-header, add-footer, delete-footer, add-named-range, delete-named-range, add-footnote, delete-object, replace-image, replace-named-range, update-style, update-section-style, update-table-cell-style, update-table-col-properties, update-table-row-style |
 | `sheets` | info, list, read, create, write, append, add-sheet, delete-sheet, clear, insert-rows, delete-rows, insert-cols, delete-cols, rename-sheet, duplicate-sheet, merge, unmerge, sort, find-replace, format, set-column-width, set-row-height, freeze, copy-to, batch-read, batch-write, add-named-range, list-named-ranges, delete-named-range, add-filter, clear-filter, add-filter-view, add-chart, list-charts, delete-chart, add-conditional-format, list-conditional-formats, delete-conditional-format |
-| `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides, thumbnail |
+| `slides` | info, list, read, create, add-slide, delete-slide, duplicate-slide, add-shape, add-image, add-text, replace-text, delete-object, delete-text, update-text-style, update-transform, update-slide-background, list-layouts, add-line, group, ungroup, create-table, insert-table-rows, delete-table-row, update-table-cell, update-table-border, update-paragraph-style, update-shape, reorder-slides, thumbnail |
 | `chat` | list, messages, members, send, get, update, delete, reactions, react, unreact, get-space, create-space, delete-space, update-space, search-spaces, find-dm, setup-space, get-member, add-member, remove-member, update-member, read-state, mark-read, thread-read-state, unread, attachment, upload, download, events, event, build-cache, find-group |
 | `contacts` | list, search, get, create, delete, update, batch-create, batch-update, batch-delete, directory, directory-search, photo, delete-photo, resolve |
 | `groups` | list, members |
 | `keep` | list, get, create |
 | `forms` | info, get, responses, response, create, update |
 | `search` | web search (needs API key) |
+| `hooks` | status, enable, configure, disable, test |
 | `version` | Show version info |
 
 ## Building & Running
@@ -50,7 +51,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.41.0** - Google API SDK and Go 1.25 baseline bump, Chat quoted-message and notification controls on `gws chat send`, and Drive file approval commands for list/get/start/approve/decline/reassign/cancel/comment workflows.
+**v1.42.0** - Slides grouping and line validation, `gws tasks reopen`, and disabled-by-default GWS session context hooks for Claude Code and Codex, including the opt-in current-time provider and guided setup.
 
 ## Roadmap
 

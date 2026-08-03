@@ -1,5 +1,13 @@
 # Releases
 
+## v1.42.0
+
+**Slides Validation, Task Reopen, and Opt-In Session Hooks**
+
+- Validated Slides grouping and line command inputs ([#186](https://github.com/omriariav/workspace-cli/issues/186)).
+- Added `gws tasks reopen` for completed tasks ([#187](https://github.com/omriariav/workspace-cli/issues/187)).
+- Added disabled-by-default GWS session context hooks, including the opt-in current-time provider and guided Claude Code/Codex setup ([#205](https://github.com/omriariav/workspace-cli/issues/205), [#206](https://github.com/omriariav/workspace-cli/issues/206), [#207](https://github.com/omriariav/workspace-cli/issues/207)).
+
 ## v1.41.0
 
 **Workspace API Refresh, Chat Send Controls, Drive Approvals**
