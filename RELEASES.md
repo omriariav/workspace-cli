@@ -1,5 +1,11 @@
 # Releases
 
+## v1.42.1
+
+**Claude Plugin Manifest Compatibility**
+
+- Fixed Claude Code marketplace installation by removing duplicate component declarations while keeping `.claude-plugin/plugin.json` as the canonical owner of skills and hooks ([#211](https://github.com/omriariav/workspace-cli/pull/211)).
+
 ## v1.42.0
 
 **Slides Validation, Task Reopen, and Opt-In Session Hooks**

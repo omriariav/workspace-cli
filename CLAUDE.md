@@ -51,7 +51,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.42.0** - Slides grouping and line validation, `gws tasks reopen`, and disabled-by-default GWS session context hooks for Claude Code and Codex, including the opt-in current-time provider and guided setup.
+**v1.42.1** - Claude Code marketplace manifest compatibility: component declarations live only in `.claude-plugin/plugin.json`, the canonical owner of skills and hooks.
 
 ## Roadmap
 
