@@ -283,7 +283,7 @@ func previewHookUpdate(cmd *cobra.Command, patch map[string]any) error {
 		}
 	}
 	if apply {
-		planned, err = pluginhooks.UpdateFile(path, patch, true)
+		_, err = pluginhooks.UpdateFile(path, patch, true)
 		if err != nil {
 			return fmt.Errorf("update hook configuration: %w", err)
 		}
@@ -311,7 +311,7 @@ func runHooksTest(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return writeHookJSON(cmd, map[string]any{"healthy": false, "diagnostic": "Hook configuration could not be loaded: " + err.Error()})
 	}
-	rendered := renderHook(cmd.Context(), event, cfg)
+	rendered := renderHook(cmd.Context(), event, cfg, cwd)
 	return writeHookJSON(cmd, hookHealthReport(cfg, rendered))
 }
 
@@ -380,15 +380,27 @@ func runHooksRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return nil
 	}
-	rendered := renderHook(cmd.Context(), event, cfg)
+	rendered := renderHook(cmd.Context(), event, cfg, cwd)
 	return writeHookEnvelope(cmd, eventValue, rendered.AdditionalContext)
 }
 
-func renderHook(ctx context.Context, event pluginhooks.Event, cfg pluginhooks.Config) pluginhooks.RenderedContext {
+func renderHook(ctx context.Context, event pluginhooks.Event, cfg pluginhooks.Config, cwd string) pluginhooks.RenderedContext {
 	return pluginhooks.Runtime{
-		Run:   runSelfGWS,
-		Store: pluginhooks.FileStore{Path: hookSnapshotPath()},
+		Run:          runSelfGWS,
+		Store:        pluginhooks.FileStore{Path: hookSnapshotPath()},
+		WorkspaceKey: hookWorkspaceKey(cwd),
 	}.Render(ctx, event, cfg)
+}
+
+func hookWorkspaceKey(cwd string) string {
+	path, err := filepath.Abs(cwd)
+	if err != nil {
+		path = cwd
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	return filepath.Clean(path)
 }
 
 func runSelfGWS(ctx context.Context, args []string) ([]byte, error) {

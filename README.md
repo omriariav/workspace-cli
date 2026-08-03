@@ -90,6 +90,16 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws auth status` | Show current auth status and email |
 | `gws auth logout` | Remove stored credentials |
 
+### Hooks
+
+| Command | Description |
+|---------|-------------|
+| `gws hooks status` | Show safe effective hook state, auth readiness, source gaps, and duplicate time injectors; never prints cached context or tokens |
+| `gws hooks enable --time --workspace --scope user` | Preview enabling one or both opt-in providers; add `--apply` only after approval |
+| `gws hooks configure` | Preview source, timezone, TTL, and provider settings; numeric limits must be positive |
+| `gws hooks test --event UserPromptSubmit` | Run an on-demand, read-only health check with metadata-only output |
+| `gws hooks disable --scope user` | Preview disabling hook fetching without changing normal GWS commands or authentication |
+
 ### Gmail
 
 | Command | Description |
@@ -584,6 +594,8 @@ gws hooks enable --time --workspace --scope user --apply
 # Verify with a read-only, on-demand event invocation.
 gws hooks test --event UserPromptSubmit
 ```
+
+Applying this configuration does not itself activate lifecycle hooks. In Codex, use `/hooks` to inspect the `gws` `SessionStart` and `UserPromptSubmit` entries and explicitly approve them as a separate host-level action. Until that review/approval is complete, the GWS hook configuration remains inert.
 
 `time` and `workspace` are independent providers. Time is recomputed for every hook event using an explicit configured timezone or a portable system-local fallback, and it never needs Google authentication. Workspace context refreshes only on `SessionStart` or the first prompt after its configured TTL, never on a background timer. Its allowlisted sources are read-only Calendar, Gmail, sent-mail, Tasks, and explicit Chat-space reads; per-source and overall time bounds keep hook failures nonblocking.
 

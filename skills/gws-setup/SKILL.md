@@ -33,6 +33,10 @@ gws hooks status
 
 If the user is considering Workspace context, also run `gws auth status`. Report paths, enabled providers, timezone, auth readiness, source gaps, and duplicate time injectors without including credentials or cached context.
 
+## Output formats
+
+Use `--format json` for structured automation, `--format yaml` for readable structured output, or `--format text` for a concise terminal view. Hook status and health output never includes cached Workspace content in any format.
+
 ## Scope and providers
 
 Configuration precedence is: built-in defaults, user config `~/.config/gws/hooks.json`, workspace config `.gws/hooks.json`, then `GWS_HOOKS_ENABLED` and `GWS_HOOKS_TIMEZONE` environment overrides. Workspace config contains allowlisted preferences only, never credentials, tokens, or cached content.
@@ -56,7 +60,7 @@ gws hooks configure --scope workspace --timezone America/New_York --refresh-minu
 gws hooks configure --scope workspace --task-list TASK_LIST_ID --chat-space spaces/SPACE_ID --chat-limit 5
 ```
 
-Review the exact path, keys, effective provider state, and whether Workspace auth is required. Reruns preserve unknown keys and produce no semantic change for unchanged answers.
+Review the exact path and requested keys. Existing configuration values are deliberately not echoed; use `gws hooks status` to inspect the safe effective provider state and auth requirement.
 
 Only after the user explicitly approves the exact preview, repeat that command with `--apply`:
 
@@ -66,6 +70,17 @@ gws hooks configure --scope workspace --timezone America/New_York --refresh-minu
 ```
 
 Writes are atomic, merge-only, and mode-restricted. They never write secret material.
+
+## Host hook approval
+
+Applying GWS configuration makes the providers eligible, but it does not by itself activate a lifecycle hook in the host. The host must also review and approve the packaged hook entrypoints.
+
+- In Codex, open `/hooks`, inspect the `gws` `SessionStart` and `UserPromptSubmit` entries, and explicitly approve them when the user approves that separate host action.
+- Do not claim hooks are active until that host review/approval is complete. Without it, the GWS configuration remains inert.
+
+## Hook command reference
+
+See the focused [hook command reference](references/commands.md) for the user-facing command surface and safety constraints.
 
 ## Verify, reconfigure, and disable
 

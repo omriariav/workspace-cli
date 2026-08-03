@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,9 +32,11 @@ func (e Event) Valid() bool {
 }
 
 type Snapshot struct {
-	UpdatedAt time.Time      `json:"updated_at"`
-	Context   string         `json:"context"`
-	Sources   []SourceResult `json:"sources"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	WorkspaceKey    string         `json:"workspace_key"`
+	SourceConfigKey string         `json:"source_config_key"`
+	Context         string         `json:"context"`
+	Sources         []SourceResult `json:"sources"`
 }
 
 func (s Snapshot) UsefulSources() int {
@@ -114,6 +117,7 @@ type Runtime struct {
 	Local          *time.Location
 	Run            Runner
 	Store          SnapshotStore
+	WorkspaceKey   string
 	OverallTimeout time.Duration
 	SourceTimeout  time.Duration
 }
@@ -200,11 +204,13 @@ func (r Runtime) Render(ctx context.Context, event Event, cfg Config) RenderedCo
 func (r Runtime) workspace(ctx context.Context, event Event, cfg Config, now time.Time) (Snapshot, bool, string) {
 	previous := Snapshot{}
 	cacheDiagnostic := ""
+	workspaceKey := r.cacheWorkspaceKey()
+	sourceConfigKey := sourceConfigurationKey(cfg.Sources)
 	if r.Store != nil {
 		loaded, err := r.Store.Load()
 		if err != nil {
 			cacheDiagnostic = "Workspace cache is unavailable; completed a fresh bounded read"
-		} else if !loaded.UpdatedAt.IsZero() && now.Sub(loaded.UpdatedAt) <= maxSnapshotAge {
+		} else if snapshotMatches(loaded, workspaceKey, sourceConfigKey) && !loaded.UpdatedAt.IsZero() && now.Sub(loaded.UpdatedAt) <= maxSnapshotAge {
 			previous = loaded
 		}
 	}
@@ -219,6 +225,8 @@ func (r Runtime) workspace(ctx context.Context, event Event, cfg Config, now tim
 	defer cancel()
 	fresh := r.collectWorkspace(refreshCtx, cfg, now)
 	fresh.UpdatedAt = now
+	fresh.WorkspaceKey = workspaceKey
+	fresh.SourceConfigKey = sourceConfigKey
 	if fresh.UsefulSources() == 0 && previous.Context != "" {
 		return previous, false, "Workspace refresh failed; retained the previous context"
 	}
@@ -234,6 +242,26 @@ func (r Runtime) workspace(ctx context.Context, event Event, cfg Config, now tim
 		}
 	}
 	return fresh, true, cacheDiagnostic
+}
+
+func (r Runtime) cacheWorkspaceKey() string {
+	if key := strings.TrimSpace(r.WorkspaceKey); key != "" {
+		return key
+	}
+	// Runtime is internal and production supplies a canonical working
+	// directory. This fallback keeps direct unit use deterministic while old,
+	// unbound snapshots are deliberately treated as stale.
+	return "runtime-default"
+}
+
+func sourceConfigurationKey(sources Sources) string {
+	encoded, _ := json.Marshal(sources)
+	sum := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", sum)
+}
+
+func snapshotMatches(snapshot Snapshot, workspaceKey, sourceConfigKey string) bool {
+	return snapshot.WorkspaceKey == workspaceKey && snapshot.SourceConfigKey == sourceConfigKey
 }
 
 func refreshLostUsefulSource(previous, fresh Snapshot, cfg Config) bool {

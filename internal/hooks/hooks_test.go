@@ -101,6 +101,105 @@ func TestWorkspaceTTLAndStaleRefresh(t *testing.T) {
 	}
 }
 
+func TestSnapshotIsBoundToWorkspaceIdentity(t *testing.T) {
+	now := time.Date(2026, time.August, 3, 12, 0, 0, 0, time.UTC)
+	store := &memoryStore{}
+	cfg := enabledConfig()
+	workspaceA := Runtime{
+		Now:          func() time.Time { return now },
+		Local:        time.UTC,
+		Store:        store,
+		WorkspaceKey: "/projects/a",
+		Run: func(context.Context, []string) ([]byte, error) {
+			return []byte(`{"events":[{"summary":"workspace-a"}]}`), nil
+		},
+	}
+	first := workspaceA.Render(context.Background(), EventSessionStart, cfg)
+	if !first.Refreshed || !strings.Contains(first.AdditionalContext, "workspace-a") {
+		t.Fatalf("workspace A did not create its snapshot: %#v", first)
+	}
+
+	workspaceBCalls := 0
+	workspaceB := Runtime{
+		Now:          func() time.Time { return now.Add(time.Minute) },
+		Local:        time.UTC,
+		Store:        store,
+		WorkspaceKey: "/projects/b",
+		Run: func(context.Context, []string) ([]byte, error) {
+			workspaceBCalls++
+			return []byte(`{"events":[{"summary":"workspace-b"}]}`), nil
+		},
+	}
+	second := workspaceB.Render(context.Background(), EventUserPromptSubmit, cfg)
+	if !second.Refreshed || workspaceBCalls != 1 || !strings.Contains(second.AdditionalContext, "workspace-b") || strings.Contains(second.AdditionalContext, "workspace-a") {
+		t.Fatalf("workspace B reused workspace A context: calls=%d context=%q", workspaceBCalls, second.AdditionalContext)
+	}
+}
+
+func TestSourceConfigurationChangeInvalidatesSnapshotWithinTTL(t *testing.T) {
+	now := time.Date(2026, time.August, 3, 12, 0, 0, 0, time.UTC)
+	store := &memoryStore{}
+	calls := 0
+	runtime := Runtime{
+		Now:          func() time.Time { return now },
+		Local:        time.UTC,
+		Store:        store,
+		WorkspaceKey: "/projects/config-change",
+		Run: func(_ context.Context, args []string) ([]byte, error) {
+			calls++
+			if args[2] == "calendar" {
+				return []byte(`{"events":[{"summary":"calendar-only"}]}`), nil
+			}
+			return []byte(`{"threads":[{"snippet":"gmail-only"}]}`), nil
+		},
+	}
+	firstConfig := enabledConfig()
+	first := runtime.Render(context.Background(), EventSessionStart, firstConfig)
+	if !first.Refreshed || !strings.Contains(first.AdditionalContext, "calendar-only") {
+		t.Fatalf("initial snapshot failed: %#v", first)
+	}
+
+	now = now.Add(time.Minute)
+	changedConfig := firstConfig
+	changedConfig.Sources.Calendar.Enabled = false
+	changedConfig.Sources.Gmail.Enabled = true
+	second := runtime.Render(context.Background(), EventUserPromptSubmit, changedConfig)
+	if !second.Refreshed || calls != 2 || !strings.Contains(second.AdditionalContext, "gmail-only") || strings.Contains(second.AdditionalContext, "calendar-only") {
+		t.Fatalf("source configuration change reused stale context: calls=%d context=%q", calls, second.AdditionalContext)
+	}
+}
+
+func TestChatSpaceChangeInvalidatesSnapshotWithinTTL(t *testing.T) {
+	now := time.Date(2026, time.August, 3, 12, 0, 0, 0, time.UTC)
+	store := &memoryStore{}
+	calls := 0
+	runtime := Runtime{
+		Now:          func() time.Time { return now },
+		Local:        time.UTC,
+		Store:        store,
+		WorkspaceKey: "/projects/chat-space-change",
+		Run: func(_ context.Context, args []string) ([]byte, error) {
+			calls++
+			return []byte(`{"messages":[{"text":"` + args[4] + `"}]}`), nil
+		},
+	}
+	cfg := enabledConfig()
+	cfg.Sources.Calendar.Enabled = false
+	cfg.Sources.Chat.Enabled = true
+	cfg.Sources.Chat.Spaces = []string{"spaces/one"}
+	first := runtime.Render(context.Background(), EventSessionStart, cfg)
+	if !first.Refreshed || !strings.Contains(first.AdditionalContext, "spaces/one") {
+		t.Fatalf("initial Chat snapshot failed: %#v", first)
+	}
+
+	now = now.Add(time.Minute)
+	cfg.Sources.Chat.Spaces = []string{"spaces/two"}
+	second := runtime.Render(context.Background(), EventUserPromptSubmit, cfg)
+	if !second.Refreshed || calls != 2 || !strings.Contains(second.AdditionalContext, "spaces/two") || strings.Contains(second.AdditionalContext, "spaces/one") {
+		t.Fatalf("Chat space configuration reused stale context: calls=%d context=%q", calls, second.AdditionalContext)
+	}
+}
+
 func TestCacheLoadFailureStillPerformsFreshBoundedRead(t *testing.T) {
 	now := time.Date(2026, time.August, 3, 12, 0, 0, 0, time.UTC)
 	calls := 0
@@ -198,6 +297,9 @@ func TestSameCountSourceLossRetainsPreviousSnapshot(t *testing.T) {
 		Store: store,
 		Run: func(_ context.Context, args []string) ([]byte, error) {
 			isSentMail := strings.Contains(strings.Join(args, " "), "in:sent")
+			if phase == 0 && isSentMail {
+				return nil, errors.New("temporary sent-mail failure")
+			}
 			if phase == 1 && args[2] == "gmail" && !isSentMail {
 				return nil, errors.New("temporary Gmail failure")
 			}
@@ -206,15 +308,15 @@ func TestSameCountSourceLossRetainsPreviousSnapshot(t *testing.T) {
 	}
 	cfg := enabledConfig()
 	cfg.Sources.Gmail.Enabled = true
+	cfg.Sources.SentMail.Enabled = true
 	first := runtime.Render(context.Background(), EventSessionStart, cfg)
 	if !first.Refreshed || store.snapshot.UsefulSources() != 2 {
 		t.Fatalf("expected initial Calendar and Gmail snapshot, got %#v", store.snapshot)
 	}
 	phase = 1
-	cfg.Sources.SentMail.Enabled = true
 	now = now.Add(6 * time.Minute)
 	second := runtime.Render(context.Background(), EventUserPromptSubmit, cfg)
-	if second.Refreshed || !strings.Contains(second.AdditionalContext, "Gmail") || strings.Contains(second.AdditionalContext, "Sent mail") {
+	if second.Refreshed || !strings.Contains(second.AdditionalContext, "Gmail") || strings.Contains(second.AdditionalContext, "Sent mail: {") {
 		t.Fatalf("same-count source replacement should retain known-good snapshot: %q", second.AdditionalContext)
 	}
 	if len(second.Diagnostics) != 1 || !strings.Contains(second.Diagnostics[0], "less complete") {
