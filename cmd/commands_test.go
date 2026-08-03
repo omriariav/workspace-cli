@@ -298,6 +298,7 @@ func TestTasksCommands(t *testing.T) {
 		{"create"},
 		{"update"},
 		{"complete"},
+		{"reopen"},
 		{"list-info"},
 		{"create-list"},
 		{"update-list"},

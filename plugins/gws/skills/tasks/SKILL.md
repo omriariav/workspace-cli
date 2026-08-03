@@ -44,6 +44,7 @@ For initial setup, see the `gws-auth` skill.
 | Update a task | `gws tasks update <tasklist-id> <task-id> --title "New title"` |
 | Delete a task | `gws tasks delete <tasklist-id> <task-id>` |
 | Complete a task | `gws tasks complete <tasklist-id> <task-id>` |
+| Reopen a task | `gws tasks reopen <tasklist-id> <task-id>` |
 | Move a task | `gws tasks move <tasklist-id> <task-id> --previous <sibling-id>` |
 | Clear completed | `gws tasks clear <tasklist-id>` |
 
@@ -155,7 +156,7 @@ gws tasks create --title "Team task" --tasklist MTIzNDU2
 gws tasks update <tasklist-id> <task-id> [flags]
 ```
 
-Updates an existing task's title, notes, or due date. At least one of `--title`, `--notes`, or `--due` is required.
+Updates an existing task's title, notes, or due date while preserving its current completion status. At least one of `--title`, `--notes`, or `--due` is required.
 
 **Flags:**
 - `--title string` — New task title
@@ -205,6 +206,19 @@ Marks a specific task as completed.
 **Examples:**
 ```bash
 gws tasks complete @default dGFzay0xMjM0
+```
+
+### reopen — Reopen a completed task
+
+```bash
+gws tasks reopen <tasklist-id> <task-id>
+```
+
+Sets a task's status to `needsAction` while preserving its other fields.
+
+**Examples:**
+```bash
+gws tasks reopen @default dGFzay0xMjM0
 ```
 
 ### move — Move a task

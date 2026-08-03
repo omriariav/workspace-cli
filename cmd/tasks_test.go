@@ -39,6 +39,19 @@ func TestTasksUpdateCommand_Flags(t *testing.T) {
 	}
 }
 
+func TestTasksReopenCommand(t *testing.T) {
+	cmd := tasksReopenCmd
+	if cmd.Use != "reopen <tasklist-id> <task-id>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
+	}
+}
+
 // TestTasksUpdate_FlagDefaults tests that update flags default to empty strings
 func TestTasksUpdate_FlagDefaults(t *testing.T) {
 	cmd := tasksUpdateCmd
@@ -589,9 +602,10 @@ func TestTasksUpdate_MockServer(t *testing.T) {
 		// GET task
 		if r.URL.Path == "/tasks/v1/lists/@default/tasks/task-123" && r.Method == "GET" {
 			resp := &tasks.Task{
-				Id:    "task-123",
-				Title: "Original title",
-				Notes: "Original notes",
+				Id:     "task-123",
+				Title:  "Original title",
+				Notes:  "Original notes",
+				Status: "completed",
 			}
 			json.NewEncoder(w).Encode(resp)
 			return
@@ -609,11 +623,15 @@ func TestTasksUpdate_MockServer(t *testing.T) {
 			if task.Title != "Updated title" {
 				t.Errorf("expected title 'Updated title', got '%s'", task.Title)
 			}
+			if task.Status != "completed" {
+				t.Errorf("ordinary update changed status to %q, want completed", task.Status)
+			}
 
 			resp := &tasks.Task{
-				Id:    "task-123",
-				Title: task.Title,
-				Notes: task.Notes,
+				Id:     "task-123",
+				Title:  task.Title,
+				Notes:  task.Notes,
+				Status: task.Status,
 			}
 			json.NewEncoder(w).Encode(resp)
 			return
@@ -638,6 +656,9 @@ func TestTasksUpdate_MockServer(t *testing.T) {
 	if task.Title != "Original title" {
 		t.Errorf("unexpected title: %s", task.Title)
 	}
+	if task.Status != "completed" {
+		t.Errorf("unexpected task status: %s", task.Status)
+	}
 
 	// Update task
 	task.Title = "Updated title"
@@ -648,5 +669,70 @@ func TestTasksUpdate_MockServer(t *testing.T) {
 
 	if updated.Title != "Updated title" {
 		t.Errorf("unexpected updated title: %s", updated.Title)
+	}
+	if updated.Status != "completed" {
+		t.Errorf("ordinary update changed status to %s", updated.Status)
+	}
+}
+
+func TestTasksReopen_MockServer(t *testing.T) {
+	completed := "2026-08-03T07:00:00.000Z"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/tasks/v1/lists/@default/tasks/task-123" && r.Method == http.MethodGet:
+			json.NewEncoder(w).Encode(&tasks.Task{
+				Id:        "task-123",
+				Title:     "Completed task",
+				Notes:     "Keep these notes",
+				Due:       "2026-08-04T00:00:00.000Z",
+				Status:    "completed",
+				Completed: &completed,
+			})
+		case r.URL.Path == "/tasks/v1/lists/@default/tasks/task-123" && r.Method == http.MethodPut:
+			var body map[string]json.RawMessage
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode task: %v", err)
+			}
+			if _, ok := body["completed"]; ok {
+				t.Error("reopen request must omit completed")
+			}
+			data, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal task body: %v", err)
+			}
+			var task tasks.Task
+			if err := json.Unmarshal(data, &task); err != nil {
+				t.Fatalf("decode task body: %v", err)
+			}
+			if task.Status != "needsAction" {
+				t.Errorf("status = %q, want needsAction", task.Status)
+			}
+			if task.Completed != nil {
+				t.Errorf("completed = %q, want nil", *task.Completed)
+			}
+			if task.Notes != "Keep these notes" {
+				t.Errorf("notes = %q, want preserved notes", task.Notes)
+			}
+			if task.Due != "2026-08-04T00:00:00.000Z" {
+				t.Errorf("due = %q, want preserved due date", task.Due)
+			}
+			json.NewEncoder(w).Encode(&task)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	svc, err := tasks.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("new Tasks service: %v", err)
+	}
+	updated, err := reopenTask(svc, "@default", "task-123")
+	if err != nil {
+		t.Fatalf("reopen task: %v", err)
+	}
+	if updated.Status != "needsAction" {
+		t.Errorf("updated status = %q, want needsAction", updated.Status)
 	}
 }

@@ -257,7 +257,7 @@ var slidesListLayoutsCmd = &cobra.Command{
 var slidesAddLineCmd = &cobra.Command{
 	Use:   "add-line <presentation-id>",
 	Short: "Add a line to a slide",
-	Long:  "Creates a line or connector on a slide.\n\nLine categories: STRAIGHT, BENT, CURVED.\nYou can also use connector names like STRAIGHT_CONNECTOR_1 (the category is extracted from the prefix).",
+	Long:  "Creates a line or connector on a slide.\n\nLine categories: STRAIGHT, BENT, CURVED.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runSlidesAddLine,
 }
@@ -495,7 +495,7 @@ func init() {
 	// Add-line flags
 	slidesAddLineCmd.Flags().String("slide-id", "", "Slide object ID")
 	slidesAddLineCmd.Flags().Int("slide-number", 0, "Slide number (1-indexed)")
-	slidesAddLineCmd.Flags().String("type", "STRAIGHT", "Line category: STRAIGHT, BENT, or CURVED")
+	slidesAddLineCmd.Flags().String("type", "STRAIGHT", "Line category (STRAIGHT, BENT, CURVED)")
 	slidesAddLineCmd.Flags().Float64("start-x", 0, "Start X position in points")
 	slidesAddLineCmd.Flags().Float64("start-y", 0, "Start Y position in points")
 	slidesAddLineCmd.Flags().Float64("end-x", 200, "End X position in points")
@@ -2927,17 +2927,6 @@ func runSlidesListLayouts(cmd *cobra.Command, args []string) error {
 
 func runSlidesAddLine(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
-
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-
-	svc, err := factory.Slides()
-	if err != nil {
-		return p.PrintError(err)
-	}
 
 	presentationID := args[0]
 	slideIDFlag, _ := cmd.Flags().GetString("slide-id")
@@ -2950,64 +2939,30 @@ func runSlidesAddLine(cmd *cobra.Command, args []string) error {
 	colorHex, _ := cmd.Flags().GetString("color")
 	weight, _ := cmd.Flags().GetFloat64("weight")
 
+	normalizedLineType, category, err := slidesLineCategory(lineType)
+	if err != nil {
+		return usageErrorf("%v", err)
+	}
+
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
 	slideID, err := getSlideID(svc, presentationID, slideIDFlag, slideNumber)
 	if err != nil {
 		return p.PrintError(err)
 	}
 
-	// Map line type to category
-	category := "STRAIGHT"
-	if strings.HasPrefix(lineType, "BENT") {
-		category = "BENT"
-	} else if strings.HasPrefix(lineType, "CURVED") {
-		category = "CURVED"
-	}
-
-	// Calculate size and position from start/end coordinates
-	width := endX - startX
-	height := endY - startY
-
-	// Handle negative dimensions by adjusting position
-	translateX := startX
-	translateY := startY
-	scaleX := 1.0
-	scaleY := 1.0
-	if width < 0 {
-		width = -width
-		translateX = endX
-		scaleX = -1.0
-	}
-	if height < 0 {
-		height = -height
-		translateY = endY
-		scaleY = -1.0
-	}
-
-	requests := []*slides.Request{
-		{
-			CreateLine: &slides.CreateLineRequest{
-				Category: category,
-				ElementProperties: &slides.PageElementProperties{
-					PageObjectId: slideID,
-					Size: &slides.Size{
-						Width:  &slides.Dimension{Magnitude: width, Unit: "PT"},
-						Height: &slides.Dimension{Magnitude: height, Unit: "PT"},
-					},
-					Transform: &slides.AffineTransform{
-						ScaleX:     scaleX,
-						ScaleY:     scaleY,
-						TranslateX: translateX,
-						TranslateY: translateY,
-						Unit:       "PT",
-					},
-				},
-			},
-		},
-	}
-
-	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
-		Requests: requests,
-	}).Do()
+	resp, err := svc.Presentations.BatchUpdate(presentationID, slidesAddLineRequest(
+		slideID, category, startX, startY, endX, endY,
+	)).Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to add line: %w", err))
 	}
@@ -3070,7 +3025,7 @@ func runSlidesAddLine(cmd *cobra.Command, args []string) error {
 		"presentation_id": presentationID,
 		"slide_id":        slideID,
 		"line_id":         lineObjectID,
-		"line_type":       lineType,
+		"line_type":       normalizedLineType,
 		"start":           map[string]float64{"x": startX, "y": startY},
 		"end":             map[string]float64{"x": endX, "y": endY},
 	}
@@ -3084,18 +3039,9 @@ func runSlidesGroup(cmd *cobra.Command, args []string) error {
 	presentationID := args[0]
 	objectIDsStr, _ := cmd.Flags().GetString("object-ids")
 
-	// Trim and drop empties so inputs like "id1,,id2" or " , id1 " don't
-	// pass validation and send empty object IDs to the API.
-	rawIDs := strings.Split(objectIDsStr, ",")
-	objectIDs := make([]string, 0, len(rawIDs))
-	for _, id := range rawIDs {
-		if trimmed := strings.TrimSpace(id); trimmed != "" {
-			objectIDs = append(objectIDs, trimmed)
-		}
-	}
-
-	if len(objectIDs) < 2 {
-		return usageErrorf("at least 2 non-empty element IDs are required for grouping")
+	objectIDs, err := slidesGroupObjectIDs(objectIDsStr)
+	if err != nil {
+		return usageErrorf("%v", err)
 	}
 
 	ctx := context.Background()
@@ -3109,17 +3055,7 @@ func runSlidesGroup(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	requests := []*slides.Request{
-		{
-			GroupObjects: &slides.GroupObjectsRequest{
-				ChildrenObjectIds: objectIDs,
-			},
-		},
-	}
-
-	resp, err := svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
-		Requests: requests,
-	}).Do()
+	resp, err := svc.Presentations.BatchUpdate(presentationID, slidesGroupRequest(objectIDs)).Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to group objects: %w", err))
 	}
@@ -3139,8 +3075,15 @@ func runSlidesGroup(cmd *cobra.Command, args []string) error {
 
 func runSlidesUngroup(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
-	ctx := context.Background()
 
+	presentationID := args[0]
+	groupID, _ := cmd.Flags().GetString("group-id")
+	groupID, err := slidesGroupID(groupID)
+	if err != nil {
+		return usageErrorf("%v", err)
+	}
+
+	ctx := context.Background()
 	factory, err := client.NewFactory(ctx)
 	if err != nil {
 		return p.PrintError(err)
@@ -3151,20 +3094,7 @@ func runSlidesUngroup(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	presentationID := args[0]
-	groupID, _ := cmd.Flags().GetString("group-id")
-
-	requests := []*slides.Request{
-		{
-			UngroupObjects: &slides.UngroupObjectsRequest{
-				ObjectIds: []string{groupID},
-			},
-		},
-	}
-
-	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
-		Requests: requests,
-	}).Do()
+	_, err = svc.Presentations.BatchUpdate(presentationID, slidesUngroupRequest(groupID)).Do()
 	if err != nil {
 		return p.PrintError(fmt.Errorf("failed to ungroup objects: %w", err))
 	}
@@ -3174,6 +3104,102 @@ func runSlidesUngroup(cmd *cobra.Command, args []string) error {
 		"presentation_id": presentationID,
 		"group_id":        groupID,
 	})
+}
+
+func slidesAddLineRequest(slideID, category string, startX, startY, endX, endY float64) *slides.BatchUpdatePresentationRequest {
+	width := endX - startX
+	height := endY - startY
+	translateX := startX
+	translateY := startY
+	scaleX := 1.0
+	scaleY := 1.0
+	if width < 0 {
+		width = -width
+		translateX = endX
+		scaleX = -1.0
+	}
+	if height < 0 {
+		height = -height
+		translateY = endY
+		scaleY = -1.0
+	}
+
+	return &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
+		CreateLine: &slides.CreateLineRequest{
+			Category: category,
+			ElementProperties: &slides.PageElementProperties{
+				PageObjectId: slideID,
+				Size: &slides.Size{
+					Width:  &slides.Dimension{Magnitude: width, Unit: "PT"},
+					Height: &slides.Dimension{Magnitude: height, Unit: "PT"},
+				},
+				Transform: &slides.AffineTransform{
+					ScaleX:     scaleX,
+					ScaleY:     scaleY,
+					TranslateX: translateX,
+					TranslateY: translateY,
+					Unit:       "PT",
+				},
+			},
+		},
+	}}}
+}
+
+func slidesGroupRequest(objectIDs []string) *slides.BatchUpdatePresentationRequest {
+	return &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
+		GroupObjects: &slides.GroupObjectsRequest{ChildrenObjectIds: objectIDs},
+	}}}
+}
+
+func slidesUngroupRequest(groupID string) *slides.BatchUpdatePresentationRequest {
+	return &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
+		UngroupObjects: &slides.UngroupObjectsRequest{ObjectIds: []string{groupID}},
+	}}}
+}
+
+var slidesLineCategories = map[string]string{
+	"STRAIGHT": "STRAIGHT",
+	"BENT":     "BENT",
+	"CURVED":   "CURVED",
+}
+
+// slidesLineCategory validates the categories accepted by Google Slides
+// CreateLineRequest.
+func slidesLineCategory(lineType string) (string, string, error) {
+	normalized := strings.ToUpper(strings.TrimSpace(lineType))
+	category, ok := slidesLineCategories[normalized]
+	if !ok {
+		return "", "", fmt.Errorf("unsupported line category %q; use STRAIGHT, BENT, or CURVED", lineType)
+	}
+	return normalized, category, nil
+}
+
+// slidesGroupObjectIDs trims group child IDs while rejecting blank entries so
+// malformed comma-separated input never reaches the Slides API.
+func slidesGroupObjectIDs(value string) ([]string, error) {
+	rawIDs := strings.Split(value, ",")
+	objectIDs := make([]string, 0, len(rawIDs))
+	for _, id := range rawIDs {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			return nil, fmt.Errorf("object IDs must not contain blank entries")
+		}
+		objectIDs = append(objectIDs, trimmed)
+	}
+
+	if len(objectIDs) < 2 {
+		return nil, fmt.Errorf("at least 2 element IDs are required for grouping")
+	}
+	return objectIDs, nil
+}
+
+// slidesGroupID trims and validates a group ID before it is sent to the API.
+func slidesGroupID(value string) (string, error) {
+	groupID := strings.TrimSpace(value)
+	if groupID == "" {
+		return "", fmt.Errorf("group ID must not be blank")
+	}
+	return groupID, nil
 }
 
 func runSlidesThumbnail(cmd *cobra.Command, args []string) error {

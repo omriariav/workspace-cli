@@ -2663,3 +2663,255 @@ func TestSlidesThumbnail_Download(t *testing.T) {
 		t.Errorf("expected 'fake-png-data', got '%s'", string(data))
 	}
 }
+
+func TestSlidesLineCategory(t *testing.T) {
+	tests := []struct {
+		lineType string
+		category string
+	}{
+		{lineType: "STRAIGHT", category: "STRAIGHT"},
+		{lineType: "BENT", category: "BENT"},
+		{lineType: "CURVED", category: "CURVED"},
+	}
+	if len(slidesLineCategories) != len(tests) {
+		t.Fatalf("allowlist has %d entries, but tests enumerate %d", len(slidesLineCategories), len(tests))
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.lineType, func(t *testing.T) {
+			gotType, gotCategory, err := slidesLineCategory(tt.lineType)
+			if err != nil {
+				t.Fatalf("slidesLineCategory(%q) returned error: %v", tt.lineType, err)
+			}
+			if gotType != tt.lineType || gotCategory != tt.category {
+				t.Errorf("slidesLineCategory(%q) = (%q, %q), want (%q, %q)", tt.lineType, gotType, gotCategory, tt.lineType, tt.category)
+			}
+		})
+	}
+
+	gotType, gotCategory, err := slidesLineCategory(" bent ")
+	if err != nil {
+		t.Fatalf("slidesLineCategory with trimmed lowercase value returned error: %v", err)
+	}
+	if gotType != "BENT" || gotCategory != "BENT" {
+		t.Errorf("trimmed lowercase BENT = (%q, %q), want (BENT, BENT)", gotType, gotCategory)
+	}
+
+	for _, value := range []string{"BENT_CONNECTOR_5", "BENTHILL", ""} {
+		if _, _, err := slidesLineCategory(value); err == nil {
+			t.Errorf("slidesLineCategory(%q) returned nil error", value)
+		}
+	}
+}
+
+func TestSlidesGroupObjectIDs(t *testing.T) {
+	objectIDs, err := slidesGroupObjectIDs(" shape-1 , shape-2 ")
+	if err != nil {
+		t.Fatalf("slidesGroupObjectIDs returned error: %v", err)
+	}
+	if got := strings.Join(objectIDs, ","); got != "shape-1,shape-2" {
+		t.Errorf("object IDs = %q, want %q", got, "shape-1,shape-2")
+	}
+
+	for _, value := range []string{"shape-1,", "shape-1,,shape-2", ",shape-1", "shape-1"} {
+		if _, err := slidesGroupObjectIDs(value); err == nil {
+			t.Errorf("slidesGroupObjectIDs(%q) returned nil error", value)
+		}
+	}
+}
+
+func TestSlidesGroupID(t *testing.T) {
+	groupID, err := slidesGroupID(" group-1 ")
+	if err != nil {
+		t.Fatalf("slidesGroupID returned error: %v", err)
+	}
+	if groupID != "group-1" {
+		t.Errorf("group ID = %q, want %q", groupID, "group-1")
+	}
+	if _, err := slidesGroupID(" \t "); err == nil {
+		t.Error("slidesGroupID accepted a blank group ID")
+	}
+}
+
+func TestSlidesUpdateSlideBackground_Request(t *testing.T) {
+	server := mockSlidesServer(t, map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/presentation-1:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				t.Errorf("method = %s, want POST", r.Method)
+			}
+			var request slides.BatchUpdatePresentationRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if len(request.Requests) != 1 || request.Requests[0].UpdatePageProperties == nil {
+				t.Fatal("expected one UpdatePageProperties request")
+			}
+			update := request.Requests[0].UpdatePageProperties
+			if update.ObjectId != "slide-1" || update.Fields != "pageBackgroundFill" {
+				t.Errorf("update = %#v, want slide-1 pageBackgroundFill", update)
+			}
+			if update.PageProperties.PageBackgroundFill.SolidFill == nil {
+				t.Error("expected solid background fill")
+			}
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{})
+		},
+	})
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("new Slides service: %v", err)
+	}
+	color, err := parseHexColor("#112233")
+	if err != nil {
+		t.Fatalf("parse color: %v", err)
+	}
+	_, err = svc.Presentations.BatchUpdate("presentation-1", &slides.BatchUpdatePresentationRequest{Requests: []*slides.Request{{
+		UpdatePageProperties: &slides.UpdatePagePropertiesRequest{
+			ObjectId: "slide-1",
+			PageProperties: &slides.PageProperties{PageBackgroundFill: &slides.PageBackgroundFill{SolidFill: &slides.SolidFill{
+				Color: &slides.OpaqueColor{RgbColor: color},
+			}}},
+			Fields: "pageBackgroundFill",
+		},
+	}}}).Do()
+	if err != nil {
+		t.Fatalf("update slide background: %v", err)
+	}
+}
+
+func TestSlidesListLayouts_Request(t *testing.T) {
+	server := mockSlidesServer(t, map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/presentation-1": func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				t.Errorf("method = %s, want GET", r.Method)
+			}
+			json.NewEncoder(w).Encode(&slides.Presentation{Layouts: []*slides.Page{{
+				ObjectId: "layout-1",
+				LayoutProperties: &slides.LayoutProperties{
+					Name:           "TITLE_AND_BODY",
+					DisplayName:    "Title and body",
+					MasterObjectId: "master-1",
+				},
+			}}})
+		},
+	})
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("new Slides service: %v", err)
+	}
+	presentation, err := svc.Presentations.Get("presentation-1").Do()
+	if err != nil {
+		t.Fatalf("get presentation: %v", err)
+	}
+	if len(presentation.Layouts) != 1 || presentation.Layouts[0].LayoutProperties.Name != "TITLE_AND_BODY" {
+		t.Errorf("layouts = %#v, want TITLE_AND_BODY layout", presentation.Layouts)
+	}
+}
+
+func TestSlidesAddLine_Request(t *testing.T) {
+	lineType, category, err := slidesLineCategory("BENT")
+	if err != nil {
+		t.Fatalf("slidesLineCategory returned error: %v", err)
+	}
+	if lineType != "BENT" {
+		t.Fatalf("line type = %q, want BENT", lineType)
+	}
+
+	server := mockSlidesServer(t, map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/presentation-1:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			var request slides.BatchUpdatePresentationRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if len(request.Requests) != 1 || request.Requests[0].CreateLine == nil {
+				t.Fatal("expected one CreateLine request")
+			}
+			line := request.Requests[0].CreateLine
+			if line.Category != "BENT" || line.ElementProperties.PageObjectId != "slide-1" {
+				t.Errorf("line = %#v, want BENT line on slide-1", line)
+			}
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{Replies: []*slides.Response{{
+				CreateLine: &slides.CreateLineResponse{ObjectId: "line-1"},
+			}}})
+		},
+	})
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("new Slides service: %v", err)
+	}
+	_, err = svc.Presentations.BatchUpdate("presentation-1", slidesAddLineRequest(
+		"slide-1", category, 10, 20, 110, 70,
+	)).Do()
+	if err != nil {
+		t.Fatalf("create line: %v", err)
+	}
+}
+
+func TestSlidesGroup_Request(t *testing.T) {
+	objectIDs, err := slidesGroupObjectIDs(" shape-1 , shape-2 ")
+	if err != nil {
+		t.Fatalf("slidesGroupObjectIDs returned error: %v", err)
+	}
+	server := mockSlidesServer(t, map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/presentation-1:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			var request slides.BatchUpdatePresentationRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if len(request.Requests) != 1 || request.Requests[0].GroupObjects == nil {
+				t.Fatal("expected one GroupObjects request")
+			}
+			if got := strings.Join(request.Requests[0].GroupObjects.ChildrenObjectIds, ","); got != "shape-1,shape-2" {
+				t.Errorf("children = %q, want shape-1,shape-2", got)
+			}
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{})
+		},
+	})
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("new Slides service: %v", err)
+	}
+	_, err = svc.Presentations.BatchUpdate("presentation-1", slidesGroupRequest(objectIDs)).Do()
+	if err != nil {
+		t.Fatalf("group objects: %v", err)
+	}
+}
+
+func TestSlidesUngroup_Request(t *testing.T) {
+	groupID, err := slidesGroupID(" group-1 ")
+	if err != nil {
+		t.Fatalf("slidesGroupID returned error: %v", err)
+	}
+	server := mockSlidesServer(t, map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/presentation-1:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			var request slides.BatchUpdatePresentationRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if len(request.Requests) != 1 || request.Requests[0].UngroupObjects == nil {
+				t.Fatal("expected one UngroupObjects request")
+			}
+			if got := strings.Join(request.Requests[0].UngroupObjects.ObjectIds, ","); got != "group-1" {
+				t.Errorf("object IDs = %q, want group-1", got)
+			}
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{})
+		},
+	})
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("new Slides service: %v", err)
+	}
+	_, err = svc.Presentations.BatchUpdate("presentation-1", slidesUngroupRequest(groupID)).Do()
+	if err != nil {
+		t.Fatalf("ungroup objects: %v", err)
+	}
+}
