@@ -1,6 +1,6 @@
 ---
 name: gws-contacts
-version: 1.0.0
+version: 1.43.1
 description: "Google Contacts CLI operations via gws. Use when users need to list, search, view, create, or delete contacts. Triggers: contacts, google contacts, people api, contact management."
 metadata:
   short-description: Google Contacts CLI operations

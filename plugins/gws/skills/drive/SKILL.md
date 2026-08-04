@@ -517,6 +517,15 @@ gws drive list --format yaml    # YAML format
 gws drive list --format text    # Human-readable text
 ```
 
+## Change Notifications
+
+To receive push notifications when Drive files change (baseline file and
+permission events on a file or shared drive, delivered to an existing
+Pub/Sub topic), use the Workspace Events API via the `gws-events` skill
+(`gws events subscriptions create --target //drive.googleapis.com/files/FILE ...`).
+For on-demand history, `gws drive changes` and `gws drive activity` remain
+the polling options.
+
 ## Tips for AI Agents
 
 - Always use `--format json` (the default) for programmatic parsing

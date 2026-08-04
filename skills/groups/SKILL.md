@@ -1,6 +1,6 @@
 ---
 name: gws-groups
-version: 1.0.0
+version: 1.43.1
 description: "Google Groups CLI operations via gws. Use when users need to list groups or view group members. Triggers: groups, google groups, admin directory, group members."
 metadata:
   short-description: Google Groups CLI operations

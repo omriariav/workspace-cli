@@ -52,7 +52,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.43.0** - Service-account authentication (domain-wide delegation and admin-approved Chat app modes) and the `gws events` command group for GA Workspace Events subscription lifecycle with CloudEvent decoding.
+**v1.43.1** - Skill audit and version consistency: every source skill version now tracks the release version (enforced by test), with gws-events cross-references and service-account-app boundary clarifications in the chat and drive skills.
 
 ## Roadmap
 
@@ -87,49 +87,25 @@ Every feature/fix follows this flow:
 
 ## Release Checklist
 
-Release changes are PR-only. Never push release commits, version bumps, tags, or GitHub releases directly from local `main`.
+The canonical release procedure lives in [RELEASE.md](RELEASE.md) — follow
+it step by step. Non-negotiable safety rules:
 
-Hard gates before publishing any release:
-- Release PR exists and contains the version bump, release notes/docs, and related issue links.
-- GitHub Actions are green on the latest PR commit.
-- Codex has posted its PR review comment for the latest PR commit, and all actionable feedback is resolved.
-- `make release-check` passes locally on the release branch or merged result.
-- No local tag, remote tag, draft release, or published release already exists for `vX.Y.Z`.
-- The release PR is merged, and the tag will point at the merged commit on `main`.
-
-If any gate is missing, do not run `make release`. If release automation already started from an unreviewed commit, stop it, delete any draft release/tag it created, restore `main` with a revert if needed, and route the release through a PR.
-
-```
-1. git checkout -b release/vX.Y.Z main
-2. Edit Makefile: bump VERSION (e.g. 1.27.0 -> 1.28.0)
-3. Edit CLAUDE.md: update "Current Version" line
-4. Update release notes/docs and issue links
-5. git add Makefile CLAUDE.md RELEASES.md <docs>
-6. git commit -m "Release vX.Y.Z"
-7. git push -u origin release/vX.Y.Z
-8. Open a PR against main
-9. Wait for green GitHub Actions and the Codex PR review comment; fix issues only by pushing to the PR branch
-10. Merge the PR only after the gates above are satisfied
-11. git checkout main && git pull --ff-only
-12. Verify the release tag/release does not already exist
-13. make release VERSION=X.Y.Z
-   — runs fmt/vet/test, checks clean tree, tags, cross-compiles, uploads binaries, verifies
-   — creates a DRAFT release — edit notes and publish:
-   gh release edit vX.Y.Z --draft=false --notes "<release notes>"
-14. make install
-   — installs to $GOPATH/bin with correct version embedded
-15. /tweet about the release (optional, comms step)
-```
-
-### Makefile targets
-
-| Target | What it does |
-|--------|-------------|
-| `make release-check` | Pre-release gate: fmt + vet + test + clean-tree check |
-| `make release VERSION=x.y.z` | Full release: check → tag → cross-compile → upload → verify |
-| `make install` | Install to `$GOPATH/bin` with proper `-ldflags` (never use `go install` directly) |
-
-**Never use `go install ./cmd/gws` directly** — it produces a pseudo-version like `v1.27.1-0.xxxxx` instead of the clean version. Always use `make install`.
+- Release changes are PR-only. Never push release commits, version bumps,
+  tags, or GitHub releases directly from local `main`.
+- Do not run `make release` unless every hard gate in RELEASE.md holds:
+  release PR merged, CI green, every automated PR-review result/comment on
+  the latest commit (Codex and GitHub Actions feedback comments alike)
+  inspected with zero unresolved actionable findings — a green check
+  status alone is not enough — `make release-check` passing, and no
+  pre-existing tag/draft/release for the version.
+- Skills are a release gate: source skill versions must equal the release
+  version, Codex mirrors must stay version-free and content-synced, and
+  affected skills must be audited for capability/scope/exclusion accuracy
+  before publishing (details in RELEASE.md).
+- If release automation started from an unreviewed commit, stop it, delete
+  any draft release/tag it created, restore `main` with a revert if needed,
+  and route the release through a PR.
+- **Never use `go install ./cmd/gws` directly** — always `make install`.
 
 ## Parallel Agent Sprints
 

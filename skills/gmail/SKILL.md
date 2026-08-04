@@ -1,6 +1,6 @@
 ---
 name: gws-gmail
-version: 1.2.0
+version: 1.43.1
 description: "Google Gmail CLI operations via gws. Use when users need to list emails, read messages, send email, manage labels, drafts, attachments, batch operations, or trash messages. Triggers: gmail, email, inbox, send email, mail, labels, archive, trash, drafts, attachments."
 metadata:
   short-description: Google Gmail CLI operations

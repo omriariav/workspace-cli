@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -479,4 +480,64 @@ func TestEventsUpdate_EmptyEventTypesRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), "contains no event types") {
 		t.Errorf("error = %q, want empty-event-types usage error", err.Error())
 	}
+}
+
+func TestEventsList_MaxValidation(t *testing.T) {
+	// Non-positive --max must fail locally as a usage error before any
+	// filter building or client/HTTP work; a valid max proceeds past the
+	// local validation (and then fails on auth in this environment, not
+	// on usage).
+	setFlags := func(t *testing.T, max string) {
+		t.Helper()
+		if err := eventsSubsListCmd.Flags().Set("event-type", "google.workspace.chat.message.v1.created"); err != nil {
+			t.Fatal(err)
+		}
+		if err := eventsSubsListCmd.Flags().Set("max", max); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = eventsSubsListCmd.Flags().Set("event-type", "")
+			_ = eventsSubsListCmd.Flags().Set("max", "50")
+		})
+	}
+
+	tests := []struct {
+		name    string
+		max     string
+		wantErr string
+	}{
+		{"zero", "0", "--max must be greater than 0"},
+		{"negative", "-1", "--max must be greater than 0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setFlags(t, tt.max)
+			err := runEventsSubsList(eventsSubsListCmd, nil)
+			if err == nil {
+				t.Fatal("expected usage error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error = %q, want containing %q", err.Error(), tt.wantErr)
+			}
+			var ue *usageError
+			if !errors.As(err, &ue) {
+				t.Errorf("error should be a usage error, got %T", err)
+			}
+		})
+	}
+
+	t.Run("valid max passes local validation", func(t *testing.T) {
+		setFlags(t, "50")
+		err := runEventsSubsList(eventsSubsListCmd, nil)
+		// In tests there are no stored credentials, so a valid max reaches
+		// the client-construction stage and fails there — never as the
+		// --max usage error.
+		if err != nil && strings.Contains(err.Error(), "--max must be greater than 0") {
+			t.Errorf("valid max rejected by local validation: %v", err)
+		}
+		var ue *usageError
+		if errors.As(err, &ue) {
+			t.Errorf("valid max must not produce a usage error, got %v", err)
+		}
+	})
 }

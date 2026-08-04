@@ -1,6 +1,6 @@
 ---
 name: gws-sheets
-version: 1.1.0
+version: 1.43.1
 description: "Google Sheets CLI operations via gws. Use when users need to read, write, or manage Google Sheets spreadsheets including cell values, rows, columns, sheets, sorting, merging, formatting, and find-replace. Triggers: sheets, spreadsheet, google sheets, cells, rows, columns, formulas, formatting."
 metadata:
   short-description: Google Sheets CLI operations

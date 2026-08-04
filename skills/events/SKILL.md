@@ -1,6 +1,6 @@
 ---
 name: gws-events
-version: 1.0.0
+version: 1.43.1
 description: "Google Workspace Events API operations via gws. Use when users need to create or manage event subscriptions for Chat, Drive, or Meet resources (Pub/Sub delivery), renew or reactivate subscriptions, or decode Pub/Sub CloudEvent notifications. Triggers: workspace events, event subscription, subscribe to chat events, drive events, meet events, pubsub notifications, cloudevent."
 metadata:
   short-description: Google Workspace Events subscriptions

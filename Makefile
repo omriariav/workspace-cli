@@ -3,7 +3,7 @@ PKG := ./cmd/gws
 BUILD_DIR := ./bin
 
 # Version info
-VERSION ?= 1.43.0
+VERSION ?= 1.43.1
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS := -ldflags "-X github.com/omriariav/workspace-cli/cmd.Version=$(VERSION) \
@@ -47,11 +47,11 @@ fmt: ## Format code
 RELEASE_DIR := $(BUILD_DIR)/release
 PLATFORMS := darwin/arm64 darwin/amd64 linux/amd64 linux/arm64
 
-release-check: fmt vet test ## Pre-release quality gate
+release-check: fmt vet test ## Pre-release gate: fmt+vet+tests (incl. skill version/mirror integrity) + clean tree
 	@if [ -n "$$(git status --porcelain)" ]; then \
 		echo "ERROR: working tree is dirty — commit or stash changes first"; exit 1; \
 	fi
-	@echo "All checks passed."
+	@echo "All checks passed (fmt, vet, tests incl. skill integrity gates, clean tree)."
 
 release: release-check ## Full release: build, tag, upload, verify (VERSION required)
 	@if [ "$(VERSION)" = "" ]; then echo "ERROR: VERSION is required (make release VERSION=x.y.z)"; exit 1; fi

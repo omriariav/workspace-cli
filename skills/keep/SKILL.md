@@ -1,6 +1,6 @@
 ---
 name: gws-keep
-version: 1.0.0
+version: 1.43.1
 description: "Google Keep CLI operations via gws. Use when users need to list, view, or create Google Keep notes. Triggers: keep, google keep, notes, sticky notes."
 metadata:
   short-description: Google Keep CLI operations

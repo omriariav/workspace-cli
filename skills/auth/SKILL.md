@@ -1,6 +1,6 @@
 ---
 name: gws-auth
-version: 1.2.0
+version: 1.43.1
 description: "Google Workspace CLI authentication setup and management. Use when users need to set up OAuth credentials, authenticate with Google APIs, or troubleshoot authentication issues. Triggers: gws auth, google workspace setup, oauth, credentials, client id, api setup."
 metadata:
   short-description: Google Workspace CLI authentication

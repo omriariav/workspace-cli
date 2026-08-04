@@ -1,6 +1,6 @@
 ---
 name: gws-forms
-version: 1.1.0
+version: 1.43.1
 description: "Google Forms CLI operations via gws. Use when users need to get form metadata, retrieve form responses, create forms, or update forms. Triggers: google forms, form responses, survey, form data, create form, update form."
 metadata:
   short-description: Google Forms CLI operations

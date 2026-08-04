@@ -1,5 +1,16 @@
 # Releases
 
+## v1.43.1
+
+**Skill Audit, Uniform Skill Versions, Canonical Release Procedure**
+
+- Unified every source skill version with the release version and added a test that anchors both plugin manifests and all `skills/*/SKILL.md` version fields to the Makefile `VERSION`, so `make release-check` enforces skill-version consistency on every release. Codex mirrors remain version-free by design and content-synced via the existing mirror tests.
+- `gws-chat` skill now routes push notifications to the `gws-events` skill, clarifies that `service-account-app` credentials cover only individual Chat-space event subscriptions (not send/notify or space management), and points domain-wide-delegation setup at `auth_mode: service-account-dwd`.
+- `gws-drive` skill gained a Change Notifications section routing push notifications to Workspace Events subscriptions, with `changes`/`activity` documented as the polling options.
+- Added canonical [RELEASE.md](RELEASE.md) with the hard release gates, including the mandatory skills gates (uniform versions, mirror parity, per-release skill capability/scope/exclusion audit, no publish before the plugin bundle passes); CLAUDE.md now points there instead of duplicating the procedure.
+- Fixed `gws events subscriptions list --max`: non-positive values (0, negative) are now rejected locally as a usage error before any filter building or API call, with regression tests.
+- Hardened the release review gate: automated PR-review results and comments (Codex and GitHub Actions feedback) must be inspected and fully resolved on the latest commit before merge or release — a green check conclusion alone does not satisfy the gate.
+
 ## v1.42.1
 
 **Claude Plugin Manifest Compatibility**

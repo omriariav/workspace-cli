@@ -1,6 +1,6 @@
 {
   "name": "gws",
-  "version": "1.43.0",
+  "version": "1.43.1",
   "description": "Unofficial Google Workspace CLI skills (Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Groups, Keep, Workspace Events, Search) and optional read-only session context hooks.",
   "author": {
     "name": "Omri Ariav",
