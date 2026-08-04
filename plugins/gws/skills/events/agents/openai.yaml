@@ -1,0 +1,4 @@
+interface:
+  display_name: "GWS Events"
+  short_description: "Workspace Events subscriptions via gws"
+  default_prompt: "Use $gws-events to manage Workspace Events subscriptions (Chat, Drive, Meet) and decode Pub/Sub CloudEvent notifications."

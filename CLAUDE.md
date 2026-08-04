@@ -17,7 +17,7 @@
 
 | Service | Commands |
 |---------|----------|
-| `auth` | login, logout, status |
+| `auth` | login, logout, status (OAuth default; `auth_mode` supports service-account-dwd and service-account-app) |
 | `gmail` | list, read, links, thread, send, reply, forward, labels, label, archive, trash, event-id, untrash, delete, batch-modify, batch-delete, trash-thread, untrash-thread, delete-thread, label-info, create-label, update-label, delete-label, drafts, draft, create-draft, update-draft, send-draft, delete-draft, attachment |
 | `calendar` | list, events, create, update, delete, rsvp, get, quick-add, instances, move, get-calendar, create-calendar, update-calendar, delete-calendar, clear, subscribe, unsubscribe, calendar-info, update-subscription, acl, share, unshare, update-acl, freebusy, colors, settings |
 | `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, reopen, move, clear |
@@ -30,6 +30,7 @@
 | `groups` | list, members |
 | `keep` | list, get, create |
 | `forms` | info, get, responses, response, create, update |
+| `events` | subscriptions list, subscriptions get, subscriptions create, subscriptions update, subscriptions renew, subscriptions delete, subscriptions reactivate, decode |
 | `search` | web search (needs API key) |
 | `hooks` | status, enable, configure, disable, test |
 | `version` | Show version info |

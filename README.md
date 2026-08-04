@@ -87,8 +87,35 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | Command | Description |
 |---------|-------------|
 | `gws auth login` | Authenticate via OAuth2 + PKCE |
-| `gws auth status` | Show current auth status and email |
+| `gws auth status` | Show current auth status and email (or the configured service-account mode) |
 | `gws auth logout` | Remove stored credentials |
+
+#### Service-account authentication
+
+Besides the default interactive OAuth flow, `gws` supports two explicit
+service-account modes via `auth_mode` (env `GWS_AUTH_MODE` or config file).
+Modes are mutually exclusive and validated fail-closed:
+
+| Mode | Settings | Behavior |
+|------|----------|----------|
+| `oauth` (default) | none | Interactive OAuth2 + PKCE; `gws auth login` |
+| `service-account-dwd` | `service_account_key_file` + `impersonate_user` | Domain-wide delegation: the service account acts as the named Workspace user across all services |
+| `service-account-app` | `service_account_key_file` | Admin-approved Google Chat app credentials; limited to `gws events` subscriptions on individual Chat spaces |
+
+```bash
+# Domain-wide delegation
+export GWS_AUTH_MODE=service-account-dwd
+export GWS_SERVICE_ACCOUNT_KEY_FILE=~/keys/sa.json
+export GWS_IMPERSONATE_USER=user@yourdomain.com
+
+# Chat app auth (events subscriptions only)
+export GWS_AUTH_MODE=service-account-app
+export GWS_SERVICE_ACCOUNT_KEY_FILE=~/keys/chat-app-sa.json
+```
+
+Service-account modes read the JSON key at request time; key material is
+never persisted, printed, or included in errors. `gws auth login` is not
+used in these modes and fails fast with guidance.
 
 ### Hooks
 
@@ -99,6 +126,30 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 | `gws hooks configure` | Preview preferences; `--enabled`, `--time`, and `--workspace` are user-scope-only consent controls, while workspace scope is limited to source, timezone, and TTL preferences |
 | `gws hooks test --event UserPromptSubmit` | Run an on-demand, read-only health check with metadata-only output |
 | `gws hooks disable --scope user` | Preview disabling hook fetching without changing normal GWS commands or authentication |
+
+### Events (Workspace Events API)
+
+| Command | Description |
+|---------|-------------|
+| `gws events subscriptions list` | List subscriptions (`--event-type` required by the API, `--target` optional, raw `--filter`, `--max`) |
+| `gws events subscriptions get <id>` | Get a subscription |
+| `gws events subscriptions create` | Create a subscription (`--target`, `--event-types`, `--topic projects/P/topics/T`, `--include-resource-data`, `--ttl`, `--meet-created-scope`) |
+| `gws events subscriptions update <id>` | Update event types and/or TTL (`--event-types`, `--ttl`) |
+| `gws events subscriptions renew <id>` | Extend expiration (`--ttl`, default `0s` = maximum) |
+| `gws events subscriptions delete <id>` | Delete a subscription |
+| `gws events subscriptions reactivate <id>` | Reactivate a suspended subscription |
+| `gws events decode` | Decode a Pub/Sub CloudEvent notification from stdin (push envelope or bare message) |
+
+GA-only surface: Chat space events (message/reaction/membership/space),
+Chat user events incl. `spaceReadState`/`threadReadState`, baseline Drive
+file (`google.workspace.drive.file.v3.added` etc.) and permission events,
+and Meet conference/participant/recording/transcript/smartNote events.
+Notifications are delivered to an **existing** Pub/Sub topic in the
+subscription's Cloud project — `gws` never creates or modifies topics.
+Credentials are minted with the least-privilege documented scopes per
+subscription class; under `service-account-app`, only individual Chat
+space subscriptions are allowed and read-state is rejected (its app-wide
+variant is Developer Preview).
 
 ### Gmail
 

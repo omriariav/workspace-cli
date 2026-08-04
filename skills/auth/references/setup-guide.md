@@ -198,3 +198,58 @@ Google Chat API may require additional configuration:
 ### "Error: redirect_uri_mismatch"
 - Ensure the credential type is "Desktop app" (not "Web application")
 - Desktop apps use `http://localhost` for the redirect URI automatically
+
+## Service-Account Setup (v1.43.0+)
+
+`gws` supports two non-interactive service-account modes selected with
+`auth_mode` (`GWS_AUTH_MODE` or `auth_mode` in `~/.config/gws/config.yaml`).
+Configuration is validated fail-closed: incomplete or mixed settings produce
+a clear error, and key material is never persisted or printed.
+
+### Domain-wide delegation (`service-account-dwd`)
+
+Acts as a named Workspace user across all services. Requires a Workspace
+**domain administrator** to authorize the service account:
+
+1. Create a service account in Google Cloud and download its JSON key.
+2. In the Admin console (Security > API controls > Domain-wide delegation),
+   authorize the service account's client ID for the scopes you need.
+3. Configure:
+   ```bash
+   export GWS_AUTH_MODE=service-account-dwd
+   export GWS_SERVICE_ACCOUNT_KEY_FILE=~/keys/sa.json
+   export GWS_IMPERSONATE_USER=user@yourdomain.com
+   ```
+4. Run `gws` commands directly — no `gws auth login` (it fails fast in this
+   mode) and no token file.
+
+Both `service_account_key_file` and `impersonate_user` are required.
+
+### Chat app authentication (`service-account-app`)
+
+Uses the Chat app's own credentials — **only** for `gws events`
+subscriptions on individual Chat spaces. The granular `chat.app.*` scopes
+require one-time **administrator approval** in the Admin console; every
+other gws service command is rejected in this mode.
+
+```bash
+export GWS_AUTH_MODE=service-account-app
+export GWS_SERVICE_ACCOUNT_KEY_FILE=~/keys/chat-app-sa.json
+```
+
+`impersonate_user` must NOT be set (app auth never impersonates); use
+`service-account-dwd` to act as a user.
+
+### Events scopes with OAuth
+
+When staying on the default OAuth flow, grant the Workspace Events
+subscription scopes by including the `events` service in a scoped login:
+
+```bash
+gws auth login --services chat,events
+```
+
+### Status in service-account modes
+
+`gws auth status` reports the configured mode, key-file path, and (for DWD)
+the impersonated user instead of OAuth token state.

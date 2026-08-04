@@ -302,7 +302,7 @@ func TestPluginHookManifestsUseOneEntrypointPerEvent(t *testing.T) {
 var expectedSkills = []string{
 	"gmail", "calendar", "drive", "docs", "sheets",
 	"slides", "tasks", "chat", "forms", "search", "auth",
-	"contacts", "groups", "keep", "gws-setup",
+	"contacts", "groups", "keep", "gws-setup", "events",
 }
 
 func TestCodexSkills_MirrorClaudeSkills(t *testing.T) {
@@ -447,7 +447,7 @@ func TestSkillFiles_AllHaveReferences(t *testing.T) {
 	servicesWithCommands := []string{
 		"gmail", "calendar", "drive", "docs", "sheets",
 		"slides", "tasks", "chat", "forms", "search",
-		"contacts", "gws-setup",
+		"contacts", "gws-setup", "events",
 	}
 	for _, skill := range servicesWithCommands {
 		path := filepath.Join(base, skill, "references", "commands.md")
@@ -469,7 +469,7 @@ func TestCodexSkillFiles_AllHaveReferences(t *testing.T) {
 	servicesWithCommands := []string{
 		"gmail", "calendar", "drive", "docs", "sheets",
 		"slides", "tasks", "chat", "forms", "search",
-		"contacts", "groups", "keep", "gws-setup",
+		"contacts", "groups", "keep", "gws-setup", "events",
 	}
 	for _, skill := range servicesWithCommands {
 		path := filepath.Join(base, skill, "references", "commands.md")
@@ -697,7 +697,7 @@ func TestCodexSKILLmd_HasOutputModes(t *testing.T) {
 
 func assertSKILLmdHasOutputModes(t *testing.T, base string) {
 	t.Helper()
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup", "events"}
 	for _, skill := range services {
 		t.Run(skill, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(base, skill, "SKILL.md"))
@@ -955,7 +955,7 @@ func TestCodexReferenceFiles_HaveDisclaimer(t *testing.T) {
 func assertReferenceFilesHaveDisclaimer(t *testing.T, base string) {
 	t.Helper()
 	// commands.md files
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup", "events"}
 	for _, svc := range services {
 		t.Run(svc+"/commands.md", func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(base, svc, "references", "commands.md"))
@@ -990,7 +990,7 @@ func TestCodexReferenceFiles_DocumentGlobalFlags(t *testing.T) {
 
 func assertReferenceFilesDocumentGlobalFlags(t *testing.T, base string) {
 	t.Helper()
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup", "events"}
 
 	for _, svc := range services {
 		t.Run(svc, func(t *testing.T) {
@@ -1023,7 +1023,7 @@ func TestCodexReferenceFiles_DocumentQuietFlag(t *testing.T) {
 
 func assertReferenceFilesDocumentQuietFlag(t *testing.T, base string) {
 	t.Helper()
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup", "events"}
 
 	for _, svc := range services {
 		t.Run(svc, func(t *testing.T) {
@@ -1061,7 +1061,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 	}
 
 	// references/commands.md files
-	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup"}
+	services := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "search", "contacts", "groups", "keep", "gws-setup", "events"}
 	for _, svc := range services {
 		if _, err := os.Stat(filepath.Join(base, svc, "references", "commands.md")); err == nil {
 			count++
@@ -1073,7 +1073,7 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 		count++
 	}
 
-	expectedTotal := 31 // 1 marketplace.json + 15 SKILL.md + 14 commands.md + 1 setup-guide.md
+	expectedTotal := 33 // 1 marketplace.json + 16 SKILL.md + 15 commands.md + 1 setup-guide.md
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
 	}
