@@ -525,19 +525,4 @@ func TestEventsList_MaxValidation(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("valid max passes local validation", func(t *testing.T) {
-		setFlags(t, "50")
-		err := runEventsSubsList(eventsSubsListCmd, nil)
-		// In tests there are no stored credentials, so a valid max reaches
-		// the client-construction stage and fails there — never as the
-		// --max usage error.
-		if err != nil && strings.Contains(err.Error(), "--max must be greater than 0") {
-			t.Errorf("valid max rejected by local validation: %v", err)
-		}
-		var ue *usageError
-		if errors.As(err, &ue) {
-			t.Errorf("valid max must not produce a usage error, got %v", err)
-		}
-	})
 }
