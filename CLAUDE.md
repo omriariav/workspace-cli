@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-`gws` is a unified CLI for Google Workspace built in Go (Cobra/Viper). It provides structured JSON output for 12 Google services, designed for AI agents and scripting.
+`gws` is a unified CLI for Google Workspace built in Go (Cobra/Viper). It provides structured JSON output for 14 Google services (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Slides, Chat, Contacts, Groups, Keep, Forms, Workspace Events, Custom Search), designed for AI agents and scripting.
 
 ## Architecture
 
@@ -17,7 +17,7 @@
 
 | Service | Commands |
 |---------|----------|
-| `auth` | login, logout, status |
+| `auth` | login, logout, status (OAuth default; `auth_mode` supports service-account-dwd and service-account-app) |
 | `gmail` | list, read, links, thread, send, reply, forward, labels, label, archive, trash, event-id, untrash, delete, batch-modify, batch-delete, trash-thread, untrash-thread, delete-thread, label-info, create-label, update-label, delete-label, drafts, draft, create-draft, update-draft, send-draft, delete-draft, attachment |
 | `calendar` | list, events, create, update, delete, rsvp, get, quick-add, instances, move, get-calendar, create-calendar, update-calendar, delete-calendar, clear, subscribe, unsubscribe, calendar-info, update-subscription, acl, share, unshare, update-acl, freebusy, colors, settings |
 | `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, reopen, move, clear |
@@ -30,6 +30,7 @@
 | `groups` | list, members |
 | `keep` | list, get, create |
 | `forms` | info, get, responses, response, create, update |
+| `events` | subscriptions list, subscriptions get, subscriptions create, subscriptions update, subscriptions renew, subscriptions delete, subscriptions reactivate, decode |
 | `search` | web search (needs API key) |
 | `hooks` | status, enable, configure, disable, test |
 | `version` | Show version info |
@@ -51,7 +52,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.42.1** - Claude Code marketplace manifest compatibility: component declarations live only in `.claude-plugin/plugin.json`, the canonical owner of skills and hooks.
+**v1.43.0** - Service-account authentication (domain-wide delegation and admin-approved Chat app modes) and the `gws events` command group for GA Workspace Events subscription lifecycle with CloudEvent decoding.
 
 ## Roadmap
 

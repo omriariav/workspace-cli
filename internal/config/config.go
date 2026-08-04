@@ -6,18 +6,24 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	ClientID     string   `mapstructure:"client_id"`
-	ClientSecret string   `mapstructure:"client_secret"`
-	Format       string   `mapstructure:"format"`
-	Services     []string `mapstructure:"services"`
+	ClientID          string   `mapstructure:"client_id"`
+	ClientSecret      string   `mapstructure:"client_secret"`
+	Format            string   `mapstructure:"format"`
+	Services          []string `mapstructure:"services"`
+	AuthMode          string   `mapstructure:"auth_mode"`
+	ServiceAccountKey string   `mapstructure:"service_account_key_file"`
+	ImpersonateUser   string   `mapstructure:"impersonate_user"`
 }
 
 // Keys for configuration values.
 const (
-	KeyClientID     = "client_id"
-	KeyClientSecret = "client_secret"
-	KeyFormat       = "format"
-	KeyServices     = "services"
+	KeyClientID          = "client_id"
+	KeyClientSecret      = "client_secret"
+	KeyFormat            = "format"
+	KeyServices          = "services"
+	KeyAuthMode          = "auth_mode"
+	KeyServiceAccountKey = "service_account_key_file"
+	KeyImpersonateUser   = "impersonate_user"
 )
 
 // GetClientID returns the OAuth client ID from config or environment.
@@ -42,6 +48,25 @@ func GetFormat() string {
 // GetServices returns the list of services from config.
 func GetServices() []string {
 	return viper.GetStringSlice(KeyServices)
+}
+
+// GetAuthMode returns the configured authentication mode. Empty means the
+// default interactive OAuth flow.
+func GetAuthMode() string {
+	return viper.GetString(KeyAuthMode)
+}
+
+// GetServiceAccountKeyFile returns the path to the service-account JSON key
+// file. Only the path is ever surfaced; key material is never read into
+// config or printed.
+func GetServiceAccountKeyFile() string {
+	return viper.GetString(KeyServiceAccountKey)
+}
+
+// GetImpersonateUser returns the Workspace user email to impersonate under
+// domain-wide delegation.
+func GetImpersonateUser() string {
+	return viper.GetString(KeyImpersonateUser)
 }
 
 // SetDefaults sets default configuration values.

@@ -1,6 +1,6 @@
 ---
 name: gws-auth
-version: 1.1.0
+version: 1.2.0
 description: "Google Workspace CLI authentication setup and management. Use when users need to set up OAuth credentials, authenticate with Google APIs, or troubleshoot authentication issues. Triggers: gws auth, google workspace setup, oauth, credentials, client id, api setup."
 metadata:
   short-description: Google Workspace CLI authentication
@@ -31,6 +31,40 @@ If not found, install: `go install github.com/omriariav/workspace-cli/cmd/gws@la
 | Login (specific services) | `gws auth login --services gmail,calendar,chat` |
 | Login with credentials | `gws auth login --client-id <id> --client-secret <secret>` |
 | Logout (revokes token) | `gws auth logout` |
+
+## Service-Account Modes (v1.43.0+)
+
+Besides the default interactive OAuth flow, `gws` supports two explicit
+service-account modes via `auth_mode` (`GWS_AUTH_MODE` or config file).
+Modes are mutually exclusive and validated fail-closed with actionable
+errors; key material is never persisted, printed, or echoed.
+
+| Mode | Required settings | Behavior |
+|------|-------------------|----------|
+| `oauth` (default) | none | Interactive OAuth2 + PKCE via `gws auth login` |
+| `service-account-dwd` | `service_account_key_file` (`GWS_SERVICE_ACCOUNT_KEY_FILE`) + `impersonate_user` (`GWS_IMPERSONATE_USER`) | Domain-wide delegation: the service account acts as the named Workspace user across all services |
+| `service-account-app` | `service_account_key_file` | Admin-approved Google Chat app credentials; limited to `gws events` subscriptions on individual Chat spaces — every other service command is rejected |
+
+```bash
+# Domain-wide delegation (requires DWD enabled for the service account
+# and the scopes authorized in the Admin console)
+export GWS_AUTH_MODE=service-account-dwd
+export GWS_SERVICE_ACCOUNT_KEY_FILE=~/keys/sa.json
+export GWS_IMPERSONATE_USER=user@yourdomain.com
+gws gmail list   # runs as the impersonated user, no login needed
+
+# Chat app auth (events subscriptions only)
+export GWS_AUTH_MODE=service-account-app
+export GWS_SERVICE_ACCOUNT_KEY_FILE=~/keys/chat-app-sa.json
+gws events subscriptions create --target //chat.googleapis.com/spaces/AAA ...
+```
+
+Notes:
+- `gws auth login` fails fast in service-account modes (no login needed);
+  `gws auth status` reports the configured mode instead of token state.
+- Incomplete or mixed configuration is rejected: DWD without
+  `impersonate_user`, app mode with `impersonate_user`, or OAuth mode with
+  leftover service-account settings all produce clear errors.
 
 ## First-Time Setup
 
