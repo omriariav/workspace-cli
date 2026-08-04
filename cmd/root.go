@@ -30,7 +30,7 @@ var rootCmd = &cobra.Command{
 
 It provides structured, token-efficient access to Gmail, Calendar, Drive,
 Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Groups, Keep,
-and Custom Search.`,
+Workspace Events, and Custom Search.`,
 	// SilenceErrors prevents Cobra from re-printing errors we already
 	// emitted via PrintError (stderr structured JSON). SilenceUsage
 	// prevents the auto-generated help dump on validation failures —

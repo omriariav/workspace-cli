@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-`gws` is a unified CLI for Google Workspace built in Go (Cobra/Viper). It provides structured JSON output for 12 Google services, designed for AI agents and scripting.
+`gws` is a unified CLI for Google Workspace built in Go (Cobra/Viper). It provides structured JSON output for 14 Google services (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Slides, Chat, Contacts, Groups, Keep, Forms, Workspace Events, Custom Search), designed for AI agents and scripting.
 
 ## Architecture
 
@@ -52,7 +52,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.42.1** - Claude Code marketplace manifest compatibility: component declarations live only in `.claude-plugin/plugin.json`, the canonical owner of skills and hooks.
+**v1.43.0** - Service-account authentication (domain-wide delegation and admin-approved Chat app modes) and the `gws events` command group for GA Workspace Events subscription lifecycle with CloudEvent decoding.
 
 ## Roadmap
 

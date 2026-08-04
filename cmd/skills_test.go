@@ -214,8 +214,8 @@ func TestCodexPluginJSON_Valid(t *testing.T) {
 	if name, ok := manifest["name"].(string); !ok || name != "gws" {
 		t.Errorf("expected Codex plugin name 'gws', got '%v'", manifest["name"])
 	}
-	if version, ok := manifest["version"].(string); !ok || version != "1.42.1" {
-		t.Errorf("expected Codex plugin version '1.42.1', got '%v'", manifest["version"])
+	if version, ok := manifest["version"].(string); !ok || version != "1.43.0" {
+		t.Errorf("expected Codex plugin version '1.43.0', got '%v'", manifest["version"])
 	}
 	if skills, ok := manifest["skills"].(string); !ok || skills != "./skills/" {
 		t.Errorf("expected Codex plugin skills path './skills/', got '%v'", manifest["skills"])
@@ -243,8 +243,8 @@ func TestPluginHookManifestsUseOneEntrypointPerEvent(t *testing.T) {
 	if hooks, ok := claudePlugin["hooks"].(string); !ok || hooks != "./hooks/hooks.json" {
 		t.Fatalf("Claude plugin hooks must reference ./hooks/hooks.json, got %v", claudePlugin["hooks"])
 	}
-	if version, ok := claudePlugin["version"].(string); !ok || version != "1.42.1" {
-		t.Fatalf("Claude plugin version must match the released 1.42.1 baseline, got %v", claudePlugin["version"])
+	if version, ok := claudePlugin["version"].(string); !ok || version != "1.43.0" {
+		t.Fatalf("Claude plugin version must match the released 1.43.0 baseline, got %v", claudePlugin["version"])
 	}
 	claudeHooksPath := filepath.Join("..", "hooks", "hooks.json")
 	claudeData, err := os.ReadFile(claudeHooksPath)
