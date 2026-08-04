@@ -59,8 +59,31 @@ func init() {
 	viper.BindPFlag("client_secret", loginCmd.Flags().Lookup("client-secret"))
 }
 
+// resolveConfiguredAuthMode validates the configured auth-mode settings,
+// returning the resolved config or the fail-closed validation error.
+func resolveConfiguredAuthMode() (*auth.AuthModeConfig, error) {
+	return auth.ResolveAuthMode(
+		config.GetAuthMode(),
+		config.GetServiceAccountKeyFile(),
+		config.GetImpersonateUser(),
+	)
+}
+
 func runLogin(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
+
+	modeCfg, err := resolveConfiguredAuthMode()
+	if err != nil {
+		return usageErrorf("%s", err.Error())
+	}
+	if modeCfg.Mode != auth.AuthModeOAuth {
+		extra := ""
+		if modeCfg.Mode == auth.AuthModeDWD {
+			extra = " and impersonate_user (GWS_IMPERSONATE_USER)"
+		}
+		return usageErrorf("auth login starts the interactive OAuth flow, but auth_mode is %q: service-account modes need no login — configure service_account_key_file (GWS_SERVICE_ACCOUNT_KEY_FILE)%s and run gws commands directly, or unset auth_mode to use OAuth",
+			modeCfg.Mode, extra)
+	}
 
 	clientID := config.GetClientID()
 	clientSecret := config.GetClientSecret()
@@ -141,6 +164,21 @@ func runLogout(cmd *cobra.Command, args []string) error {
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
+
+	if modeCfg, err := resolveConfiguredAuthMode(); err != nil {
+		return usageErrorf("%s", err.Error())
+	} else if modeCfg.Mode != auth.AuthModeOAuth {
+		result := map[string]interface{}{
+			"authenticated": true,
+			"auth_mode":     modeCfg.Mode,
+			"key_file":      modeCfg.KeyFile,
+			"message":       "Using service-account credentials (no OAuth token required)",
+		}
+		if modeCfg.ImpersonateUser != "" {
+			result["impersonate_user"] = modeCfg.ImpersonateUser
+		}
+		return p.Print(result)
+	}
 
 	token, err := auth.LoadToken()
 	if err != nil {

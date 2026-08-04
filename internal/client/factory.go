@@ -24,6 +24,7 @@ import (
 	"google.golang.org/api/sheets/v4"
 	"google.golang.org/api/slides/v1"
 	"google.golang.org/api/tasks/v1"
+	workspaceevents "google.golang.org/api/workspaceevents/v1"
 )
 
 // Factory provides lazy-initialized Google API service clients.
@@ -515,5 +516,35 @@ func (f *Factory) peopleLocked() (*people.Service, error) {
 		return nil, fmt.Errorf("failed to create People client: %w", err)
 	}
 	f.people = svc
+	return svc, nil
+}
+
+// WorkspaceEvents returns a Workspace Events API client. In the
+// service-account modes a dedicated token source is minted with exactly the
+// provided least-privilege scopes (computed by the events command from the
+// subscription class); the default OAuth mode reuses the stored user token,
+// whose scopes were granted at login. Not cached: scopes vary per call.
+func (f *Factory) WorkspaceEvents(scopes []string) (*workspaceevents.Service, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.authMode != nil && f.authMode.Mode != auth.AuthModeOAuth {
+		ts, err := auth.ServiceAccountTokenSource(f.ctx, f.authMode, scopes)
+		if err != nil {
+			return nil, err
+		}
+		svc, err := workspaceevents.NewService(f.ctx, option.WithTokenSource(ts))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Workspace Events client: %w", err)
+		}
+		return svc, nil
+	}
+
+	f.checkServiceScopes("events")
+
+	svc, err := workspaceevents.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Workspace Events client: %w", err)
+	}
 	return svc, nil
 }
