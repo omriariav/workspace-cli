@@ -186,3 +186,54 @@ func TestConfigConstants(t *testing.T) {
 		t.Errorf("unexpected KeyFormat: %s", KeyFormat)
 	}
 }
+
+func TestAuthModeGetters(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+
+	if GetAuthMode() != "" {
+		t.Errorf("expected empty default auth mode, got %q", GetAuthMode())
+	}
+	if GetServiceAccountKeyFile() != "" {
+		t.Errorf("expected empty default key file, got %q", GetServiceAccountKeyFile())
+	}
+	if GetImpersonateUser() != "" {
+		t.Errorf("expected empty default impersonate user, got %q", GetImpersonateUser())
+	}
+
+	viper.Set(KeyAuthMode, "service-account-dwd")
+	viper.Set(KeyServiceAccountKey, "/path/to/key.json")
+	viper.Set(KeyImpersonateUser, "user@example.com")
+
+	if got := GetAuthMode(); got != "service-account-dwd" {
+		t.Errorf("GetAuthMode() = %q", got)
+	}
+	if got := GetServiceAccountKeyFile(); got != "/path/to/key.json" {
+		t.Errorf("GetServiceAccountKeyFile() = %q", got)
+	}
+	if got := GetImpersonateUser(); got != "user@example.com" {
+		t.Errorf("GetImpersonateUser() = %q", got)
+	}
+}
+
+func TestLoad_AuthModeFields(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+
+	viper.Set(KeyAuthMode, "service-account-app")
+	viper.Set(KeyServiceAccountKey, "/path/to/key.json")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.AuthMode != "service-account-app" {
+		t.Errorf("cfg.AuthMode = %q", cfg.AuthMode)
+	}
+	if cfg.ServiceAccountKey != "/path/to/key.json" {
+		t.Errorf("cfg.ServiceAccountKey = %q", cfg.ServiceAccountKey)
+	}
+	if cfg.ImpersonateUser != "" {
+		t.Errorf("cfg.ImpersonateUser = %q, want empty", cfg.ImpersonateUser)
+	}
+}

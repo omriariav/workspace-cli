@@ -30,6 +30,7 @@ import (
 type Factory struct {
 	mu              sync.Mutex
 	ctx             context.Context
+	authMode        *auth.AuthModeConfig
 	tokenSource     oauth2.TokenSource
 	grantedServices []string        // services granted at login time
 	scopeWarned     map[string]bool // track warnings to avoid repeats
@@ -49,8 +50,45 @@ type Factory struct {
 	driveActivity *driveactivity.Service
 }
 
-// NewFactory creates a new client factory.
+// NewFactory creates a new client factory. The token source depends on the
+// configured auth mode: the default OAuth flow reuses the stored user token,
+// while the service-account modes mint credentials from the configured JSON
+// key (with the DWD mode impersonating the configured Workspace user).
 func NewFactory(ctx context.Context) (*Factory, error) {
+	modeCfg, err := auth.ResolveAuthMode(
+		config.GetAuthMode(),
+		config.GetServiceAccountKeyFile(),
+		config.GetImpersonateUser(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if modeCfg.Mode == auth.AuthModeApp {
+		// App mode never pre-mints credentials: only the Workspace Events
+		// surface may request a token, scoped exactly to the granular
+		// chat.app scopes its subscription class needs. Every other
+		// service getter is rejected via requireUserAuth.
+		return &Factory{
+			ctx:         ctx,
+			authMode:    modeCfg,
+			scopeWarned: make(map[string]bool),
+		}, nil
+	}
+
+	if modeCfg.Mode == auth.AuthModeDWD {
+		ts, err := auth.ServiceAccountTokenSource(ctx, modeCfg, serviceAccountScopes(modeCfg))
+		if err != nil {
+			return nil, err
+		}
+		return &Factory{
+			ctx:         ctx,
+			authMode:    modeCfg,
+			tokenSource: ts,
+			scopeWarned: make(map[string]bool),
+		}, nil
+	}
+
 	token, err := auth.LoadToken()
 	if err != nil {
 		return nil, err
@@ -78,10 +116,44 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 
 	return &Factory{
 		ctx:             ctx,
+		authMode:        modeCfg,
 		tokenSource:     ts,
 		grantedServices: auth.LoadGrantedServices(),
 		scopeWarned:     make(map[string]bool),
 	}, nil
+}
+
+// serviceAccountScopes returns the scopes a DWD token source is minted
+// with. DWD acts as a user, so it follows the same service-based scope
+// resolution as an OAuth login (config `services` list, or all services).
+func serviceAccountScopes(modeCfg *auth.AuthModeConfig) []string {
+	if services := config.GetServices(); len(services) > 0 {
+		return auth.ScopesForServices(services)
+	}
+	return auth.AllScopes
+}
+
+// requireUserAuth rejects service access under service-account-app mode.
+// App credentials are limited to Workspace Events subscriptions on
+// individual Chat spaces; every regular service client needs user
+// credentials (OAuth or DWD impersonation).
+func (f *Factory) requireUserAuth(service string) error {
+	if f.authMode != nil && f.authMode.Mode == auth.AuthModeApp {
+		return fmt.Errorf("%s is not available with auth_mode %q: Chat app credentials only support `gws events` subscriptions on individual Chat spaces; use auth_mode %q or the default OAuth login for %s",
+			service, auth.AuthModeApp, auth.AuthModeDWD, service)
+	}
+	return nil
+}
+
+// AuthMode returns the resolved authentication mode config for this factory.
+func (f *Factory) AuthMode() *auth.AuthModeConfig {
+	return f.authMode
+}
+
+// TokenSource exposes the factory's token source so commands can construct
+// clients for services not cached on the factory.
+func (f *Factory) TokenSource() oauth2.TokenSource {
+	return f.tokenSource
 }
 
 // serviceAliases maps every accepted alias for a service to its canonical
@@ -133,6 +205,9 @@ func (f *Factory) Gmail() (*gmail.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("gmail"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("gmail")
 
 	if f.gmail != nil {
@@ -153,6 +228,9 @@ func (f *Factory) Calendar() (*calendar.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("calendar"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("calendar")
 
 	if f.calendar != nil {
@@ -173,6 +251,9 @@ func (f *Factory) Drive() (*drive.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("drive"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("drive")
 
 	if f.drive != nil {
@@ -193,6 +274,9 @@ func (f *Factory) Docs() (*docs.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("docs"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("docs")
 
 	if f.docs != nil {
@@ -213,6 +297,9 @@ func (f *Factory) Sheets() (*sheets.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("sheets"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("sheets")
 
 	if f.sheets != nil {
@@ -233,6 +320,9 @@ func (f *Factory) Slides() (*slides.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("slides"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("slides")
 
 	if f.slides != nil {
@@ -253,6 +343,9 @@ func (f *Factory) Tasks() (*tasks.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("tasks"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("tasks")
 
 	if f.tasks != nil {
@@ -273,6 +366,9 @@ func (f *Factory) Chat() (*chat.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("chat"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("chat")
 
 	if f.chat != nil {
@@ -293,6 +389,9 @@ func (f *Factory) Forms() (*forms.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("forms"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("forms")
 
 	if f.forms != nil {
@@ -313,6 +412,9 @@ func (f *Factory) Admin() (*admin.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("groups"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("groups")
 
 	if f.admin != nil {
@@ -333,6 +435,9 @@ func (f *Factory) Keep() (*keep.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("keep"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("keep")
 
 	if f.keep != nil {
@@ -353,6 +458,9 @@ func (f *Factory) DriveActivity() (*driveactivity.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("driveactivity"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("driveactivity")
 
 	if f.driveActivity != nil {
@@ -374,6 +482,9 @@ func (f *Factory) People() (*people.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if err := f.requireUserAuth("contacts"); err != nil {
+		return nil, err
+	}
 	f.checkServiceScopes("contacts")
 
 	return f.peopleLocked()
@@ -387,6 +498,9 @@ func (f *Factory) People() (*people.Service, error) {
 func (f *Factory) PeopleProfile() (*people.Service, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.requireUserAuth("people"); err != nil {
+		return nil, err
+	}
 	return f.peopleLocked()
 }
 

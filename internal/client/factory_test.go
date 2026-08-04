@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/omriariav/workspace-cli/internal/auth"
 )
 
 // captureStderr swaps os.Stderr for a pipe, runs fn, and returns whatever was
@@ -110,5 +112,61 @@ func TestPeopleProfile_NoWarnEvenAfterPeopleWarned(t *testing.T) {
 	out := captureStderr(t, func() { _, _ = f.PeopleProfile() })
 	if strings.Contains(out, "contacts requires additional permissions") {
 		t.Errorf("PeopleProfile must not warn even after People warned; got %q", out)
+	}
+}
+
+func TestAppMode_RejectsRegularServiceClients(t *testing.T) {
+	f := &Factory{
+		ctx:         context.Background(),
+		authMode:    &auth.AuthModeConfig{Mode: auth.AuthModeApp, KeyFile: "/tmp/key.json"},
+		scopeWarned: map[string]bool{},
+	}
+
+	checks := []struct {
+		service string
+		call    func() error
+	}{
+		{"gmail", func() error { _, err := f.Gmail(); return err }},
+		{"calendar", func() error { _, err := f.Calendar(); return err }},
+		{"drive", func() error { _, err := f.Drive(); return err }},
+		{"docs", func() error { _, err := f.Docs(); return err }},
+		{"sheets", func() error { _, err := f.Sheets(); return err }},
+		{"slides", func() error { _, err := f.Slides(); return err }},
+		{"tasks", func() error { _, err := f.Tasks(); return err }},
+		{"chat", func() error { _, err := f.Chat(); return err }},
+		{"forms", func() error { _, err := f.Forms(); return err }},
+		{"groups", func() error { _, err := f.Admin(); return err }},
+		{"keep", func() error { _, err := f.Keep(); return err }},
+		{"driveactivity", func() error { _, err := f.DriveActivity(); return err }},
+		{"contacts", func() error { _, err := f.People(); return err }},
+		{"people-profile", func() error { _, err := f.PeopleProfile(); return err }},
+	}
+
+	for _, c := range checks {
+		err := c.call()
+		if err == nil {
+			t.Errorf("%s: expected app-mode rejection, got nil error", c.service)
+			continue
+		}
+		if !strings.Contains(err.Error(), "service-account-app") {
+			t.Errorf("%s: error %q does not mention app mode", c.service, err)
+		}
+	}
+}
+
+func TestUserModes_AllowServiceClients(t *testing.T) {
+	for _, mode := range []*auth.AuthModeConfig{
+		nil,
+		{Mode: auth.AuthModeOAuth},
+		{Mode: auth.AuthModeDWD, KeyFile: "/tmp/key.json", ImpersonateUser: "u@example.com"},
+	} {
+		f := &Factory{
+			ctx:         context.Background(),
+			authMode:    mode,
+			scopeWarned: map[string]bool{},
+		}
+		if err := f.requireUserAuth("gmail"); err != nil {
+			t.Errorf("mode %+v: unexpected rejection: %v", mode, err)
+		}
 	}
 }

@@ -23,7 +23,12 @@ var ServiceScopes = map[string][]string{
 	"groups":        {"admin.directory.group.readonly", "admin.directory.group.member.readonly"},
 	"keep":          {"keep.readonly", "keep"},
 	"driveactivity": {"drive.activity.readonly"},
-	"userinfo":      {"userinfo.email"},
+	// `events` covers Workspace Events API subscriptions with user
+	// credentials: least-privilege readonly scopes per GA subscription
+	// class (Chat space/user events incl. read-state, baseline Drive
+	// file/permission events, Meet events).
+	"events":   {"chat.spaces.readonly", "chat.memberships.readonly", "chat.messages.readonly", "chat.messages.reactions.readonly", "chat.users.readstate.readonly", "drive.metadata", "meetings.space.readonly", "meetings.space.created"},
+	"userinfo": {"userinfo.email"},
 }
 
 // AllScopes is the union of all service scopes. Computed at init time for backward compat.
@@ -33,7 +38,7 @@ func computeAllScopes() []string {
 	seen := make(map[string]bool)
 	var scopes []string
 	// Deterministic order: iterate known service names
-	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity", "userinfo"}
+	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity", "events", "userinfo"}
 	for _, svc := range order {
 		for _, s := range ServiceScopes[svc] {
 			full := scopePrefix + s
@@ -79,7 +84,7 @@ func ScopesForServices(services []string) []string {
 // the canonical name first.
 func ServiceForScope(scope string) string {
 	short := strings.TrimPrefix(scope, scopePrefix)
-	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity", "userinfo"}
+	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity", "events", "userinfo"}
 	for _, svc := range order {
 		for _, s := range ServiceScopes[svc] {
 			if s == short {
@@ -92,7 +97,7 @@ func ServiceForScope(scope string) string {
 
 // ValidServiceNames returns all known service names.
 func ValidServiceNames() []string {
-	return []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity"}
+	return []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity", "events"}
 }
 
 // ValidateServices checks that all service names are recognized.
