@@ -394,7 +394,12 @@ func runEventsSubsUpdate(cmd *cobra.Command, args []string) error {
 		return usageErrorf("nothing to update: pass --ttl and/or --event-types")
 	}
 
-	return patchSubscription(p, name, splitEventTypes(eventTypesFlag), ttl, meetCreated)
+	eventTypes := splitEventTypes(eventTypesFlag)
+	if eventTypesFlag != "" && len(eventTypes) == 0 {
+		return usageErrorf("--event-types %q contains no event types: pass a comma-separated list of GA event types", eventTypesFlag)
+	}
+
+	return patchSubscription(p, name, eventTypes, ttl, meetCreated)
 }
 
 func runEventsSubsRenew(cmd *cobra.Command, args []string) error {

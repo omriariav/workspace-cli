@@ -109,3 +109,26 @@ func ServiceAccountTokenSource(ctx context.Context, cfg *AuthModeConfig, scopes 
 
 	return jwtCfg.TokenSource(ctx), nil
 }
+
+// ValidateServiceAccountKey checks that the configured key file exists and
+// parses as a service-account JSON key, without minting a token or making
+// any network call. Errors name the path only, never key content.
+func ValidateServiceAccountKey(cfg *AuthModeConfig) error {
+	if cfg == nil || (cfg.Mode != AuthModeDWD && cfg.Mode != AuthModeApp) {
+		return fmt.Errorf("service-account key validation requires auth_mode %q or %q", AuthModeDWD, AuthModeApp)
+	}
+
+	keyJSON, err := os.ReadFile(cfg.KeyFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("service-account key file not found: %s", cfg.KeyFile)
+		}
+		return fmt.Errorf("failed to read service-account key file %s: %w", cfg.KeyFile, err)
+	}
+
+	// Scope choice is irrelevant for parse validation.
+	if _, err := google.JWTConfigFromJSON(keyJSON, "https://www.googleapis.com/auth/userinfo.email"); err != nil {
+		return fmt.Errorf("invalid service-account key file %s: not a valid service-account JSON key", cfg.KeyFile)
+	}
+	return nil
+}

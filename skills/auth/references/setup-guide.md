@@ -252,4 +252,7 @@ gws auth login --services chat,events
 ### Status in service-account modes
 
 `gws auth status` reports the configured mode, key-file path, and (for DWD)
-the impersonated user instead of OAuth token state.
+the impersonated user instead of OAuth token state. It also validates the
+key file locally (`key_valid`) without minting a token or calling Google —
+"configured" is not "authenticated"; credentials are only verified when a
+command runs.

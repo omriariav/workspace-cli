@@ -168,14 +168,24 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	if modeCfg, err := resolveConfiguredAuthMode(); err != nil {
 		return usageErrorf("%s", err.Error())
 	} else if modeCfg.Mode != auth.AuthModeOAuth {
+		// Configured is not authenticated: only a local key check is
+		// performed here — no token is minted and no network call made,
+		// so credentials are never claimed valid beyond that.
 		result := map[string]interface{}{
-			"authenticated": true,
-			"auth_mode":     modeCfg.Mode,
-			"key_file":      modeCfg.KeyFile,
-			"message":       "Using service-account credentials (no OAuth token required)",
+			"configured": true,
+			"auth_mode":  modeCfg.Mode,
+			"key_file":   modeCfg.KeyFile,
 		}
 		if modeCfg.ImpersonateUser != "" {
 			result["impersonate_user"] = modeCfg.ImpersonateUser
+		}
+		if err := auth.ValidateServiceAccountKey(modeCfg); err != nil {
+			result["key_valid"] = false
+			result["error"] = err.Error()
+			result["message"] = "Service-account mode configured but the key file failed local validation"
+		} else {
+			result["key_valid"] = true
+			result["message"] = "Service-account mode configured; key file is locally valid (credentials are not verified against Google until a command runs)"
 		}
 		return p.Print(result)
 	}

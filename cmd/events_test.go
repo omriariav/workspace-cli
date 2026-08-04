@@ -2,9 +2,15 @@ package cmd
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -358,8 +364,40 @@ func TestAuthLogin_InvalidModeConfigFailsFast(t *testing.T) {
 	}
 }
 
+// writeTestSAKey writes a syntactically valid service-account JSON key
+// (fresh test-only RSA key, never a real credential) and returns its path.
+func writeTestSAKey(t *testing.T) string {
+	t.Helper()
+
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(rsaKey),
+	})
+	key := map[string]string{
+		"type":         "service_account",
+		"project_id":   "test-project",
+		"private_key":  string(keyPEM),
+		"client_email": "gws-test@test-project.iam.gserviceaccount.com",
+		"token_uri":    "https://oauth2.googleapis.com/token",
+	}
+	data, err := json.Marshal(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "sa-key.json")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestAuthStatus_ReportsServiceAccountMode(t *testing.T) {
-	setAuthModeConfig(t, "service-account-dwd", "/tmp/key.json", "user@example.com")
+	keyFile := writeTestSAKey(t)
+	setAuthModeConfig(t, "service-account-dwd", keyFile, "user@example.com")
 
 	out, err := captureStdout(t, func() error {
 		return runStatus(statusCmd, nil)
@@ -368,12 +406,77 @@ func TestAuthStatus_ReportsServiceAccountMode(t *testing.T) {
 		t.Fatalf("runStatus error: %v", err)
 	}
 
-	for _, want := range []string{"service-account-dwd", "user@example.com", "/tmp/key.json"} {
+	for _, want := range []string{"service-account-dwd", "user@example.com", keyFile, `"configured": true`, `"key_valid": true`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("status output missing %q: %s", want, out)
 		}
 	}
+	// Configured is not authenticated: no network validation happened, so
+	// the status must not claim authenticated.
+	if strings.Contains(out, `"authenticated": true`) {
+		t.Errorf("status must not report authenticated:true for a merely configured service-account mode: %s", out)
+	}
 	if strings.Contains(out, "Not authenticated") {
 		t.Errorf("status must not claim unauthenticated in service-account mode: %s", out)
+	}
+}
+
+func TestAuthStatus_SurfacesInvalidServiceAccountKey(t *testing.T) {
+	t.Run("missing key file", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "missing.json")
+		setAuthModeConfig(t, "service-account-app", missing, "")
+
+		out, err := captureStdout(t, func() error {
+			return runStatus(statusCmd, nil)
+		})
+		if err != nil {
+			t.Fatalf("runStatus error: %v", err)
+		}
+		for _, want := range []string{`"key_valid": false`, "not found"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("status output missing %q: %s", want, out)
+			}
+		}
+	})
+
+	t.Run("malformed key file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "bad.json")
+		if err := os.WriteFile(path, []byte(`{"type":"service_account"`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		setAuthModeConfig(t, "service-account-app", path, "")
+
+		out, err := captureStdout(t, func() error {
+			return runStatus(statusCmd, nil)
+		})
+		if err != nil {
+			t.Fatalf("runStatus error: %v", err)
+		}
+		for _, want := range []string{`"key_valid": false`, "not a valid service-account JSON key"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("status output missing %q: %s", want, out)
+			}
+		}
+	})
+}
+
+func TestEventsUpdate_EmptyEventTypesRejected(t *testing.T) {
+	// --event-types provided but containing no usable entries (e.g. ",,")
+	// must fail locally as a usage error, never reach a PATCH with an
+	// empty update mask.
+	if err := eventsSubsUpdateCmd.Flags().Set("event-types", ",,"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = eventsSubsUpdateCmd.Flags().Set("event-types", "")
+		_ = eventsSubsUpdateCmd.Flags().Set("ttl", "")
+	})
+
+	err := runEventsSubsUpdate(eventsSubsUpdateCmd, []string{"sub-1"})
+	if err == nil {
+		t.Fatal("expected usage error, got nil")
+	}
+	if !strings.Contains(err.Error(), "contains no event types") {
+		t.Errorf("error = %q, want empty-event-types usage error", err.Error())
 	}
 }
