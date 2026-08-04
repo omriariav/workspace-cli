@@ -10,6 +10,7 @@
 - Added canonical [RELEASE.md](RELEASE.md) with the hard release gates, including the mandatory skills gates (uniform versions, mirror parity, per-release skill capability/scope/exclusion audit, no publish before the plugin bundle passes); CLAUDE.md now points there instead of duplicating the procedure.
 - Fixed `gws events subscriptions list --max`: non-positive values (0, negative) are now rejected locally as a usage error before any filter building or API call, with regression tests.
 - Hardened the release review gate: automated PR-review results and comments (Codex and GitHub Actions feedback) must be inspected and fully resolved on the latest commit before merge or release — a green check conclusion alone does not satisfy the gate.
+- `make release-check` (and therefore `make release`) now rejects a `VERSION` override that differs from the checked-in Makefile version, so an override can no longer bypass the skill/manifest version tests; RELEASE.md clarifies which skill gates are test-enforced versus the mandatory manual content audit.
 
 ## v1.42.1
 

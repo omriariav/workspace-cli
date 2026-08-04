@@ -40,8 +40,10 @@ the release through a PR.
 ## Skills are a release gate
 
 The plugin bundle (skills and their mirrors) ships with every release and
-is part of the release surface. All of the following are mandatory and
-enforced by tests that `make release-check` runs:
+is part of the release surface. All of the following are mandatory. Items
+1, 2, and 5 are enforced automatically by tests that `make release-check`
+runs; item 3 is a mandatory HUMAN step whose evidence belongs in the
+release PR review — it is procedural and NOT test-enforced:
 
 1. **Uniform source skill versions** — every `skills/*/SKILL.md` `version`
    field equals the release version in the Makefile and in BOTH plugin
@@ -55,16 +57,21 @@ enforced by tests that `make release-check` runs:
    source's top-level `version` line. Bundled reference files must match
    exactly. Enforced by `TestCodexSKILLmd_HasCodexFrontmatter` and
    `TestCodexSkills_MirrorClaudeSkills`.
-3. **Skill content audit** — every release audits the skills affected by
-   the change set for: newly supported or newly restricted CLI capability,
-   accurate examples, correct scopes/auth-mode statements, and precise
-   exclusions (e.g. Developer Preview boundaries). Source, mirror, and
-   agent metadata (`agents/openai.yaml`) must stay in parity, and the
-   inventory tests (`expectedSkills`, `servicesWithCommands`, file counts)
-   must cover any new skill.
-4. **`make release-check` enforces the above** — it runs the full test
-   suite, so a version drift, mirror divergence, or inventory gap fails
-   the release gate before any tag or draft exists.
+3. **Skill content audit (manual, mandatory)** — every release audits the
+   skills affected by the change set for: newly supported or newly
+   restricted CLI capability, accurate examples, correct scopes/auth-mode
+   statements, and precise exclusions (e.g. Developer Preview boundaries).
+   Source, mirror, and agent metadata (`agents/openai.yaml`) must stay in
+   parity, and the inventory tests (`expectedSkills`,
+   `servicesWithCommands`, file counts) must cover any new skill. Content
+   accuracy itself cannot be test-enforced: the release PR must record
+   that this audit happened and what it covered.
+4. **`make release-check` enforces the automated gates** — it first runs
+   a version preflight that rejects any `VERSION` override differing from
+   the checked-in Makefile version (so an override cannot bypass the
+   skill/manifest version tests), then the full test suite, so a version
+   drift, mirror divergence, or inventory gap fails the release gate
+   before any tag or draft exists.
 5. **No publish before the bundle check** — a release is not published
    until the plugin bundle has passed these checks on the exact commit
    being tagged.
@@ -92,7 +99,11 @@ enforced by tests that `make release-check` runs:
 11. git checkout main && git pull --ff-only
 12. Verify the release tag/release does not already exist
 13. make release VERSION=X.Y.Z
-    — runs release-check (fmt/vet/test incl. skill gates, clean tree),
+    — X.Y.Z MUST equal the checked-in Makefile VERSION (set in step 2);
+      a differing override fails the version preflight before any other
+      work. You may omit VERSION to use the checked-in value.
+    — runs release-check (version preflight, fmt/vet/test incl. skill
+      gates, clean tree),
       tags, cross-compiles, uploads binaries, verifies
     — creates a DRAFT release — edit notes and publish:
       gh release edit vX.Y.Z --draft=false --notes "<release notes>"
@@ -105,7 +116,7 @@ enforced by tests that `make release-check` runs:
 
 | Target | What it does |
 |--------|-------------|
-| `make release-check` | Pre-release gate: fmt + vet + full tests (incl. skill version/mirror/inventory gates) + clean-tree check |
+| `make release-check` | Pre-release gate: version preflight (VERSION override must match the checked-in Makefile version) + fmt + vet + full tests (incl. skill version/mirror/inventory gates) + clean-tree check |
 | `make release VERSION=x.y.z` | Full release: check → tag → cross-compile → upload → verify |
 | `make install` | Install to `$GOPATH/bin` with proper `-ldflags` (never use `go install` directly) |
 

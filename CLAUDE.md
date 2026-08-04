@@ -99,9 +99,12 @@ it step by step. Non-negotiable safety rules:
   status alone is not enough — `make release-check` passing, and no
   pre-existing tag/draft/release for the version.
 - Skills are a release gate: source skill versions must equal the release
-  version, Codex mirrors must stay version-free and content-synced, and
-  affected skills must be audited for capability/scope/exclusion accuracy
-  before publishing (details in RELEASE.md).
+  version and Codex mirrors must stay version-free and content-synced
+  (test-enforced via release-check, whose version preflight also rejects a
+  mismatched VERSION override); affected skills must additionally be
+  audited by a human for capability/scope/exclusion accuracy before
+  publishing — that audit is procedural, not test-enforced (details in
+  RELEASE.md).
 - If release automation started from an unreviewed commit, stop it, delete
   any draft release/tag it created, restore `main` with a revert if needed,
   and route the release through a PR.
