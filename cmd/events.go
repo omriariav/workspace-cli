@@ -281,6 +281,12 @@ func runEventsSubsList(cmd *cobra.Command, args []string) error {
 	eventType, _ := cmd.Flags().GetString("event-type")
 	max, _ := cmd.Flags().GetInt("max")
 
+	// Validate locally before building filters or any client: a
+	// non-positive max would otherwise reach the API as PageSize(<=0).
+	if max <= 0 {
+		return usageErrorf("--max must be greater than 0, got %d", max)
+	}
+
 	filter, err := buildListFilter(raw, target, eventType)
 	if err != nil {
 		return usageErrorf("%s", err.Error())

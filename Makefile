@@ -3,14 +3,14 @@ PKG := ./cmd/gws
 BUILD_DIR := ./bin
 
 # Version info
-VERSION ?= 1.43.0
+VERSION ?= 1.43.1
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS := -ldflags "-X github.com/omriariav/workspace-cli/cmd.Version=$(VERSION) \
 	-X github.com/omriariav/workspace-cli/cmd.Commit=$(COMMIT) \
 	-X github.com/omriariav/workspace-cli/cmd.BuildDate=$(BUILD_DATE)"
 
-.PHONY: build test lint vet fmt tidy clean run help install release-check release ci
+.PHONY: build test lint vet fmt tidy clean run help install version-preflight release-check release ci
 
 ## Build
 
@@ -47,11 +47,19 @@ fmt: ## Format code
 RELEASE_DIR := $(BUILD_DIR)/release
 PLATFORMS := darwin/arm64 darwin/amd64 linux/amd64 linux/arm64
 
-release-check: fmt vet test ## Pre-release quality gate
+version-preflight: ## Reject a VERSION override that differs from the checked-in Makefile version
+	@checked_in=$$(grep -E '^VERSION \?=' Makefile | head -1 | sed 's/^VERSION ?= *//'); \
+	if [ "$(VERSION)" != "$$checked_in" ]; then \
+		echo "ERROR: VERSION=$(VERSION) does not match the checked-in Makefile VERSION ($$checked_in)."; \
+		echo "Release versions are set by editing Makefile in the release PR — omit VERSION or pass the matching value."; \
+		exit 1; \
+	fi
+
+release-check: version-preflight fmt vet test ## Pre-release gate: version preflight + fmt+vet+tests (incl. skill version/mirror integrity) + clean tree
 	@if [ -n "$$(git status --porcelain)" ]; then \
 		echo "ERROR: working tree is dirty — commit or stash changes first"; exit 1; \
 	fi
-	@echo "All checks passed."
+	@echo "All checks passed (fmt, vet, tests incl. skill integrity gates, clean tree)."
 
 release: release-check ## Full release: build, tag, upload, verify (VERSION required)
 	@if [ "$(VERSION)" = "" ]; then echo "ERROR: VERSION is required (make release VERSION=x.y.z)"; exit 1; fi

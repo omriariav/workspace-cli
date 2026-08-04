@@ -1,6 +1,6 @@
 ---
 name: gws-docs
-version: 1.1.0
+version: 1.43.1
 description: "Google Docs CLI operations via gws. Use when users need to read, create, or edit Google Docs documents. Triggers: google docs, document, gdoc, word processing."
 metadata:
   short-description: Google Docs CLI operations

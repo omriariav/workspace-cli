@@ -1,6 +1,6 @@
 ---
 name: gws-calendar
-version: 2.0.0
+version: 1.43.1
 description: "Google Calendar CLI operations via gws. Use when users need to list calendars, view events, create/update/delete events, RSVP to invitations, manage calendar CRUD, subscriptions, ACL, free/busy queries, colors, and settings. Triggers: calendar, events, meetings, schedule, rsvp, invite, share, freebusy."
 metadata:
   short-description: Google Calendar CLI operations

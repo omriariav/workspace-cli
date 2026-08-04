@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -214,8 +215,8 @@ func TestCodexPluginJSON_Valid(t *testing.T) {
 	if name, ok := manifest["name"].(string); !ok || name != "gws" {
 		t.Errorf("expected Codex plugin name 'gws', got '%v'", manifest["name"])
 	}
-	if version, ok := manifest["version"].(string); !ok || version != "1.43.0" {
-		t.Errorf("expected Codex plugin version '1.43.0', got '%v'", manifest["version"])
+	if version, ok := manifest["version"].(string); !ok || version != "1.43.1" {
+		t.Errorf("expected Codex plugin version '1.43.1', got '%v'", manifest["version"])
 	}
 	if skills, ok := manifest["skills"].(string); !ok || skills != "./skills/" {
 		t.Errorf("expected Codex plugin skills path './skills/', got '%v'", manifest["skills"])
@@ -243,8 +244,8 @@ func TestPluginHookManifestsUseOneEntrypointPerEvent(t *testing.T) {
 	if hooks, ok := claudePlugin["hooks"].(string); !ok || hooks != "./hooks/hooks.json" {
 		t.Fatalf("Claude plugin hooks must reference ./hooks/hooks.json, got %v", claudePlugin["hooks"])
 	}
-	if version, ok := claudePlugin["version"].(string); !ok || version != "1.43.0" {
-		t.Fatalf("Claude plugin version must match the released 1.43.0 baseline, got %v", claudePlugin["version"])
+	if version, ok := claudePlugin["version"].(string); !ok || version != "1.43.1" {
+		t.Fatalf("Claude plugin version must match the released 1.43.1 baseline, got %v", claudePlugin["version"])
 	}
 	claudeHooksPath := filepath.Join("..", "hooks", "hooks.json")
 	claudeData, err := os.ReadFile(claudeHooksPath)
@@ -1076,5 +1077,72 @@ func TestSkillFiles_TotalCount(t *testing.T) {
 	expectedTotal := 33 // 1 marketplace.json + 16 SKILL.md + 15 commands.md + 1 setup-guide.md
 	if count != expectedTotal {
 		t.Errorf("expected %d skill files, found %d", expectedTotal, count)
+	}
+}
+
+// makefileVersion reads VERSION from the repository Makefile — the single
+// source of truth for the release version.
+func makefileVersion(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "Makefile"))
+	if err != nil {
+		t.Fatalf("failed to read Makefile: %v", err)
+	}
+	m := regexp.MustCompile(`(?m)^VERSION \?= (.+)$`).FindStringSubmatch(string(data))
+	if m == nil {
+		t.Fatal("Makefile has no VERSION ?= line")
+	}
+	return strings.TrimSpace(m[1])
+}
+
+// manifestVersion extracts the version field of a plugin manifest.
+func manifestVersion(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+	var manifest map[string]interface{}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("%s is not valid JSON: %v", path, err)
+	}
+	version, ok := manifest["version"].(string)
+	if !ok || version == "" {
+		t.Fatalf("%s missing version", path)
+	}
+	return version
+}
+
+// TestSkillVersions_MatchPackageVersion enforces the release policy from
+// RELEASE.md: the Makefile VERSION is the source of truth, and BOTH plugin
+// manifests plus every shipped source skill's version field must equal it.
+// Codex mirrors stay version-free by design and are covered by the mirror
+// and frontmatter tests.
+func TestSkillVersions_MatchPackageVersion(t *testing.T) {
+	pkgVersion := makefileVersion(t)
+
+	if got := manifestVersion(t, filepath.Join(pluginDir(t), "plugin.json")); got != pkgVersion {
+		t.Errorf("Claude plugin manifest version = %q, want Makefile VERSION %q", got, pkgVersion)
+	}
+	if got := manifestVersion(t, filepath.Join(codexPluginDir(t), ".codex-plugin", "plugin.json")); got != pkgVersion {
+		t.Errorf("Codex plugin manifest version = %q, want Makefile VERSION %q", got, pkgVersion)
+	}
+
+	base := skillsDir(t)
+	versionRe := regexp.MustCompile(`(?m)^version: (.+)$`)
+	for _, skill := range expectedSkills {
+		t.Run(skill, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(base, skill, "SKILL.md"))
+			if err != nil {
+				t.Fatalf("failed to read SKILL.md: %v", err)
+			}
+			m := versionRe.FindStringSubmatch(string(data))
+			if m == nil {
+				t.Fatalf("source SKILL.md for %s has no version field", skill)
+			}
+			if got := strings.TrimSpace(m[1]); got != pkgVersion {
+				t.Errorf("skill %s version = %q, want Makefile VERSION %q", skill, got, pkgVersion)
+			}
+		})
 	}
 }

@@ -30,7 +30,12 @@ For initial setup, see the `gws-auth` skill.
 **Note:** Google Chat API requires additional setup:
 1. Enable the Chat API in your Google Cloud project
 2. Configure the OAuth consent screen for Chat scopes
-3. For some operations, you may need a service account with domain-wide delegation
+3. For some operations, you may need a service account with domain-wide
+   delegation — configure it with `auth_mode: service-account-dwd` (see the
+   `gws-auth` skill). Note: `auth_mode: service-account-app` (admin-approved
+   Chat app credentials) is restricted to `gws events` subscriptions on
+   individual Chat spaces; it does NOT enable normal Chat operations such as
+   send, notify, or space management.
 
 ## Quick Command Reference
 
@@ -197,7 +202,7 @@ gws chat send --space <space-id> --text <message>
 - `--text string` — Message text (required)
 - `--quote string` — Message resource name or ID to quote; the CLI fetches the quoted message and sends its current create/update timestamp.
 - `--quote-type string` — Quote type: `reply` or `forward` (default API behavior is reply).
-- `--notify string` — Notification behavior: `none`, `force`, or `silent` (default `none`). `force` and `silent` are rejected until Chat app authentication is supported.
+- `--notify string` — Notification behavior: `none`, `force`, or `silent` (default `none`). `force` and `silent` require Chat app authentication for message sends, which gws does not support: the `service-account-app` auth mode only covers `gws events` subscriptions, so these values are rejected.
 
 ### get — Get a single message
 
@@ -432,6 +437,11 @@ gws chat download <resource-name> --output ./file.pdf
 gws chat events <space> --filter 'event_types:"google.workspace.chat.message.v1.created"' [flags]
 ```
 
+This polls historical space events on demand. For push delivery of new
+events to a Pub/Sub topic (Workspace Events API subscriptions on spaces or
+users, including read-state), use the `gws-events` skill
+(`gws events subscriptions ...`).
+
 **Flags:**
 - `--filter string` — Event type filter (required — API requires it)
 - `--page-size int` — Events per page (default 100)
@@ -558,3 +568,4 @@ gws chat send --space spaces/DMXYZ --text "Hello!"
 - `read-state` auto-expands bare space IDs (e.g. `AAAA` → `users/me/spaces/AAAA/spaceReadState`)
 - `events` requires a `--filter` with event types — see [API docs](https://developers.google.com/workspace/chat/api/reference/rest/v1/spaces.spaceEvents/list)
 - Chat API requires additional GCP setup beyond standard OAuth — see the `gws-auth` skill
+- For continuous push notifications of Chat events (messages, memberships, reactions, read-state) use Workspace Events subscriptions — see the `gws-events` skill

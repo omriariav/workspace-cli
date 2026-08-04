@@ -1,6 +1,6 @@
 ---
 name: gws-setup
-version: 1.0.0
+version: 1.43.1
 description: "Safely inspect, preview, and explicitly configure optional GWS authentication and session-context hooks. Use for gws setup, gws hooks, time context, Workspace context, or hook configuration."
 metadata:
   short-description: Safe GWS hook setup

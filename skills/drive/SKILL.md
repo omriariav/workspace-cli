@@ -1,6 +1,6 @@
 ---
 name: gws-drive
-version: 2.0.0
+version: 1.43.1
 description: "Google Drive CLI operations via gws. Use when users need to list, search, upload, download, manage files/folders, permissions, approvals, revisions, comments, shared drives, and more. Triggers: drive, files, upload, download, folders, google drive, file management, permissions, approvals, share, shared drives."
 metadata:
   short-description: Google Drive CLI operations
@@ -517,6 +517,15 @@ gws drive list --format json    # Structured JSON (default)
 gws drive list --format yaml    # YAML format
 gws drive list --format text    # Human-readable text
 ```
+
+## Change Notifications
+
+To receive push notifications when Drive files change (baseline file and
+permission events on a file or shared drive, delivered to an existing
+Pub/Sub topic), use the Workspace Events API via the `gws-events` skill
+(`gws events subscriptions create --target //drive.googleapis.com/files/FILE ...`).
+For on-demand history, `gws drive changes` and `gws drive activity` remain
+the polling options.
 
 ## Tips for AI Agents
 
