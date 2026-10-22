@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/api/sheets/v4"
 )
 
 // TestSheetsCommands_Flags tests that all sheets commands have expected flags
@@ -2461,5 +2462,55 @@ func TestSheetsFreeze_MockServer(t *testing.T) {
 
 	if server == nil {
 		t.Fatal("server not created")
+	}
+}
+
+func TestSheetsSetValidationCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(sheetsCmd, "set-validation")
+	if cmd == nil {
+		t.Fatal("set-validation command not found")
+	}
+
+	if cmd.Use != "set-validation <spreadsheet-id> <range>" {
+		t.Errorf("unexpected Use: %s", cmd.Use)
+	}
+
+	for _, flag := range []string{"values", "strict", "no-dropdown"} {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+}
+
+func TestBuildOneOfListValidationRequest(t *testing.T) {
+	gridRange := &sheets.GridRange{SheetId: 3, StartRowIndex: 1, EndRowIndex: 10, StartColumnIndex: 2, EndColumnIndex: 3}
+
+	req := buildOneOfListValidationRequest(gridRange, []string{"Open", "Closed"}, true, false)
+	if req.SetDataValidation == nil {
+		t.Fatal("expected SetDataValidation request")
+	}
+	if req.SetDataValidation.Range != gridRange {
+		t.Error("range not passed through")
+	}
+
+	rule := req.SetDataValidation.Rule
+	if rule.Condition.Type != "ONE_OF_LIST" {
+		t.Errorf("expected ONE_OF_LIST, got %s", rule.Condition.Type)
+	}
+	if len(rule.Condition.Values) != 2 ||
+		rule.Condition.Values[0].UserEnteredValue != "Open" ||
+		rule.Condition.Values[1].UserEnteredValue != "Closed" {
+		t.Errorf("unexpected condition values: %+v", rule.Condition.Values)
+	}
+	if !rule.Strict {
+		t.Error("expected strict=true")
+	}
+	if rule.ShowCustomUi {
+		t.Error("expected ShowCustomUi=false")
+	}
+
+	req = buildOneOfListValidationRequest(gridRange, []string{"a"}, false, true)
+	if req.SetDataValidation.Rule.Strict || !req.SetDataValidation.Rule.ShowCustomUi {
+		t.Error("expected strict=false and ShowCustomUi=true")
 	}
 }

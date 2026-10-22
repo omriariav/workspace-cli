@@ -341,6 +341,14 @@ var sheetsAddFilterViewCmd = &cobra.Command{
 	RunE:  runSheetsAddFilterView,
 }
 
+var sheetsSetValidationCmd = &cobra.Command{
+	Use:   "set-validation <spreadsheet-id> <range>",
+	Short: "Set a dropdown list data validation",
+	Long:  "Sets a ONE_OF_LIST data validation (dropdown of allowed values) on a range in a spreadsheet.",
+	Args:  cobra.ExactArgs(2),
+	RunE:  runSheetsSetValidation,
+}
+
 var sheetsAddChartCmd = &cobra.Command{
 	Use:   "add-chart <spreadsheet-id>",
 	Short: "Add a chart to a spreadsheet",
@@ -575,6 +583,13 @@ func init() {
 	sheetsCmd.AddCommand(sheetsAddFilterViewCmd)
 	sheetsAddFilterViewCmd.Flags().String("name", "", "Title for the filter view (required)")
 	sheetsAddFilterViewCmd.MarkFlagRequired("name")
+
+	// Set-validation command
+	sheetsCmd.AddCommand(sheetsSetValidationCmd)
+	sheetsSetValidationCmd.Flags().StringSlice("values", nil, "Allowed values, comma-separated or repeated (required)")
+	sheetsSetValidationCmd.Flags().Bool("strict", false, "Reject input that is not in the list")
+	sheetsSetValidationCmd.Flags().Bool("no-dropdown", false, "Do not show the in-cell dropdown")
+	sheetsSetValidationCmd.MarkFlagRequired("values")
 
 	// Add-chart command
 	sheetsCmd.AddCommand(sheetsAddChartCmd)
@@ -2470,6 +2485,83 @@ func runSheetsAddFilter(cmd *cobra.Command, args []string) error {
 		"status":      "added",
 		"spreadsheet": spreadsheetID,
 		"range":       rangeStr,
+	})
+}
+
+// buildOneOfListValidationRequest builds a SetDataValidation request that
+// restricts gridRange to the given list of values.
+func buildOneOfListValidationRequest(gridRange *sheets.GridRange, values []string, strict, showDropdown bool) *sheets.Request {
+	conditionValues := make([]*sheets.ConditionValue, 0, len(values))
+	for _, v := range values {
+		conditionValues = append(conditionValues, &sheets.ConditionValue{UserEnteredValue: v})
+	}
+
+	return &sheets.Request{
+		SetDataValidation: &sheets.SetDataValidationRequest{
+			Range: gridRange,
+			Rule: &sheets.DataValidationRule{
+				Condition: &sheets.BooleanCondition{
+					Type:   "ONE_OF_LIST",
+					Values: conditionValues,
+				},
+				Strict:       strict,
+				ShowCustomUi: showDropdown,
+			},
+		},
+	}
+}
+
+func runSheetsSetValidation(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	values, _ := cmd.Flags().GetStringSlice("values")
+	strict, _ := cmd.Flags().GetBool("strict")
+	noDropdown, _ := cmd.Flags().GetBool("no-dropdown")
+
+	var listValues []string
+	for _, v := range values {
+		if v = strings.TrimSpace(v); v != "" {
+			listValues = append(listValues, v)
+		}
+	}
+	if len(listValues) == 0 {
+		return p.PrintError(fmt.Errorf("--values must contain at least one non-empty value"))
+	}
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Sheets()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	spreadsheetID := args[0]
+	rangeStr := args[1]
+
+	_, gridRange, err := parseRange(svc, spreadsheetID, rangeStr)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	_, err = svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: []*sheets.Request{buildOneOfListValidationRequest(gridRange, listValues, strict, !noDropdown)},
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to set data validation: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":      "set",
+		"spreadsheet": spreadsheetID,
+		"range":       rangeStr,
+		"type":        "ONE_OF_LIST",
+		"values":      listValues,
+		"strict":      strict,
+		"dropdown":    !noDropdown,
 	})
 }
 
