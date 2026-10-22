@@ -3,9 +3,11 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
 	"github.com/omriariav/workspace-cli/internal/config"
@@ -26,6 +28,77 @@ import (
 	"google.golang.org/api/tasks/v1"
 	workspaceevents "google.golang.org/api/workspaceevents/v1"
 )
+
+var (
+	rateLimitMu       sync.Mutex
+	rateLimitInterval time.Duration // 0 means unlimited
+	rateLimitNext     time.Time
+)
+
+// SetRateLimit caps outgoing API requests at perSecond requests per second
+// across all service clients created afterwards. Zero or negative disables
+// the limit. The limit is client-side only and does not inspect responses.
+func SetRateLimit(perSecond float64) {
+	rateLimitMu.Lock()
+	defer rateLimitMu.Unlock()
+	if perSecond <= 0 {
+		rateLimitInterval = 0
+		return
+	}
+	rateLimitInterval = time.Duration(float64(time.Second) / perSecond)
+	rateLimitNext = time.Time{}
+}
+
+// rateLimitWait reserves the next request slot and returns how long the
+// caller must wait before sending.
+func rateLimitWait() time.Duration {
+	rateLimitMu.Lock()
+	defer rateLimitMu.Unlock()
+	if rateLimitInterval <= 0 {
+		return 0
+	}
+	now := time.Now()
+	slot := rateLimitNext
+	if slot.Before(now) {
+		slot = now
+	}
+	rateLimitNext = slot.Add(rateLimitInterval)
+	return slot.Sub(now)
+}
+
+type rateLimitedTransport struct {
+	base http.RoundTripper
+}
+
+func (t *rateLimitedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if d := rateLimitWait(); d > 0 {
+		timer := time.NewTimer(d)
+		select {
+		case <-timer.C:
+		case <-req.Context().Done():
+			timer.Stop()
+			return nil, req.Context().Err()
+		}
+	}
+	return t.base.RoundTrip(req)
+}
+
+// authOption authenticates a service client with ts. When a rate limit is
+// set, requests go through an HTTP client that throttles them first.
+func authOption(ctx context.Context, ts oauth2.TokenSource) option.ClientOption {
+	rateLimitMu.Lock()
+	limited := rateLimitInterval > 0
+	rateLimitMu.Unlock()
+	if !limited {
+		return option.WithTokenSource(ts)
+	}
+	return option.WithHTTPClient(&http.Client{
+		Transport: &oauth2.Transport{
+			Source: ts,
+			Base:   &rateLimitedTransport{base: http.DefaultTransport},
+		},
+	})
+}
 
 // Factory provides lazy-initialized Google API service clients.
 type Factory struct {
@@ -215,7 +288,7 @@ func (f *Factory) Gmail() (*gmail.Service, error) {
 		return f.gmail, nil
 	}
 
-	svc, err := gmail.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := gmail.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Gmail client: %w", err)
 	}
@@ -238,7 +311,7 @@ func (f *Factory) Calendar() (*calendar.Service, error) {
 		return f.calendar, nil
 	}
 
-	svc, err := calendar.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := calendar.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Calendar client: %w", err)
 	}
@@ -261,7 +334,7 @@ func (f *Factory) Drive() (*drive.Service, error) {
 		return f.drive, nil
 	}
 
-	svc, err := drive.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := drive.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Drive client: %w", err)
 	}
@@ -284,7 +357,7 @@ func (f *Factory) Docs() (*docs.Service, error) {
 		return f.docs, nil
 	}
 
-	svc, err := docs.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := docs.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Docs client: %w", err)
 	}
@@ -307,7 +380,7 @@ func (f *Factory) Sheets() (*sheets.Service, error) {
 		return f.sheets, nil
 	}
 
-	svc, err := sheets.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := sheets.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Sheets client: %w", err)
 	}
@@ -330,7 +403,7 @@ func (f *Factory) Slides() (*slides.Service, error) {
 		return f.slides, nil
 	}
 
-	svc, err := slides.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := slides.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Slides client: %w", err)
 	}
@@ -353,7 +426,7 @@ func (f *Factory) Tasks() (*tasks.Service, error) {
 		return f.tasks, nil
 	}
 
-	svc, err := tasks.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := tasks.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Tasks client: %w", err)
 	}
@@ -376,7 +449,7 @@ func (f *Factory) Chat() (*chat.Service, error) {
 		return f.chat, nil
 	}
 
-	svc, err := chat.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := chat.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Chat client: %w", err)
 	}
@@ -399,7 +472,7 @@ func (f *Factory) Forms() (*forms.Service, error) {
 		return f.forms, nil
 	}
 
-	svc, err := forms.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := forms.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Forms client: %w", err)
 	}
@@ -422,7 +495,7 @@ func (f *Factory) Admin() (*admin.Service, error) {
 		return f.admin, nil
 	}
 
-	svc, err := admin.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := admin.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Admin Directory client: %w", err)
 	}
@@ -445,7 +518,7 @@ func (f *Factory) Keep() (*keep.Service, error) {
 		return f.keep, nil
 	}
 
-	svc, err := keep.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := keep.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Keep client: %w", err)
 	}
@@ -468,7 +541,7 @@ func (f *Factory) DriveActivity() (*driveactivity.Service, error) {
 		return f.driveActivity, nil
 	}
 
-	svc, err := driveactivity.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := driveactivity.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Drive Activity client: %w", err)
 	}
@@ -511,7 +584,7 @@ func (f *Factory) peopleLocked() (*people.Service, error) {
 	if f.people != nil {
 		return f.people, nil
 	}
-	svc, err := people.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := people.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create People client: %w", err)
 	}
@@ -533,7 +606,7 @@ func (f *Factory) WorkspaceEvents(scopes []string) (*workspaceevents.Service, er
 		if err != nil {
 			return nil, err
 		}
-		svc, err := workspaceevents.NewService(f.ctx, option.WithTokenSource(ts))
+		svc, err := workspaceevents.NewService(f.ctx, authOption(f.ctx, ts))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Workspace Events client: %w", err)
 		}
@@ -542,7 +615,7 @@ func (f *Factory) WorkspaceEvents(scopes []string) (*workspaceevents.Service, er
 
 	f.checkServiceScopes("events")
 
-	svc, err := workspaceevents.NewService(f.ctx, option.WithTokenSource(f.tokenSource))
+	svc, err := workspaceevents.NewService(f.ctx, authOption(f.ctx, f.tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Workspace Events client: %w", err)
 	}

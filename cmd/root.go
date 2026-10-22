@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/config"
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/omriariav/workspace-cli/internal/updatecheck"
@@ -18,9 +19,10 @@ import (
 )
 
 var (
-	cfgFile string
-	format  string
-	quiet   bool
+	cfgFile   string
+	format    string
+	quiet     bool
+	rateLimit float64
 )
 
 var rootCmd = &cobra.Command{
@@ -40,6 +42,7 @@ Workspace Events, and Custom Search.`,
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		client.SetRateLimit(rateLimit)
 		emitVersionNotice(cmd, os.Stderr, quiet, os.Getenv("GWS_NO_UPDATE_CHECK") != "")
 	},
 }
@@ -198,6 +201,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ~/.config/gws/config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&format, "format", "json", "output format: json, text, or yaml")
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress output (useful for scripted actions)")
+
+	rootCmd.PersistentFlags().Float64Var(&rateLimit, "rate-limit", 0, "max API requests per second (0 = unlimited)")
 
 	viper.BindPFlag("format", rootCmd.PersistentFlags().Lookup("format"))
 }

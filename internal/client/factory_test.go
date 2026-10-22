@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
 )
@@ -170,3 +172,44 @@ func TestUserModes_AllowServiceClients(t *testing.T) {
 		}
 	}
 }
+
+func TestSetRateLimit_SpacesRequests(t *testing.T) {
+	defer SetRateLimit(0)
+
+	SetRateLimit(0)
+	if d := rateLimitWait(); d != 0 {
+		t.Fatalf("unlimited wait = %v, want 0", d)
+	}
+
+	SetRateLimit(10) // 100ms interval
+	if d := rateLimitWait(); d > 5*time.Millisecond {
+		t.Fatalf("first request wait = %v, want ~0", d)
+	}
+	d := rateLimitWait()
+	if d < 50*time.Millisecond || d > 100*time.Millisecond {
+		t.Fatalf("second request wait = %v, want ~100ms", d)
+	}
+}
+
+func TestAuthOption_RateLimitedTransportThrottles(t *testing.T) {
+	defer SetRateLimit(0)
+	SetRateLimit(20) // 50ms interval
+
+	rt := &rateLimitedTransport{base: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+	})}
+	start := time.Now()
+	for i := 0; i < 3; i++ {
+		req, _ := http.NewRequest("GET", "http://example.invalid/", nil)
+		if _, err := rt.RoundTrip(req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if elapsed := time.Since(start); elapsed < 90*time.Millisecond {
+		t.Fatalf("3 requests took %v, want >= ~100ms", elapsed)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
