@@ -1667,6 +1667,7 @@ func TestSlidesCommands_Structure_Extended(t *testing.T) {
 		"update-table-cell",
 		"update-table-border",
 		"update-paragraph-style",
+		"add-bullets",
 		"update-shape",
 		"reorder-slides",
 	}
@@ -1828,6 +1829,92 @@ func TestSlidesUpdateParagraphStyleCommand_Flags(t *testing.T) {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected flag '--%s' not found", flag)
 		}
+	}
+}
+
+// TestSlidesAddBulletsCommand_Flags tests add-bullets command flags
+func TestSlidesAddBulletsCommand_Flags(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "add-bullets")
+	if cmd == nil {
+		t.Fatal("slides add-bullets command not found")
+	}
+
+	expectedFlags := []string{"object-id", "from", "to", "preset"}
+	for _, flag := range expectedFlags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected flag '--%s' not found", flag)
+		}
+	}
+	if got := cmd.Flags().Lookup("preset").DefValue; got != defaultBulletPreset {
+		t.Errorf("expected default preset %s, got %s", defaultBulletPreset, got)
+	}
+}
+
+// TestBuildCreateParagraphBulletsRequest tests request construction
+func TestBuildCreateParagraphBulletsRequest(t *testing.T) {
+	req := buildCreateParagraphBulletsRequest("shape-1", 0, -1, "NUMBERED_DIGIT_ALPHA_ROMAN")
+	b := req.CreateParagraphBullets
+	if b == nil {
+		t.Fatal("expected CreateParagraphBullets request")
+	}
+	if b.ObjectId != "shape-1" || b.BulletPreset != "NUMBERED_DIGIT_ALPHA_ROMAN" {
+		t.Errorf("unexpected request: %+v", b)
+	}
+	if b.TextRange.Type != "ALL" {
+		t.Errorf("expected ALL range, got %s", b.TextRange.Type)
+	}
+
+	req = buildCreateParagraphBulletsRequest("shape-1", 5, 20, defaultBulletPreset)
+	r := req.CreateParagraphBullets.TextRange
+	if r.Type != "FIXED_RANGE" || r.StartIndex == nil || *r.StartIndex != 5 || r.EndIndex == nil || *r.EndIndex != 20 {
+		t.Errorf("unexpected fixed range: %+v", r)
+	}
+}
+
+// TestSlidesAddBullets_MockServer tests add-bullets sends the expected batchUpdate
+func TestSlidesAddBullets_MockServer(t *testing.T) {
+	var got slides.BatchUpdatePresentationRequest
+	handlers := map[string]func(w http.ResponseWriter, r *http.Request){
+		"/v1/presentations/pres-1:batchUpdate": func(w http.ResponseWriter, r *http.Request) {
+			json.NewDecoder(r.Body).Decode(&got)
+			json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{PresentationId: "pres-1"})
+		},
+	}
+	server := mockSlidesServer(t, handlers)
+	defer server.Close()
+
+	svc, err := slides.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create slides service: %v", err)
+	}
+
+	_, err = svc.Presentations.BatchUpdate("pres-1", &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{buildCreateParagraphBulletsRequest("shape-1", 0, -1, defaultBulletPreset)},
+	}).Do()
+	if err != nil {
+		t.Fatalf("batchUpdate failed: %v", err)
+	}
+	if len(got.Requests) != 1 || got.Requests[0].CreateParagraphBullets == nil {
+		t.Fatalf("expected one CreateParagraphBullets request, got %+v", got.Requests)
+	}
+	if got.Requests[0].CreateParagraphBullets.BulletPreset != defaultBulletPreset {
+		t.Errorf("unexpected preset: %s", got.Requests[0].CreateParagraphBullets.BulletPreset)
+	}
+}
+
+// TestSlidesAddBulletsInvalidPreset tests preset validation
+func TestSlidesAddBulletsInvalidPreset(t *testing.T) {
+	cmd := findSubcommand(slidesCmd, "add-bullets")
+	if cmd == nil {
+		t.Fatal("slides add-bullets command not found")
+	}
+	cmd.Flags().Set("object-id", "shape-1")
+	cmd.Flags().Set("preset", "NOT_A_PRESET")
+	defer cmd.Flags().Set("preset", defaultBulletPreset)
+
+	err := runSlidesAddBullets(cmd, []string{"pres-1"})
+	if err == nil || !strings.Contains(err.Error(), "invalid --preset") {
+		t.Errorf("expected invalid preset error, got %v", err)
 	}
 }
 

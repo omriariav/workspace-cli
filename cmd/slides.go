@@ -220,6 +220,18 @@ Supports alignment, line spacing, and paragraph spacing.`,
 	RunE: runSlidesUpdateParagraphStyle,
 }
 
+var slidesAddBulletsCmd = &cobra.Command{
+	Use:   "add-bullets <presentation-id>",
+	Short: "Add native bullets to paragraphs",
+	Long: `Turns the paragraphs in a shape into a native bulleted or numbered list.
+
+Uses a Slides bullet preset (default BULLET_DISC_CIRCLE_SQUARE). Use --from/--to
+to limit the text range; if --to is omitted, all paragraphs in the shape are
+converted.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSlidesAddBullets,
+}
+
 var slidesUpdateShapeCmd = &cobra.Command{
 	Use:   "update-shape <presentation-id>",
 	Short: "Modify shape properties",
@@ -309,6 +321,7 @@ func init() {
 	slidesCmd.AddCommand(slidesUpdateTableCellCmd)
 	slidesCmd.AddCommand(slidesUpdateTableBorderCmd)
 	slidesCmd.AddCommand(slidesUpdateParagraphStyleCmd)
+	slidesCmd.AddCommand(slidesAddBulletsCmd)
 	slidesCmd.AddCommand(slidesUpdateShapeCmd)
 	slidesCmd.AddCommand(slidesReorderSlidesCmd)
 	slidesCmd.AddCommand(slidesUpdateSlideBackgroundCmd)
@@ -472,6 +485,12 @@ func init() {
 	slidesUpdateParagraphStyleCmd.Flags().Float64("space-above", 0, "Space above paragraph in points")
 	slidesUpdateParagraphStyleCmd.Flags().Float64("space-below", 0, "Space below paragraph in points")
 	slidesUpdateParagraphStyleCmd.MarkFlagRequired("object-id")
+
+	slidesAddBulletsCmd.Flags().String("object-id", "", "Shape containing text (required)")
+	slidesAddBulletsCmd.Flags().Int("from", 0, "Start index")
+	slidesAddBulletsCmd.Flags().Int("to", -1, "End index (if omitted, applies to all text)")
+	slidesAddBulletsCmd.Flags().String("preset", defaultBulletPreset, "Bullet glyph preset (e.g., BULLET_DISC_CIRCLE_SQUARE, NUMBERED_DIGIT_ALPHA_ROMAN)")
+	slidesAddBulletsCmd.MarkFlagRequired("object-id")
 
 	// Update-shape flags
 	slidesUpdateShapeCmd.Flags().String("object-id", "", "Shape to update (required)")
@@ -2651,6 +2670,91 @@ func runSlidesUpdateParagraphStyle(cmd *cobra.Command, args []string) error {
 		"presentation_id": presentationID,
 		"object_id":       objectID,
 		"fields_updated":  fields,
+	})
+}
+
+const defaultBulletPreset = "BULLET_DISC_CIRCLE_SQUARE"
+
+// validBulletPresets lists the BulletGlyphPreset values accepted by
+// CreateParagraphBulletsRequest (excluding the unspecified placeholder).
+var validBulletPresets = map[string]bool{
+	"BULLET_DISC_CIRCLE_SQUARE":            true,
+	"BULLET_DIAMONDX_ARROW3D_SQUARE":       true,
+	"BULLET_CHECKBOX":                      true,
+	"BULLET_ARROW_DIAMOND_DISC":            true,
+	"BULLET_STAR_CIRCLE_SQUARE":            true,
+	"BULLET_ARROW3D_CIRCLE_SQUARE":         true,
+	"BULLET_LEFTTRIANGLE_DIAMOND_DISC":     true,
+	"NUMBERED_DIGIT_ALPHA_ROMAN":           true,
+	"NUMBERED_DIGIT_ALPHA_ROMAN_PARENS":    true,
+	"NUMBERED_DIGIT_NESTED":                true,
+	"NUMBERED_UPPERALPHA_ALPHA_ROMAN":      true,
+	"NUMBERED_UPPERROMAN_UPPERALPHA_DIGIT": true,
+	"NUMBERED_ZERODIGIT_ALPHA_ROMAN":       true,
+}
+
+// buildCreateParagraphBulletsRequest builds a CreateParagraphBullets request
+// for objectID. A negative toIndex selects all text in the shape.
+func buildCreateParagraphBulletsRequest(objectID string, fromIndex, toIndex int, preset string) *slides.Request {
+	var textRange *slides.Range
+	if toIndex < 0 {
+		textRange = &slides.Range{Type: "ALL"}
+	} else {
+		startIdx := int64(fromIndex)
+		endIdx := int64(toIndex)
+		textRange = &slides.Range{
+			StartIndex: &startIdx,
+			EndIndex:   &endIdx,
+			Type:       "FIXED_RANGE",
+		}
+	}
+
+	return &slides.Request{
+		CreateParagraphBullets: &slides.CreateParagraphBulletsRequest{
+			ObjectId:     objectID,
+			TextRange:    textRange,
+			BulletPreset: preset,
+		},
+	}
+}
+
+func runSlidesAddBullets(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	presentationID := args[0]
+	objectID, _ := cmd.Flags().GetString("object-id")
+	fromIndex, _ := cmd.Flags().GetInt("from")
+	toIndex, _ := cmd.Flags().GetInt("to")
+	preset, _ := cmd.Flags().GetString("preset")
+
+	preset = strings.ToUpper(strings.TrimSpace(preset))
+	if !validBulletPresets[preset] {
+		return usageErrorf("invalid --preset %q: see the Slides API BulletGlyphPreset values (e.g., %s)", preset, defaultBulletPreset)
+	}
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Slides()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	_, err = svc.Presentations.BatchUpdate(presentationID, &slides.BatchUpdatePresentationRequest{
+		Requests: []*slides.Request{buildCreateParagraphBulletsRequest(objectID, fromIndex, toIndex, preset)},
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to add bullets: %w", err))
+	}
+
+	return p.Print(map[string]interface{}{
+		"status":          "updated",
+		"presentation_id": presentationID,
+		"object_id":       objectID,
+		"preset":          preset,
 	})
 }
 
