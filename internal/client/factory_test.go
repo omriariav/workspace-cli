@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
+	"github.com/omriariav/workspace-cli/internal/config"
+	"github.com/spf13/viper"
 )
 
 // captureStderr swaps os.Stderr for a pipe, runs fn, and returns whatever was
@@ -168,5 +170,46 @@ func TestUserModes_AllowServiceClients(t *testing.T) {
 		if err := f.requireUserAuth("gmail"); err != nil {
 			t.Errorf("mode %+v: unexpected rejection: %v", mode, err)
 		}
+	}
+}
+
+func TestServiceAccountScopes_DefaultsToAllScopes(t *testing.T) {
+	viper.Set(config.KeyServices, nil)
+	t.Cleanup(func() { viper.Set(config.KeyServices, nil) })
+
+	got := serviceAccountScopes(&auth.AuthModeConfig{Mode: auth.AuthModeDWD})
+	if len(got) == 0 {
+		t.Fatal("expected scopes, got none")
+	}
+	if strings.Join(got, ",") != strings.Join(auth.AllScopes, ",") {
+		t.Errorf("expected auth.AllScopes when no services configured, got %v", got)
+	}
+}
+
+func TestServiceAccountScopes_HonorsConfiguredServices(t *testing.T) {
+	viper.Set(config.KeyServices, []string{"gmail"})
+	t.Cleanup(func() { viper.Set(config.KeyServices, nil) })
+
+	got := serviceAccountScopes(&auth.AuthModeConfig{Mode: auth.AuthModeDWD})
+	want := auth.ScopesForServices([]string{"gmail"})
+	if len(got) == 0 {
+		t.Fatal("expected gmail scopes, got none")
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("scopes = %v, want %v", got, want)
+	}
+	if len(got) >= len(auth.AllScopes) {
+		t.Errorf("configured services should narrow scopes: got %d, all %d", len(got), len(auth.AllScopes))
+	}
+}
+
+func TestFactoryAuthMode(t *testing.T) {
+	cfg := &auth.AuthModeConfig{Mode: auth.AuthModeDWD, KeyFile: "/tmp/key.json", ImpersonateUser: "u@example.com"}
+
+	if got := (&Factory{authMode: cfg}).AuthMode(); got != cfg {
+		t.Errorf("AuthMode() = %+v, want the configured pointer %+v", got, cfg)
+	}
+	if got := (&Factory{}).AuthMode(); got != nil {
+		t.Errorf("AuthMode() = %+v, want nil when unset", got)
 	}
 }
