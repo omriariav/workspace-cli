@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/omriariav/workspace-cli/internal/printer"
+	"github.com/spf13/cobra"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )
@@ -3299,5 +3300,156 @@ func TestGmailLinks_RunnerLevel(t *testing.T) {
 	second := parsedLinks[1].(map[string]interface{})
 	if second["href"] != "https://example.com/attached" {
 		t.Errorf("second link href: %v", second["href"])
+	}
+}
+
+// TestGmailVacationCommands_Flags tests vacation command registration and flags
+func TestGmailVacationCommands_Flags(t *testing.T) {
+	if gmailVacationCmd.Use != "vacation" {
+		t.Errorf("unexpected Use: %s", gmailVacationCmd.Use)
+	}
+	for _, name := range []string{"enable", "subject", "body", "start", "end", "restrict-to-contacts", "restrict-to-domain"} {
+		if gmailSetVacationCmd.Flags().Lookup(name) == nil {
+			t.Errorf("expected --%s flag on set-vacation", name)
+		}
+	}
+	registered := map[string]bool{}
+	for _, c := range gmailCmd.Commands() {
+		registered[c.Name()] = true
+	}
+	for _, name := range []string{"vacation", "set-vacation"} {
+		if !registered[name] {
+			t.Errorf("expected %s to be registered under gmail", name)
+		}
+	}
+}
+
+// TestParseVacationTime tests time parsing for vacation start/end
+func TestParseVacationTime(t *testing.T) {
+	ms, err := parseVacationTime("2026-12-24T09:00:00Z")
+	if err != nil || ms != 1798102800000 {
+		t.Errorf("RFC3339: got %d, %v", ms, err)
+	}
+	if ms, err := parseVacationTime("2026-12-24"); err != nil || ms == 0 {
+		t.Errorf("date only: got %d, %v", ms, err)
+	}
+	if ms, err := parseVacationTime(""); err != nil || ms != 0 {
+		t.Errorf("empty: got %d, %v", ms, err)
+	}
+	if _, err := parseVacationTime("tomorrow"); err == nil {
+		t.Error("expected error for invalid time")
+	}
+}
+
+// TestGmailVacation_GetMockServer tests vacation get output mapping
+func TestGmailVacation_GetMockServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/gmail/v1/users/me/settings/vacation" && r.Method == "GET" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"enableAutoReply":       true,
+				"responseSubject":       "Away",
+				"responseBodyPlainText": "Back soon",
+				"startTime":             "1798102800000",
+				"restrictToContacts":    true,
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+	v, err := svc.Users.Settings.GetVacation("me").Do()
+	if err != nil {
+		t.Fatalf("GetVacation failed: %v", err)
+	}
+	out := vacationOutput(v)
+	if out["enable_auto_reply"] != true || out["response_subject"] != "Away" || out["restrict_to_contacts"] != true {
+		t.Errorf("unexpected output: %v", out)
+	}
+	if out["start_time"] != "2026-12-24T09:00:00Z" {
+		t.Errorf("unexpected start_time: %v", out["start_time"])
+	}
+	if _, ok := out["end_time"]; ok {
+		t.Error("end_time should be omitted when unset")
+	}
+}
+
+// TestGmailSetVacation_MergesChangedFlags tests that only changed flags override current settings
+func TestGmailSetVacation_MergesChangedFlags(t *testing.T) {
+	var sent map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/gmail/v1/users/me/settings/vacation" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		switch r.Method {
+		case "GET":
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"enableAutoReply":  true,
+				"responseSubject":  "Old subject",
+				"restrictToDomain": true,
+			})
+		case "PUT":
+			json.NewDecoder(r.Body).Decode(&sent)
+			json.NewEncoder(w).Encode(sent)
+		}
+	}))
+	defer server.Close()
+
+	svc, err := gmail.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create gmail service: %v", err)
+	}
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("enable", false, "")
+	cmd.Flags().String("subject", "", "")
+	cmd.Flags().String("body", "", "")
+	cmd.Flags().String("start", "", "")
+	cmd.Flags().String("end", "", "")
+	cmd.Flags().Bool("restrict-to-contacts", false, "")
+	cmd.Flags().Bool("restrict-to-domain", false, "")
+	cmd.Flags().Set("enable", "false")
+	cmd.Flags().Set("body", "New body")
+	cmd.Flags().Set("start", "2026-12-24T09:00:00Z")
+
+	current, err := svc.Users.Settings.GetVacation("me").Do()
+	if err != nil {
+		t.Fatalf("GetVacation failed: %v", err)
+	}
+	if err := applyVacationFlags(cmd, current); err != nil {
+		t.Fatalf("applyVacationFlags failed: %v", err)
+	}
+	if _, err := svc.Users.Settings.UpdateVacation("me", current).Do(); err != nil {
+		t.Fatalf("UpdateVacation failed: %v", err)
+	}
+
+	if v, ok := sent["enableAutoReply"]; !ok || v != false {
+		t.Errorf("enableAutoReply should be sent as false, got %v (present=%v)", v, ok)
+	}
+	if sent["responseSubject"] != "Old subject" {
+		t.Errorf("unchanged subject should be preserved, got %v", sent["responseSubject"])
+	}
+	if sent["restrictToDomain"] != true {
+		t.Errorf("unchanged restrictToDomain should be preserved, got %v", sent["restrictToDomain"])
+	}
+	if sent["responseBodyPlainText"] != "New body" {
+		t.Errorf("unexpected body: %v", sent["responseBodyPlainText"])
+	}
+	if sent["startTime"] != "1798102800000" {
+		t.Errorf("unexpected startTime: %v", sent["startTime"])
+	}
+
+	bad := &cobra.Command{}
+	bad.Flags().String("start", "", "")
+	bad.Flags().Set("start", "nope")
+	if err := applyVacationFlags(bad, &gmail.VacationSettings{}); err == nil {
+		t.Error("expected error for invalid --start")
 	}
 }

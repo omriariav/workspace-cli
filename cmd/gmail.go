@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
 	"github.com/omriariav/workspace-cli/internal/printer"
@@ -240,6 +241,24 @@ var gmailLabelInfoCmd = &cobra.Command{
 	RunE:  runGmailLabelInfo,
 }
 
+var gmailVacationCmd = &cobra.Command{
+	Use:   "vacation",
+	Short: "Get vacation responder settings",
+	Long:  "Gets the Gmail vacation auto-reply (out-of-office) settings for the authenticated user.",
+	RunE:  runGmailVacation,
+}
+
+var gmailSetVacationCmd = &cobra.Command{
+	Use:   "set-vacation",
+	Short: "Set vacation responder settings",
+	Long: `Updates the Gmail vacation auto-reply (out-of-office) settings.
+
+Only the flags you pass are changed; all other current settings are preserved.
+--start and --end accept RFC3339 (2026-12-24T09:00:00Z) or YYYY-MM-DD (local time).
+Pass --start or --end as an empty string to clear it.`,
+	RunE: runGmailSetVacation,
+}
+
 var gmailCreateLabelCmd = &cobra.Command{
 	Use:   "create-label",
 	Short: "Create a new label",
@@ -385,6 +404,8 @@ func init() {
 	gmailCmd.AddCommand(gmailUntrashThreadCmd)
 	gmailCmd.AddCommand(gmailDeleteThreadCmd)
 	gmailCmd.AddCommand(gmailLabelInfoCmd)
+	gmailCmd.AddCommand(gmailVacationCmd)
+	gmailCmd.AddCommand(gmailSetVacationCmd)
 	gmailCmd.AddCommand(gmailCreateLabelCmd)
 	gmailCmd.AddCommand(gmailUpdateLabelCmd)
 	gmailCmd.AddCommand(gmailDeleteLabelCmd)
@@ -410,6 +431,15 @@ func init() {
 	// Label info flags
 	gmailLabelInfoCmd.Flags().String("id", "", "Label ID (required)")
 	gmailLabelInfoCmd.MarkFlagRequired("id")
+
+	// Set vacation flags
+	gmailSetVacationCmd.Flags().Bool("enable", false, "Enable (--enable) or disable (--enable=false) the auto-reply")
+	gmailSetVacationCmd.Flags().String("subject", "", "Auto-reply subject")
+	gmailSetVacationCmd.Flags().String("body", "", "Auto-reply plain text body")
+	gmailSetVacationCmd.Flags().String("start", "", "Start time (RFC3339 or YYYY-MM-DD); empty clears")
+	gmailSetVacationCmd.Flags().String("end", "", "End time (RFC3339 or YYYY-MM-DD); empty clears")
+	gmailSetVacationCmd.Flags().Bool("restrict-to-contacts", false, "Only reply to people in your contacts")
+	gmailSetVacationCmd.Flags().Bool("restrict-to-domain", false, "Only reply to people in your domain")
 
 	// Create label flags
 	gmailCreateLabelCmd.Flags().String("name", "", "Label name (required)")
@@ -2763,4 +2793,137 @@ func parseGoogleDocsURL(href string) map[string]interface{} {
 		result["tab_id"] = tab
 	}
 	return result
+}
+
+func vacationOutput(v *gmail.VacationSettings) map[string]interface{} {
+	out := map[string]interface{}{
+		"enable_auto_reply":    v.EnableAutoReply,
+		"response_subject":     v.ResponseSubject,
+		"response_body_plain":  v.ResponseBodyPlainText,
+		"response_body_html":   v.ResponseBodyHtml,
+		"restrict_to_contacts": v.RestrictToContacts,
+		"restrict_to_domain":   v.RestrictToDomain,
+	}
+	if v.StartTime != 0 {
+		out["start_time"] = time.UnixMilli(v.StartTime).UTC().Format(time.RFC3339)
+	}
+	if v.EndTime != 0 {
+		out["end_time"] = time.UnixMilli(v.EndTime).UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
+// parseVacationTime converts RFC3339 or YYYY-MM-DD input to epoch milliseconds.
+// An empty string returns 0, which clears the value.
+func parseVacationTime(s string) (int64, error) {
+	if s == "" {
+		return 0, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UnixMilli(), nil
+	}
+	if t, err := time.ParseInLocation("2006-01-02", s, time.Local); err == nil {
+		return t.UnixMilli(), nil
+	}
+	return 0, fmt.Errorf("invalid time %q (expected RFC3339 or YYYY-MM-DD)", s)
+}
+
+// applyVacationFlags merges the flags the user explicitly passed into v.
+func applyVacationFlags(cmd *cobra.Command, v *gmail.VacationSettings) error {
+	flags := cmd.Flags()
+	if flags.Changed("enable") {
+		v.EnableAutoReply, _ = flags.GetBool("enable")
+		v.ForceSendFields = append(v.ForceSendFields, "EnableAutoReply")
+	}
+	if flags.Changed("subject") {
+		v.ResponseSubject, _ = flags.GetString("subject")
+		v.ForceSendFields = append(v.ForceSendFields, "ResponseSubject")
+	}
+	if flags.Changed("body") {
+		v.ResponseBodyPlainText, _ = flags.GetString("body")
+		v.ForceSendFields = append(v.ForceSendFields, "ResponseBodyPlainText")
+	}
+	if flags.Changed("restrict-to-contacts") {
+		v.RestrictToContacts, _ = flags.GetBool("restrict-to-contacts")
+		v.ForceSendFields = append(v.ForceSendFields, "RestrictToContacts")
+	}
+	if flags.Changed("restrict-to-domain") {
+		v.RestrictToDomain, _ = flags.GetBool("restrict-to-domain")
+		v.ForceSendFields = append(v.ForceSendFields, "RestrictToDomain")
+	}
+	if flags.Changed("start") {
+		str, _ := flags.GetString("start")
+		ms, err := parseVacationTime(str)
+		if err != nil {
+			return err
+		}
+		v.StartTime = ms
+		v.ForceSendFields = append(v.ForceSendFields, "StartTime")
+	}
+	if flags.Changed("end") {
+		str, _ := flags.GetString("end")
+		ms, err := parseVacationTime(str)
+		if err != nil {
+			return err
+		}
+		v.EndTime = ms
+		v.ForceSendFields = append(v.ForceSendFields, "EndTime")
+	}
+	return nil
+}
+
+func runGmailVacation(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	v, err := svc.Users.Settings.GetVacation("me").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get vacation settings: %w", err))
+	}
+
+	return p.Print(vacationOutput(v))
+}
+
+func runGmailSetVacation(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Gmail()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	// UpdateVacation replaces the whole resource, so merge onto current settings.
+	current, err := svc.Users.Settings.GetVacation("me").Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to get vacation settings: %w", err))
+	}
+
+	if err := applyVacationFlags(cmd, current); err != nil {
+		return usageErrorf("%v", err)
+	}
+
+	updated, err := svc.Users.Settings.UpdateVacation("me", current).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to update vacation settings: %w", err))
+	}
+
+	out := vacationOutput(updated)
+	out["status"] = "updated"
+	return p.Print(out)
 }
