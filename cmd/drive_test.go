@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1453,6 +1454,66 @@ func TestDriveDeleteRevisionCommand_Flags(t *testing.T) {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected --%s flag", flag)
 		}
+	}
+}
+
+func TestDriveRestoreRevisionCommand_Flags(t *testing.T) {
+	cmd := driveRestoreRevisionCmd
+	flags := []string{"file-id", "revision-id"}
+	for _, flag := range flags {
+		if cmd.Flags().Lookup(flag) == nil {
+			t.Errorf("expected --%s flag", flag)
+		}
+	}
+}
+
+func TestDriveRestoreRevision_MockServer(t *testing.T) {
+	var uploaded string
+	var sawUpdate bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/files/f1/revisions/rev-1") && r.URL.Query().Get("alt") == "media":
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write([]byte("old content"))
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/files/f1/revisions/rev-1"):
+			json.NewEncoder(w).Encode(&drive.Revision{Id: "rev-1", MimeType: "text/plain"})
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/files/f1/revisions/rev-g"):
+			json.NewEncoder(w).Encode(&drive.Revision{Id: "rev-g", MimeType: "application/vnd.google-apps.document"})
+		case r.Method == "PATCH" && strings.HasSuffix(r.URL.Path, "/files/f1"):
+			sawUpdate = true
+			body, _ := io.ReadAll(r.Body)
+			uploaded = string(body)
+			json.NewEncoder(w).Encode(&drive.File{Id: "f1", HeadRevisionId: "rev-2"})
+		default:
+			t.Logf("Unexpected request: %s %s", r.Method, r.URL.String())
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	svc, err := drive.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create drive service: %v", err)
+	}
+
+	updated, err := restoreDriveRevision(svc, "f1", "rev-1")
+	if err != nil {
+		t.Fatalf("restoreDriveRevision failed: %v", err)
+	}
+	if updated.HeadRevisionId != "rev-2" {
+		t.Errorf("expected head revision rev-2, got %q", updated.HeadRevisionId)
+	}
+	if !sawUpdate || !strings.Contains(uploaded, "old content") {
+		t.Errorf("expected old revision content to be uploaded, sawUpdate=%v body=%q", sawUpdate, uploaded)
+	}
+
+	sawUpdate = false
+	if _, err := restoreDriveRevision(svc, "f1", "rev-g"); err == nil || !strings.Contains(err.Error(), "native Google format") {
+		t.Errorf("expected native format rejection, got %v", err)
+	}
+	if sawUpdate {
+		t.Error("native format revision must not trigger an upload")
 	}
 }
 

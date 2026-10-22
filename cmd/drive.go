@@ -272,6 +272,13 @@ var driveRevisionCmd = &cobra.Command{
 	RunE:  runDriveRevision,
 }
 
+var driveRestoreRevisionCmd = &cobra.Command{
+	Use:   "restore-revision",
+	Short: "Restore a prior revision as the head revision",
+	Long:  "Forces a prior revision of a binary file to become the head revision by re-uploading that revision's content as the file's current content. Google Docs/Sheets/Slides revisions cannot be restored this way.",
+	RunE:  runDriveRestoreRevision,
+}
+
 var driveDeleteRevisionCmd = &cobra.Command{
 	Use:   "delete-revision",
 	Short: "Delete a revision",
@@ -523,6 +530,7 @@ func init() {
 	driveCmd.AddCommand(driveUpdatePermissionCmd)
 	driveCmd.AddCommand(driveRevisionsCmd)
 	driveCmd.AddCommand(driveRevisionCmd)
+	driveCmd.AddCommand(driveRestoreRevisionCmd)
 	driveCmd.AddCommand(driveDeleteRevisionCmd)
 	driveCmd.AddCommand(driveRepliesCmd)
 	driveCmd.AddCommand(driveReplyCmd)
@@ -591,6 +599,11 @@ func init() {
 	driveRevisionCmd.Flags().String("revision-id", "", "Revision ID (required)")
 	driveRevisionCmd.MarkFlagRequired("file-id")
 	driveRevisionCmd.MarkFlagRequired("revision-id")
+
+	driveRestoreRevisionCmd.Flags().String("file-id", "", "File ID (required)")
+	driveRestoreRevisionCmd.Flags().String("revision-id", "", "Revision ID to restore (required)")
+	driveRestoreRevisionCmd.MarkFlagRequired("file-id")
+	driveRestoreRevisionCmd.MarkFlagRequired("revision-id")
 
 	driveDeleteRevisionCmd.Flags().String("file-id", "", "File ID (required)")
 	driveDeleteRevisionCmd.Flags().String("revision-id", "", "Revision ID (required)")
@@ -2365,6 +2378,73 @@ func runDriveRevision(cmd *cobra.Command, args []string) error {
 			"name":  rev.LastModifyingUser.DisplayName,
 			"email": rev.LastModifyingUser.EmailAddress,
 		}
+	}
+
+	return p.Print(result)
+}
+
+// restoreDriveRevision makes revisionID the head revision of fileID by
+// downloading that revision's content and uploading it as the file's new
+// content. Drive has no native restore call, and native Google formats have
+// no downloadable revision content, so those are rejected.
+func restoreDriveRevision(svc *drive.Service, fileID, revisionID string) (*drive.File, error) {
+	rev, err := svc.Revisions.Get(fileID, revisionID).Fields("id,mimeType").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get revision: %w", err)
+	}
+	if strings.HasPrefix(rev.MimeType, "application/vnd.google-apps.") {
+		return nil, fmt.Errorf("revision %s is a native Google format (%s) and cannot be restored by re-upload", revisionID, rev.MimeType)
+	}
+
+	resp, err := svc.Revisions.Get(fileID, revisionID).Download()
+	if err != nil {
+		return nil, fmt.Errorf("failed to download revision: %w", err)
+	}
+	defer resp.Body.Close()
+
+	updated, err := svc.Files.Update(fileID, &drive.File{MimeType: rev.MimeType}).
+		SupportsAllDrives(true).
+		Media(resp.Body).
+		Fields("id, name, modifiedTime, headRevisionId").
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to restore revision: %w", err)
+	}
+	return updated, nil
+}
+
+func runDriveRestoreRevision(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+	ctx := context.Background()
+
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	svc, err := factory.Drive()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	fileID, _ := cmd.Flags().GetString("file-id")
+	revisionID, _ := cmd.Flags().GetString("revision-id")
+
+	updated, err := restoreDriveRevision(svc, fileID, revisionID)
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	result := map[string]interface{}{
+		"status":               "restored",
+		"file_id":              fileID,
+		"restored_revision_id": revisionID,
+	}
+	if updated.HeadRevisionId != "" {
+		result["head_revision_id"] = updated.HeadRevisionId
+	}
+	if updated.ModifiedTime != "" {
+		result["modified"] = updated.ModifiedTime
 	}
 
 	return p.Print(result)
