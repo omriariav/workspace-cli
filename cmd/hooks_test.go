@@ -302,3 +302,175 @@ func newHookConfigureTestCommand() *cobra.Command {
 	flags.Int("chat-limit", 0, "")
 	return cmd
 }
+
+// isolateHookEnv points every path hook helpers consult at temp dirs so tests
+// never read or write the real home directory or gws config.
+func isolateHookEnv(t *testing.T) (configHome, pluginData string) {
+	t.Helper()
+	home := t.TempDir()
+	configHome = filepath.Join(home, "xdg")
+	pluginData = filepath.Join(home, "plugin-data")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("PLUGIN_DATA", "")
+	t.Setenv("CLAUDE_PLUGIN_DATA", "")
+	return configHome, pluginData
+}
+
+func TestHookWorkspaceKeyCleansAndResolvesSymlinks(t *testing.T) {
+	root := t.TempDir()
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	real := filepath.Join(resolvedRoot, "real")
+	if err := os.Mkdir(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(resolvedRoot, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if got := hookWorkspaceKey(link); got != real {
+		t.Errorf("symlink key = %q, want %q", got, real)
+	}
+	if got := hookWorkspaceKey(real + string(filepath.Separator)); got != real {
+		t.Errorf("trailing separator key = %q, want %q", got, real)
+	}
+	if got := hookWorkspaceKey(filepath.Join(real, "sub", "..")); got != real {
+		t.Errorf("dotdot key = %q, want %q", got, real)
+	}
+
+	missing := filepath.Join(resolvedRoot, "does-not-exist")
+	if got := hookWorkspaceKey(missing); got != missing {
+		t.Errorf("missing path key = %q, want %q", got, missing)
+	}
+}
+
+func TestHookWorkspaceKeyMakesRelativePathsAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	if got := hookWorkspaceKey("."); got != resolved {
+		t.Errorf("relative key = %q, want %q", got, resolved)
+	}
+}
+
+func TestHookConfigPathScopes(t *testing.T) {
+	configHome, _ := isolateHookEnv(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	userPath, err := hookConfigPath("user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := pluginhooks.UserConfigPath(filepath.Join(configHome, "gws")); userPath != want {
+		t.Errorf("user path = %q, want %q", userPath, want)
+	}
+
+	workspacePath, err := hookConfigPath("workspace")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotCwd, _ := os.Getwd()
+	if want := pluginhooks.WorkspaceConfigPath(gotCwd); workspacePath != want {
+		t.Errorf("workspace path = %q, want %q", workspacePath, want)
+	}
+	if userPath == workspacePath {
+		t.Error("user and workspace config paths must differ")
+	}
+
+	for _, scope := range []string{"", "global", "USER"} {
+		path, err := hookConfigPath(scope)
+		if err == nil || path != "" {
+			t.Errorf("scope %q: got (%q, %v), want empty path and error", scope, path, err)
+		} else if !strings.Contains(err.Error(), "invalid --scope") {
+			t.Errorf("scope %q: unexpected error %v", scope, err)
+		}
+	}
+}
+
+func TestHookSnapshotPathPrecedence(t *testing.T) {
+	configHome, _ := isolateHookEnv(t)
+	pluginDir := t.TempDir()
+	claudeDir := t.TempDir()
+
+	t.Setenv("CLAUDE_PLUGIN_DATA", claudeDir)
+	if got, want := hookSnapshotPath(), filepath.Join(claudeDir, "workspace-snapshot.json"); got != want {
+		t.Errorf("CLAUDE_PLUGIN_DATA path = %q, want %q", got, want)
+	}
+
+	t.Setenv("PLUGIN_DATA", "  "+pluginDir+"  ")
+	if got, want := hookSnapshotPath(), filepath.Join(pluginDir, "workspace-snapshot.json"); got != want {
+		t.Errorf("PLUGIN_DATA must win and be trimmed: got %q, want %q", got, want)
+	}
+
+	t.Setenv("PLUGIN_DATA", "   ")
+	t.Setenv("CLAUDE_PLUGIN_DATA", "")
+	got := hookSnapshotPath()
+	if filepath.Base(got) != "workspace-snapshot.json" {
+		t.Errorf("fallback file name = %q", filepath.Base(got))
+	}
+	if strings.HasPrefix(got, configHome) {
+		// os.UserCacheDir failed; the config-dir fallback applies.
+		if want := filepath.Join(configHome, "gws", "hooks-cache", "workspace-snapshot.json"); got != want {
+			t.Errorf("config fallback = %q, want %q", got, want)
+		}
+	} else if want := filepath.Join("gws", "hooks", "workspace-snapshot.json"); !strings.HasSuffix(got, want) {
+		t.Errorf("cache fallback = %q, want suffix %q", got, want)
+	}
+}
+
+func TestRenderHookDisabledAndInvalidEventAreEmpty(t *testing.T) {
+	_, _ = isolateHookEnv(t)
+	pluginData := t.TempDir()
+	t.Setenv("PLUGIN_DATA", pluginData)
+	cwd := t.TempDir()
+
+	disabled := pluginhooks.DefaultConfig()
+	disabled.Enabled = false
+	got := renderHook(t.Context(), pluginhooks.EventSessionStart, disabled, cwd)
+	if got.AdditionalContext != "" || got.Refreshed || got.WorkspaceDegraded {
+		t.Errorf("disabled config rendered %+v, want empty", got)
+	}
+
+	enabled := pluginhooks.DefaultConfig()
+	enabled.Enabled = true
+	got = renderHook(t.Context(), pluginhooks.Event("Bogus"), enabled, cwd)
+	if got.AdditionalContext != "" {
+		t.Errorf("invalid event rendered %q, want empty", got.AdditionalContext)
+	}
+
+	if _, err := os.Stat(filepath.Join(pluginData, "workspace-snapshot.json")); !os.IsNotExist(err) {
+		t.Errorf("snapshot must not be written for no-op renders, stat err = %v", err)
+	}
+}
+
+func TestRenderHookTimeOnlyNeverRunsWorkspaceSources(t *testing.T) {
+	_, _ = isolateHookEnv(t)
+	pluginData := t.TempDir()
+	t.Setenv("PLUGIN_DATA", pluginData)
+	cwd := t.TempDir()
+
+	cfg := pluginhooks.DefaultConfig()
+	cfg.Enabled = true
+	cfg.Timezone = "UTC"
+	cfg.Providers.Time.Enabled = true
+	cfg.Providers.Workspace.Enabled = false
+
+	got := renderHook(t.Context(), pluginhooks.EventSessionStart, cfg, cwd)
+	if strings.TrimSpace(got.AdditionalContext) == "" {
+		t.Fatal("expected time context for enabled time provider")
+	}
+	if got.Refreshed || got.WorkspaceDegraded {
+		t.Errorf("workspace provider is off; got Refreshed=%v WorkspaceDegraded=%v", got.Refreshed, got.WorkspaceDegraded)
+	}
+	if got.ResolvedTimezone != "UTC" {
+		t.Errorf("ResolvedTimezone = %q, want UTC", got.ResolvedTimezone)
+	}
+}
