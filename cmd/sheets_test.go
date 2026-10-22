@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/api/option"
+	"google.golang.org/api/sheets/v4"
 )
 
 // TestSheetsCommands_Flags tests that all sheets commands have expected flags
@@ -2461,5 +2464,121 @@ func TestSheetsFreeze_MockServer(t *testing.T) {
 
 	if server == nil {
 		t.Fatal("server not created")
+	}
+}
+
+// TestParseCellRange tests parsing of A1:D10 style ranges into grid indices
+func TestParseCellRange(t *testing.T) {
+	tests := []struct {
+		name                               string
+		input                              string
+		startCol, startRow, endCol, endRow int64
+		wantErr                            bool
+	}{
+		{name: "single cell span", input: "A1:A1", startCol: 0, startRow: 0, endCol: 1, endRow: 1},
+		{name: "basic range", input: "A1:D10", startCol: 0, startRow: 0, endCol: 4, endRow: 10},
+		{name: "lowercase", input: "b2:c3", startCol: 1, startRow: 1, endCol: 3, endRow: 3},
+		{name: "surrounding spaces", input: " A1 : B2 ", startCol: 0, startRow: 0, endCol: 2, endRow: 2},
+		{name: "multi-letter column", input: "Z1:AA2", startCol: 25, startRow: 0, endCol: 27, endRow: 2},
+		{name: "offset range", input: "C5:F20", startCol: 2, startRow: 4, endCol: 6, endRow: 20},
+		{name: "no colon", input: "A1", wantErr: true},
+		{name: "too many colons", input: "A1:B2:C3", wantErr: true},
+		{name: "empty", input: "", wantErr: true},
+		{name: "missing row in start", input: "A:B2", wantErr: true},
+		{name: "missing column in end", input: "A1:2", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sc, sr, ec, er, err := parseCellRange(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for %q, got none", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", tt.input, err)
+			}
+			if sc != tt.startCol || sr != tt.startRow || ec != tt.endCol || er != tt.endRow {
+				t.Errorf("parseCellRange(%q) = (%d,%d,%d,%d), want (%d,%d,%d,%d)",
+					tt.input, sc, sr, ec, er, tt.startCol, tt.startRow, tt.endCol, tt.endRow)
+			}
+		})
+	}
+}
+
+// TestParseRange tests resolving sheet names and grid ranges against a mock Sheets API
+func TestParseRange(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || !strings.Contains(r.URL.Path, "/spreadsheets/test-id") {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		resp := map[string]interface{}{
+			"spreadsheetId": "test-id",
+			"sheets": []map[string]interface{}{
+				{"properties": map[string]interface{}{"sheetId": 11, "title": "First"}},
+				{"properties": map[string]interface{}{"sheetId": 22, "title": "Second"}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	svc, err := sheets.NewService(context.Background(),
+		option.WithoutAuthentication(),
+		option.WithEndpoint(server.URL),
+	)
+	if err != nil {
+		t.Fatalf("failed to create sheets service: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		rangeStr    string
+		wantSheetID int64
+		wantGrid    sheets.GridRange
+		wantErr     bool
+	}{
+		{
+			name:        "named sheet",
+			rangeStr:    "Second!B2:C4",
+			wantSheetID: 22,
+			wantGrid:    sheets.GridRange{SheetId: 22, StartColumnIndex: 1, StartRowIndex: 1, EndColumnIndex: 3, EndRowIndex: 4},
+		},
+		{
+			name:        "no sheet name uses first sheet",
+			rangeStr:    "A1:D10",
+			wantSheetID: 11,
+			wantGrid:    sheets.GridRange{SheetId: 11, StartColumnIndex: 0, StartRowIndex: 0, EndColumnIndex: 4, EndRowIndex: 10},
+		},
+		{name: "unknown sheet", rangeStr: "Missing!A1:B2", wantErr: true},
+		{name: "invalid cell range", rangeStr: "First!A1", wantErr: true},
+		{name: "whole column unsupported", rangeStr: "First!A:A", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, grid, err := parseRange(svc, "test-id", tt.rangeStr)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for %q, got none", tt.rangeStr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", tt.rangeStr, err)
+			}
+			if id != tt.wantSheetID {
+				t.Errorf("sheet ID = %d, want %d", id, tt.wantSheetID)
+			}
+			if grid.SheetId != tt.wantGrid.SheetId || grid.StartColumnIndex != tt.wantGrid.StartColumnIndex ||
+				grid.StartRowIndex != tt.wantGrid.StartRowIndex || grid.EndColumnIndex != tt.wantGrid.EndColumnIndex ||
+				grid.EndRowIndex != tt.wantGrid.EndRowIndex {
+				t.Errorf("grid = %+v, want %+v", grid, &tt.wantGrid)
+			}
+		})
 	}
 }
