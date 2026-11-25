@@ -468,6 +468,40 @@ func TestExistingGrantedAccess_IgnoresMetadataWithoutToken(t *testing.T) {
 	}
 }
 
+func TestExistingGrantedAccess_LegacyVersusInterruptedLogin(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	current := &oauth2.Token{AccessToken: "a", RefreshToken: "current"}
+	if err := auth.SaveToken(current); err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.SaveGrantedServices([]string{"gmail", "drive"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Legacy login: a service list and no access record at all. Those
+	// logins always granted full access.
+	if got := existingGrantedAccess(); got["gmail"] != auth.AccessFull || got["drive"] != auth.AccessFull {
+		t.Errorf("legacy login = %v, want gmail and drive full", got)
+	}
+
+	// Interrupted login: an access record exists but belongs to another
+	// token. The service list must not be read as full access.
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, &oauth2.Token{RefreshToken: "other"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := existingGrantedAccess(); len(got) != 0 {
+		t.Errorf("after an interrupted login nothing may be assumed, got %v", got)
+	}
+
+	// Once the record matches the stored token it is used as written.
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, current); err != nil {
+		t.Fatal(err)
+	}
+	if got := existingGrantedAccess(); len(got) != 1 || got["gmail"] != auth.AccessReadOnly {
+		t.Errorf("matching record = %v, want gmail readonly", got)
+	}
+}
+
 func TestLogout_ClearsGrantedMetadata(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, &oauth2.Token{RefreshToken: "r"}); err != nil {

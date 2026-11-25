@@ -156,15 +156,21 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
+	// Write order matters if the process is interrupted. The access record
+	// is bound to the new token's fingerprint and goes first: until the
+	// token itself is saved it matches nothing and is ignored, and its
+	// presence stops the unbound service list from being trusted. The
+	// service list goes last, so it never describes a newer login than the
+	// access record does.
+	errAccess := auth.SaveGrantedAccess(access, token)
+
 	if err := auth.SaveToken(token); err != nil {
 		return p.PrintError(err)
 	}
 
-	// Persist granted services and access levels for scope diagnostics.
-	// If either write fails, remove both files: no metadata is better than
-	// metadata that still describes the previous token.
+	// If recording the metadata failed, remove both files: no metadata is
+	// better than metadata that still describes the previous token.
 	errServices := auth.SaveGrantedServices(grantedServiceNames(access))
-	errAccess := auth.SaveGrantedAccess(access, token)
 	if errServices != nil || errAccess != nil {
 		auth.DeleteGrantedMetadata()
 		fmt.Fprintf(os.Stderr, "Warning: failed to record granted access (services: %v, access levels: %v); `gws auth status` will not show per-service access until the next login\n", errServices, errAccess)
@@ -202,8 +208,12 @@ func existingGrantedAccess() map[string]string {
 	if access := auth.LoadGrantedAccess(); access != nil {
 		return access
 	}
+	// GrantedServicesForToken returns the plain service list only for a
+	// login that never wrote an access record (an older version, which
+	// always granted full access). If a record exists but belongs to
+	// another token, a login was interrupted and nothing is assumed.
 	access := map[string]string{}
-	for _, svc := range auth.LoadGrantedServices() {
+	for _, svc := range auth.GrantedServicesForToken() {
 		access[svc] = auth.AccessFull
 	}
 	return access
