@@ -1,5 +1,26 @@
 # Releases
 
+## v1.44.0
+
+**Agent Safety: Least-Privilege Login, External Tokens, Introspection, Confirmation Gate, Suggest-Time**
+
+- **Least-privilege login** ([#225](https://github.com/omriariav/workspace-cli/issues/225)): `gws auth login --readonly` requests only read-only scopes, and `--add --services X` extends the stored authorization instead of replacing it (same account required; previously granted scopes are re-requested and verified). `gws auth status` reports per-service access (`full`, `readonly`, `partial`, `partial-readonly`). Insufficient-scope errors carry a hint naming the login that grants the missing access.
+- **Introspection** ([#226](https://github.com/omriariav/workspace-cli/issues/226)): global `--schema` and `--show-scopes` print JSON describing a command (flags, subcommands, whether the confirmation gate covers it, the scopes `gws auth login` requests for its service) and exit without calling any API or needing credentials.
+- **External access token** ([#227](https://github.com/omriariav/workspace-cli/issues/227)): `GWS_ACCESS_TOKEN` / `--access-token` supply an externally managed OAuth token, used as-is (no refresh, nothing stored). A supplied-but-empty token is an error, never a fallback to the stored login. While one is set, the Chat space-cache commands and `auth logout` refuse to run, `chat members` skips its name cache, and session hooks add no Workspace context.
+- **Confirmation gate** ([#228](https://github.com/omriariav/workspace-cli/issues/228)): opt-in via `GWS_CONFIRM_SENSITIVE` / `confirm_sensitive`. Commands that send, share, delete or destroy data show the invocation and ask before running; `--yes` skips the prompt; without a terminal they fail with `confirmation required`. A setting that cannot be understood, or a config file that cannot be loaded, stops sensitive commands rather than switching the gate off. Off by default.
+- **`gws calendar suggest-time`** ([#229](https://github.com/omriariav/workspace-cli/issues/229)): finds free meeting slots across calendars and attendees inside working hours. Unreadable calendars fail the command unless `--allow-partial` is given.
+- **Token refresh and locking**: refreshes of the stored login are serialized across processes with an OS-held lock (`flock` / `LockFileEx`), including refresh-token rotation; older gws versions sharing the config directory are still excluded through the existing `.lock` file. An expired token is no longer refreshed when the lock cannot be taken (for example a read-only config directory): the command fails with a message saying so.
+- **`gws auth logout`** returns `"revoked": true` only when Google confirmed the revocation, and `"revoked": false` with instructions otherwise. `gws auth status` reports a token Google rejects as not authenticated.
+- **README**: retitled as the unofficial Go CLI for Google Workspace, with a comparison against Google's `gwscli` and `googleworkspace/cli` and a Disclaimer section.
+- New direct dependencies `golang.org/x/term` and `golang.org/x/sys` (both already in the module graph).
+- All of the above shipped in [#230](https://github.com/omriariav/workspace-cli/pull/230).
+
+**Upgrade notes**
+
+- A blank `GWS_ACCESS_TOKEN=` in a shell profile now makes every command fail until it is unset.
+- With a malformed `config.yaml`, sensitive commands are refused until the file is fixed, `GWS_CONFIRM_SENSITIVE` is set, or `--yes` is given.
+- Upgrade every gws binary that shares a config directory: the refresh guarantee holds only between copies of this version or later.
+
 ## v1.43.1
 
 **Skill Audit, Uniform Skill Versions, Canonical Release Procedure**

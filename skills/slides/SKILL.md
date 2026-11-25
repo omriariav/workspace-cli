@@ -1,6 +1,6 @@
 ---
 name: gws-slides
-version: 1.43.1
+version: 1.44.0
 description: "Google Slides CLI operations via gws. Use when users need to create, read, or edit Google Slides presentations. Triggers: slides, presentation, google slides, deck."
 metadata:
   short-description: Google Slides CLI operations

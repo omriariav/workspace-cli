@@ -17,9 +17,9 @@
 
 | Service | Commands |
 |---------|----------|
-| `auth` | login, logout, status (OAuth default; `auth_mode` supports service-account-dwd and service-account-app) |
+| `auth` | login (`--readonly`, `--add`), logout, status (OAuth default; `auth_mode` supports service-account-dwd and service-account-app; `GWS_ACCESS_TOKEN` supplies an external token) |
 | `gmail` | list, read, links, thread, send, reply, forward, labels, label, archive, trash, event-id, untrash, delete, batch-modify, batch-delete, trash-thread, untrash-thread, delete-thread, label-info, create-label, update-label, delete-label, drafts, draft, create-draft, update-draft, send-draft, delete-draft, attachment |
-| `calendar` | list, events, create, update, delete, rsvp, get, quick-add, instances, move, get-calendar, create-calendar, update-calendar, delete-calendar, clear, subscribe, unsubscribe, calendar-info, update-subscription, acl, share, unshare, update-acl, freebusy, colors, settings |
+| `calendar` | list, events, create, update, delete, rsvp, get, quick-add, instances, move, get-calendar, create-calendar, update-calendar, delete-calendar, clear, subscribe, unsubscribe, calendar-info, update-subscription, acl, share, unshare, update-acl, freebusy, suggest-time, colors, settings |
 | `tasks` | lists, list, list-info, create, create-list, update, update-list, delete-list, get, delete, complete, reopen, move, clear |
 | `drive` | list, search, info, download, upload, create-folder, move, delete, copy, convert, comments, approvals, approval, start-approval, approve, decline, reassign-approval, cancel-approval, comment-approval, permissions, share, unshare, permission, update-permission, revisions, revision, delete-revision, replies, reply, get-reply, delete-reply, comment, add-comment, delete-comment, resolve-comment, unresolve-comment, export, empty-trash, update, shared-drives, shared-drive, create-drive, delete-drive, update-drive, about, changes, activity |
 | `docs` | read, info, create, append, insert, replace, replace-content, delete, add-table, format, set-paragraph-style, add-list, remove-list, trash, add-tab, delete-tab, rename-tab, add-image, insert-table-row, delete-table-row, insert-table-col, delete-table-col, merge-cells, unmerge-cells, pin-rows, page-break, section-break, add-header, delete-header, add-footer, delete-footer, add-named-range, delete-named-range, add-footnote, delete-object, replace-image, replace-named-range, update-style, update-section-style, update-table-cell-style, update-table-col-properties, update-table-row-style |
@@ -52,7 +52,7 @@ go run ./cmd/gws    # or go run .
 
 ## Current Version
 
-**v1.43.1** - Skill audit and version consistency: every source skill version now tracks the release version (enforced by test), with gws-events cross-references and service-account-app boundary clarifications in the chat and drive skills.
+**v1.44.0** - Agent-safety release: least-privilege login (`auth login --readonly` / `--add`), external access tokens (`GWS_ACCESS_TOKEN`), `--schema` / `--show-scopes` introspection, an opt-in confirmation gate for sensitive commands (`GWS_CONFIRM_SENSITIVE`, `--yes`), `calendar suggest-time`, and OS-held locking for login state and token refresh.
 
 ## Roadmap
 

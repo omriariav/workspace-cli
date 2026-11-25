@@ -1,6 +1,6 @@
 ---
 name: gws-search
-version: 1.43.1
+version: 1.44.0
 description: "Google Custom Search CLI operations via gws. Use when users need to perform web searches using Google Programmable Search Engine. Triggers: google search, custom search, web search."
 metadata:
   short-description: Google Custom Search CLI operations

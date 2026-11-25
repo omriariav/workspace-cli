@@ -1,6 +1,6 @@
 ---
 name: gws-tasks
-version: 1.43.1
+version: 1.44.0
 description: "Google Tasks CLI operations via gws. Use when users need to manage task lists, view/create/update/delete tasks, move tasks, or clear completed. Triggers: google tasks, task list, todo, task management."
 metadata:
   short-description: Google Tasks CLI operations
