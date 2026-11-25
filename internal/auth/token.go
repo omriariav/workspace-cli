@@ -277,6 +277,17 @@ func LoadGrantedAccess() map[string]string {
 	return nil
 }
 
+// LoadGrantedAccessFor returns the access levels recorded for the given
+// token, or nil if the record on disk belongs to another one. Use it when
+// the levels are reported next to something else derived from that same
+// token, so a login finishing in between cannot mix the two.
+func LoadGrantedAccessFor(token *oauth2.Token) map[string]string {
+	if record := readGrantedRecordFor(token); record != nil {
+		return record.Services
+	}
+	return nil
+}
+
 // LoadGrantedScopes returns the exact scopes granted to the stored token,
 // or nil when they are not known (no record, or a record for another
 // token).
@@ -409,16 +420,22 @@ func SnapshotGrantedAccess() (restore func()) {
 // loadGrantedRecord reads the access record and returns it only if it
 // belongs to the stored token.
 func loadGrantedRecord() *grantedAccessRecord {
+	token, err := LoadToken()
+	if err != nil {
+		return nil
+	}
+	return readGrantedRecordFor(token)
+}
+
+// readGrantedRecordFor reads the access record and returns it only if it
+// belongs to the given token.
+func readGrantedRecordFor(token *oauth2.Token) *grantedAccessRecord {
 	data, err := os.ReadFile(config.GetGrantedAccessPath())
 	if err != nil {
 		return nil
 	}
 	var record grantedAccessRecord
 	if err := json.Unmarshal(data, &record); err != nil {
-		return nil
-	}
-	token, err := LoadToken()
-	if err != nil {
 		return nil
 	}
 	fp := tokenFingerprint(token)

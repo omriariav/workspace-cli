@@ -33,16 +33,24 @@ var commandScopeServices = map[string][]string{
 	"events":   {"events"},
 }
 
+// commandScopeOverrides lists the commands that call a different API than
+// the rest of their group, so their scopes are not the group's.
+var commandScopeOverrides = map[string][]string{
+	// Talks only to the Drive Activity API: one read-only scope, not
+	// Drive file access.
+	"drive activity": {"driveactivity"},
+	// Trashes or deletes the file through the Drive API.
+	"docs trash": {"drive"},
+}
+
 // scopeServicesFor returns the scope services a command uses.
 func scopeServicesFor(cmd *cobra.Command) []string {
 	key := commandKey(cmd)
 	if key == "" {
 		return nil
 	}
-	// `drive activity` talks only to the Drive Activity API: it needs that
-	// one read-only scope, not Drive file access.
-	if key == "drive activity" {
-		return []string{"driveactivity"}
+	if services, ok := commandScopeOverrides[key]; ok {
+		return append([]string(nil), services...)
 	}
 	group := strings.SplitN(key, " ", 2)[0]
 	return append([]string(nil), commandScopeServices[group]...)

@@ -223,6 +223,16 @@ func TestIntrospection_ShowScopes(t *testing.T) {
 		t.Errorf("drive activity login = %v", activity["login"])
 	}
 
+	// docs trash goes through the Drive API, so it needs Drive scopes.
+	trash, _ := runIntrospection(t, "docs", "trash", "--show-scopes")
+	if !containsStr(toStrings(trash["scopes"]), "https://www.googleapis.com/auth/drive") || containsStr(toStrings(trash["scopes"]), "https://www.googleapis.com/auth/documents") {
+		t.Errorf("docs trash scopes = %v, want Drive scopes", trash["scopes"])
+	}
+	docsRead, _ := runIntrospection(t, "docs", "read", "--show-scopes")
+	if !containsStr(toStrings(docsRead["scopes"]), "https://www.googleapis.com/auth/documents") {
+		t.Errorf("docs read scopes = %v, want Docs scopes", docsRead["scopes"])
+	}
+
 	version, _ := runIntrospection(t, "version", "--show-scopes")
 	if len(toStrings(version["scopes"])) != 0 || version["note"] == nil {
 		t.Errorf("version uses no OAuth scopes: %v", version)
@@ -585,6 +595,20 @@ func TestLogout_ClearsGrantedMetadata(t *testing.T) {
 	}
 	if auth.LoadGrantedAccess() != nil || auth.LoadGrantedServices() != nil {
 		t.Error("logout should remove granted-services and granted-access metadata")
+	}
+}
+
+func TestCommandScopeOverrides_AreKnown(t *testing.T) {
+	for key, services := range commandScopeOverrides {
+		cmd, _, err := rootCmd.Find(strings.Fields(key))
+		if err != nil || commandKey(cmd) != key {
+			t.Errorf("scope override %q does not resolve to a real command", key)
+		}
+		for _, svc := range services {
+			if _, ok := auth.ServiceScopes[svc]; !ok {
+				t.Errorf("override %q maps to unknown scope service %q", key, svc)
+			}
+		}
 	}
 }
 

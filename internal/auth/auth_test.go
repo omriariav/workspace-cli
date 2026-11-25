@@ -780,6 +780,17 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	if account := LoadGrantedAccount(); account != "acct-1" {
 		t.Errorf("LoadGrantedAccount = %q", account)
 	}
+	// Bound to a specific token: the right one sees it, another does not,
+	// whatever happens to be on disk.
+	if got := LoadGrantedAccessFor(tok); got["gmail"] != AccessReadOnly {
+		t.Errorf("LoadGrantedAccessFor(matching token) = %v", got)
+	}
+	if got := LoadGrantedAccessFor(&oauth2.Token{RefreshToken: "someone-else"}); got != nil {
+		t.Errorf("LoadGrantedAccessFor(other token) = %v, want nil", got)
+	}
+	if got := LoadGrantedAccessFor(nil); got != nil {
+		t.Errorf("LoadGrantedAccessFor(nil) = %v, want nil", got)
+	}
 	if scopes := LoadGrantedScopes(); strings.Join(scopes, ",") != "scope-a,scope-b" {
 		t.Errorf("LoadGrantedScopes = %v", scopes)
 	}

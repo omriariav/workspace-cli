@@ -810,7 +810,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 	// The recorded access levels are local: report them whether or not
 	// the user-info lookup below succeeds.
-	addGrantedAccess(result, auth.LoadGrantedAccess())
+	// Read for the same token the account lookup below uses, so the email
+	// and the access levels always describe one login.
+	addGrantedAccess(result, auth.LoadGrantedAccessFor(token))
 
 	if userInfo, err := getUserInfo(token); err != nil {
 		result["user"] = "unknown (failed to fetch user info)"
