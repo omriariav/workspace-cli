@@ -481,7 +481,7 @@ Usage: gws calendar suggest-time [flags]
 | `--timezone` | string | local | No | IANA timezone for working hours and output |
 | `--max` | int | `5` | No | Maximum number of suggestions |
 | `--include-weekends` | bool | `false` | No | Also search Saturdays and Sundays |
-| `--allow-partial` | bool | `false` | No | Suggest times even if some calendars could not be read |
+| `--allow-partial` | bool | `false` | No | Suggest times even if some (not all) calendars could not be read |
 
 ### Output
 
@@ -503,8 +503,10 @@ Usage: gws calendar suggest-time [flags]
 
 Each suggestion is the earliest slot of one free window. If any requested
 calendar cannot be read the command fails. With `--allow-partial` it
-continues: `partial` is `true` and `unavailable` lists each unread calendar
-as `{"calendar": "...", "reason": "..."}` — their availability is unknown. At most 50
+continues as long as at least one calendar could be read: `partial` is `true`
+and `unavailable` lists each unread calendar as
+`{"calendar": "...", "reason": "..."}` — their availability is unknown. If no
+calendar at all could be read, the command fails even with `--allow-partial`. At most 50
 calendars can be checked at once, over a range of at most 92 days. A group
 address counts as its members (up to 100 per group) toward that 50; a group
 or request over the limit is reported as unavailable.

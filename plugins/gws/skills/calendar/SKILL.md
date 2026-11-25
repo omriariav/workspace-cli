@@ -321,7 +321,7 @@ Finds times when every requested calendar is free. Built on the same free/busy q
 
 - `--allow-partial` — Suggest times even if some calendars could not be read
 
-Each suggestion is the earliest slot in a free window, with `free_until` / `free_minutes` showing how long the window stays open. If any requested calendar cannot be read, the command fails and names it — fix the calendar ID or sharing rather than guessing. Only with `--allow-partial` does it suggest times from the readable calendars; the output then has `partial: true` and lists the others under `unavailable`, and those people's availability is **unknown** — say so to the user.
+Each suggestion is the earliest slot in a free window, with `free_until` / `free_minutes` showing how long the window stays open. If any requested calendar cannot be read, the command fails and names it — fix the calendar ID or sharing rather than guessing. Only with `--allow-partial` does it suggest times from the readable calendars (at least one must be readable, or it still fails); the output then has `partial: true` and lists the others under `unavailable`, and those people's availability is **unknown** — say so to the user.
 
 ### colors -- List available colors
 

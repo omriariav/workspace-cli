@@ -25,7 +25,8 @@ result gives the earliest slot in a window and how long the window stays free.
 A date-only --to includes that whole day. If any requested calendar cannot
 be read the command fails, because a slot is only useful when everyone's
 availability is known. With --allow-partial it suggests times from the
-calendars it could read and lists the others under "unavailable".
+calendars it could read and lists the others under "unavailable"; if none
+could be read it still fails.
 
 Examples:
   gws calendar suggest-time --from 2026-12-01 --to 2026-12-05
