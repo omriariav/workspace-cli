@@ -32,7 +32,7 @@ If not found, install: `go install github.com/omriariav/workspace-cli/cmd/gws@la
 | Login read-only for some services | `gws auth login --services gmail,drive --readonly` |
 | Add a service to the existing login | `gws auth login --add --services tasks` |
 | Use an existing access token | `GWS_ACCESS_TOKEN=<token> gws gmail list` |
-| Scopes a command needs | `gws gmail send --show-scopes` |
+| Scopes `gws auth login` requests for a command's service | `gws gmail send --show-scopes` |
 | Describe a command's flags as JSON | `gws gmail send --schema` |
 | Login with credentials | `gws auth login --client-id <id> --client-secret <secret>` |
 | Logout (revokes token) | `gws auth logout` |

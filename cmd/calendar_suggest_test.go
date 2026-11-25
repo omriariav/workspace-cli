@@ -1362,3 +1362,30 @@ func TestEndOfDateOnly_DateResumesAfterMidnight(t *testing.T) {
 		t.Errorf("ordinary day ends at %v, want the next midnight", l)
 	}
 }
+
+// Kwajalein moved from UTC+11 to UTC-12 on 1969-09-30, so 23 hours of
+// that date happened twice. A local time inside the repeat resolves to
+// its first occurrence, as documented, not to the one 23 hours later.
+func TestCivilInstant_LongRepeatedInterval(t *testing.T) {
+	loc, err := time.LoadLocation("Pacific/Kwajalein")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	_, before := time.Date(1969, 9, 29, 12, 0, 0, 0, loc).Zone()
+	_, after := time.Date(1969, 10, 2, 12, 0, 0, 0, loc).Zone()
+	if before-after != 23*3600 {
+		t.Skipf("tzdata does not model the 23-hour rollback (offsets %d -> %d)", before, after)
+	}
+
+	got := civilInstant(1969, 9, 30, 14, 0, loc)
+	if l := got.In(loc); l.Day() != 30 || l.Hour() != 14 || l.Minute() != 0 {
+		t.Fatalf("resolved to %v, want a 14:00 on September 30", l)
+	}
+	if _, offset := got.In(loc).Zone(); offset != before {
+		t.Errorf("resolved to the later occurrence (offset %d), want the first (offset %d)", offset, before)
+	}
+	// The other occurrence exists and is 23 hours later.
+	if later := got.Add(23 * time.Hour).In(loc); later.Day() != 30 || later.Hour() != 14 {
+		t.Errorf("expected the same wall time 23h later, got %v", later)
+	}
+}

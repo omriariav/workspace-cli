@@ -193,7 +193,16 @@ func civilInstant(year int, month time.Month, day, hour, min int, loc *time.Loca
 	if wall(t).Equal(want) {
 		// The time exists. If a fall-back change makes it occur twice,
 		// time.Date may pick either one; take the earliest explicitly.
-		for back := 3 * time.Hour; back > 0; back -= 15 * time.Minute {
+		// The search reaches back a full day and more: Kwajalein repeated
+		// 23 hours when it moved across the date line in 1969. It is
+		// skipped when the zone's offset did not change in that stretch,
+		// which is nearly always.
+		const reach = 26 * time.Hour
+		_, offsetNow := t.In(loc).Zone()
+		if _, offsetBefore := t.Add(-reach).In(loc).Zone(); offsetBefore == offsetNow {
+			return t
+		}
+		for back := reach; back > 0; back -= time.Minute {
 			if earlier := t.Add(-back); wall(earlier).Equal(want) {
 				return earlier
 			}
