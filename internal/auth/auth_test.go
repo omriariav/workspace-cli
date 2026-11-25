@@ -825,6 +825,34 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestStoredTokenFingerprint_ChangesOnlyWhenTheLoginIsReplaced(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if StoredTokenFingerprint() != "" {
+		t.Error("nothing stored should give an empty fingerprint")
+	}
+	if err := SaveToken(&oauth2.Token{AccessToken: "a1", RefreshToken: "login-1"}); err != nil {
+		t.Fatal(err)
+	}
+	base := StoredTokenFingerprint()
+	if base == "" {
+		t.Fatal("a stored login should have a fingerprint")
+	}
+	// An access-token refresh is the same login.
+	if err := SaveToken(&oauth2.Token{AccessToken: "a2", RefreshToken: "login-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if StoredTokenFingerprint() != base {
+		t.Error("an access-token refresh must not look like a new login")
+	}
+	// Another login finishing in the meantime is detected.
+	if err := SaveToken(&oauth2.Token{AccessToken: "b1", RefreshToken: "login-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if StoredTokenFingerprint() == base {
+		t.Error("a replaced login must change the fingerprint")
+	}
+}
+
 func TestTokenFingerprint(t *testing.T) {
 	if tokenFingerprint(nil) != "" || tokenFingerprint(&oauth2.Token{AccessToken: "a"}) != "" {
 		t.Error("no refresh token means no fingerprint")

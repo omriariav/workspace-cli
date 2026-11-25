@@ -286,6 +286,18 @@ func LoadGrantedAccount() string {
 	return ""
 }
 
+// StoredTokenFingerprint identifies the authorization currently stored on
+// disk without revealing it. Returns "" when nothing is stored. Two calls
+// return the same value exactly when no login has replaced the token in
+// between.
+func StoredTokenFingerprint() string {
+	token, err := LoadToken()
+	if err != nil {
+		return ""
+	}
+	return tokenFingerprint(token)
+}
+
 // LockLoginState serialises the writes a login makes (token, access
 // record, service list) across processes. The returned function releases
 // the lock.

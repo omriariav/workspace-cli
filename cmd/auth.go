@@ -132,6 +132,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// preserve. It is nil for a replacing login.
 	var previousScopes []string
 	previousAccount := ""
+	// The authorization this login starts from. --add extends it, so it
+	// must still be the stored one when the result is saved.
+	baseAuthorization := auth.StoredTokenFingerprint()
 	if add {
 		var err error
 		previousAccount, err = storedAccountID()
@@ -222,6 +225,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 	defer unlock()
+
+	// Another login may have finished while the browser was open. Saving
+	// now would replace its grant with one built from the older state and
+	// silently drop whatever it added.
+	if add && auth.StoredTokenFingerprint() != baseAuthorization {
+		return p.PrintError(fmt.Errorf("the stored authorization changed while this login was in progress (another `gws auth login` finished first), so this one was not saved; run the --add login again"))
+	}
 
 	restoreAccessRecord := auth.SnapshotGrantedAccess()
 	errAccess := auth.SaveGrantedAccess(access, grantedScopes, account, token)
