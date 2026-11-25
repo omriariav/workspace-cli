@@ -89,6 +89,27 @@ func TestConfirmGate_NoApprovalWithoutAVisiblePrompt(t *testing.T) {
 	}
 }
 
+// An incomplete sensitive command reports its missing flags, not a
+// confirmation request for something that cannot run.
+func TestGate_RequiredFlagsAreCheckedFirst(t *testing.T) {
+	t.Setenv("GWS_NO_UPDATE_CHECK", "1")
+	t.Setenv("GWS_CONFIRM_SENSITIVE", "1")
+	viper.SetEnvPrefix("GWS")
+	viper.AutomaticEnv()
+
+	share, _, _ := rootCmd.Find([]string{"drive", "share"})
+	err := rootCmd.PersistentPreRunE(share, nil)
+	if err == nil || !strings.Contains(err.Error(), "required flag(s)") {
+		t.Fatalf("error = %v, want the missing required flags", err)
+	}
+	if strings.Contains(err.Error(), "confirmation required") {
+		t.Errorf("the gate ran before flag validation: %v", err)
+	}
+	if !isCobraUsageError(err) {
+		t.Errorf("a missing required flag should be a usage error: %v", err)
+	}
+}
+
 func TestConfirmSensitive_ReadsEnv(t *testing.T) {
 	t.Setenv("GWS_CONFIRM_SENSITIVE", "1")
 	viper.SetEnvPrefix("GWS")
@@ -781,7 +802,7 @@ func TestReadOnlyScopeHint(t *testing.T) {
 
 	// A service left out of a scoped login gets a hint too.
 	events, _, _ := rootCmd.Find([]string{"calendar", "events"})
-	if hint := readOnlyScopeHint(events, insufficient, map[string]string{"gmail": auth.AccessReadOnly}); !strings.Contains(hint, "--add --services calendar") {
+	if hint := readOnlyScopeHint(events, insufficient, map[string]string{"gmail": auth.AccessReadOnly}); !strings.Contains(hint, "--add --services calendar") || !strings.Contains(hint, "--readonly if read-only access is enough") {
 		t.Errorf("hint for a service missing from the login = %q", hint)
 	}
 	// With no recorded access at all there is nothing to base a hint on.

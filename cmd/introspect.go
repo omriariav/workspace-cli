@@ -289,7 +289,7 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	}
 
 	var lacking []string
-	completeReadOnly, incompleteReadOnly := 0, 0
+	completeReadOnly, incompleteReadOnly, holdsWrite := 0, 0, false
 	for _, svc := range scopeServicesFor(cmd) {
 		// A service that is not in the record at all was left out of a
 		// scoped login: as much a missing grant as a read-only one.
@@ -303,6 +303,8 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 			completeReadOnly++
 		case auth.AccessPartialReadOnly:
 			incompleteReadOnly++
+		case auth.AccessPartial:
+			holdsWrite = true
 		}
 	}
 	if len(lacking) == 0 {
@@ -322,7 +324,14 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	}
 	// Worded without "write access": some services (groups) have only
 	// read scopes, and a partial grant can be missing one of those.
-	return fmt.Sprintf("Hint: the stored login does not hold every scope %s needs. Grant them with: gws auth login --add --services %s", joined, joined)
+	if holdsWrite {
+		// The login already has some write access to the service; a
+		// read-only retry would not add what is missing.
+		return fmt.Sprintf("Hint: the stored login does not hold every scope %s needs. Grant them with: gws auth login --add --services %s", joined, joined)
+	}
+	// Whether the command only reads is not known here, so both ways in
+	// are named rather than steering straight to full access.
+	return fmt.Sprintf("Hint: the stored login does not hold every scope %s needs. Grant them with: gws auth login --add --services %s (append --readonly if read-only access is enough)", joined, joined)
 }
 
 // discardValue is a flag value that stores nothing. It reports the

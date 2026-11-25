@@ -48,6 +48,12 @@ Workspace Events, and Custom Search.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		executedCmd = cmd
 		emitVersionNotice(cmd, os.Stderr, quiet, os.Getenv("GWS_NO_UPDATE_CHECK") != "")
+		// Cobra checks required flags after this hook. Check them first,
+		// so an incomplete command reports its usage error instead of
+		// asking for confirmation of something that cannot run.
+		if err := cmd.ValidateRequiredFlags(); err != nil {
+			return err
+		}
 		yes, _ := cmd.Flags().GetBool("yes")
 		return confirmGate(cmd, config.GetConfirmSensitive(), yes, os.Stdin, os.Stderr, stdinIsTerminal())
 	},
