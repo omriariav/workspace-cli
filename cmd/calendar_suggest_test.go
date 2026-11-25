@@ -191,6 +191,60 @@ func TestSuggestSlots_ClipsToRangeAndHonoursTimezone(t *testing.T) {
 	}
 }
 
+func TestSuggestSlots_SpansMidnightWhenWorkingHoursAreUnrestricted(t *testing.T) {
+	// Monday 23:00 to Tuesday 01:00, empty calendar: a 90-minute meeting
+	// fits only if the two whole-day windows are treated as one.
+	from := mustTime(t, "2026-11-30T23:00:00Z")
+	to := mustTime(t, "2026-12-01T01:00:00Z")
+	got := suggestSlots(nil, from, to, 90*time.Minute, 0, 24*time.Hour, time.UTC, false, 5)
+	if len(got) != 1 || !got[0].Start.Equal(from) || !got[0].FreeUntil.Equal(to) {
+		t.Fatalf("suggestions = %v, want one window across midnight", got)
+	}
+
+	// Friday night into Saturday: the weekend day is not eligible, so the
+	// window stops at midnight and the meeting does not fit.
+	fri := mustTime(t, "2026-12-04T23:00:00Z")
+	if none := suggestSlots(nil, fri, fri.Add(2*time.Hour), 90*time.Minute, 0, 24*time.Hour, time.UTC, false, 5); len(none) != 0 {
+		t.Errorf("expected no suggestion across an excluded weekend day, got %v", none)
+	}
+	// Restricted working hours never merge across the night.
+	if none := suggestSlots(nil, from, to, 30*time.Minute, 9*time.Hour, 17*time.Hour, time.UTC, false, 5); len(none) != 0 {
+		t.Errorf("expected nothing outside working hours, got %v", none)
+	}
+}
+
+func TestSuggestSlots_MidnightDSTTransition(t *testing.T) {
+	// In America/Sao_Paulo, DST began at midnight on Sunday 2018-11-04:
+	// 00:00 did not exist that day. Every weekday around it must still
+	// get its 09:00-17:00 window, on the right date.
+	loc, err := time.LoadLocation("America/Sao_Paulo")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	from := time.Date(2018, 11, 2, 0, 0, 0, 0, loc) // Friday
+	to := time.Date(2018, 11, 8, 0, 0, 0, 0, loc)   // Thursday
+
+	got := suggestSlots(nil, from, to, time.Hour, 9*time.Hour, 17*time.Hour, loc, true, 10)
+
+	wantDays := []int{2, 3, 4, 5, 6, 7}
+	if len(got) != len(wantDays) {
+		t.Fatalf("got %d windows, want %d: %v", len(got), len(wantDays), got)
+	}
+	for i, day := range wantDays {
+		s := got[i].Start.In(loc)
+		e := got[i].FreeUntil.In(loc)
+		if s.Day() != day || s.Hour() != 9 || s.Minute() != 0 || e.Day() != day || e.Hour() != 17 {
+			t.Errorf("window %d = %v - %v, want Nov %d 09:00-17:00", i, s, e, day)
+		}
+	}
+
+	// Whole-day windows across the skipped midnight stay contiguous.
+	whole := suggestSlots(nil, from, to, time.Hour, 0, 24*time.Hour, loc, true, 10)
+	if len(whole) != 1 || !whole[0].Start.Equal(from) || !whole[0].FreeUntil.Equal(to) {
+		t.Errorf("whole-day windows = %v, want one continuous window", whole)
+	}
+}
+
 func newSuggestTestService(t *testing.T, handler http.HandlerFunc) *calendar.Service {
 	t.Helper()
 	server := httptest.NewServer(handler)

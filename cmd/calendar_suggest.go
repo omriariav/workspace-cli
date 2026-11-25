@@ -163,29 +163,48 @@ func mergeSpans(spans []timeSpan) []timeSpan {
 }
 
 // suggestSlots returns up to max free windows of at least dur between from
-// and to, restricted to the daily [whStart, whEnd) window in loc. Day
-// boundaries are computed with calendar arithmetic so DST changes do not
-// shift working hours.
+// and to, restricted to the daily [whStart, whEnd) window in loc.
+//
+// Days are tracked as civil dates (year, month, day) rather than by adding
+// 24h or stepping a local-midnight timestamp, so a DST change — including
+// one that skips midnight — cannot shift or drop a day's working window.
+// Windows that touch (e.g. whole-day windows on consecutive days) are
+// merged, so a slot may span midnight when working hours allow it.
 func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.Duration, loc *time.Location, includeWeekends bool, max int) []suggestion {
 	busy = mergeSpans(busy)
-	var out []suggestion
 
-	local := from.In(loc)
-	day := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
-	for ; day.Before(to) && len(out) < max; day = day.AddDate(0, 0, 1) {
-		if wd := day.Weekday(); !includeWeekends && (wd == time.Saturday || wd == time.Sunday) {
+	// Start one day early: a window ending at 24:00 belongs to the
+	// previous civil date but can still overlap the range.
+	first := from.In(loc)
+	y, m, d := first.Year(), first.Month(), first.Day()-1
+
+	var windows []timeSpan
+	for i := 0; ; i++ {
+		// Noon UTC on the civil date: a stable handle for the weekday and
+		// for normalising day overflow, independent of loc's offsets.
+		civil := time.Date(y, m, d+i, 12, 0, 0, 0, time.UTC)
+		winStart := atDayOffset(civil, whStart, loc)
+		if !winStart.Before(to) {
+			break
+		}
+		if wd := civil.Weekday(); !includeWeekends && (wd == time.Saturday || wd == time.Sunday) {
 			continue
 		}
-		winStart := atDayOffset(day, whStart)
-		winEnd := atDayOffset(day, whEnd)
+		winEnd := atDayOffset(civil, whEnd, loc)
 		if winStart.Before(from) {
 			winStart = from
 		}
 		if winEnd.After(to) {
 			winEnd = to
 		}
+		if winEnd.After(winStart) {
+			windows = append(windows, timeSpan{Start: winStart, End: winEnd})
+		}
+	}
 
-		cursor := winStart
+	var out []suggestion
+	for _, w := range mergeSpans(windows) {
+		cursor := w.Start
 		emit := func(gapEnd time.Time) {
 			if len(out) < max && gapEnd.Sub(cursor) >= dur {
 				out = append(out, suggestion{Start: cursor, End: cursor.Add(dur), FreeUntil: gapEnd})
@@ -195,7 +214,7 @@ func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.
 			if !b.End.After(cursor) {
 				continue
 			}
-			if !b.Start.Before(winEnd) {
+			if !b.Start.Before(w.End) {
 				break
 			}
 			if b.Start.After(cursor) {
@@ -203,18 +222,22 @@ func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.
 			}
 			cursor = b.End
 		}
-		if cursor.Before(winEnd) {
-			emit(winEnd)
+		if cursor.Before(w.End) {
+			emit(w.End)
+		}
+		if len(out) >= max {
+			break
 		}
 	}
 	return out
 }
 
-// atDayOffset returns the wall-clock time `offset` after midnight on day.
-func atDayOffset(day time.Time, offset time.Duration) time.Time {
+// atDayOffset returns the wall-clock time `offset` after midnight on the
+// civil date of day, in loc. An offset of 24h is midnight of the next day.
+func atDayOffset(day time.Time, offset time.Duration, loc *time.Location) time.Time {
 	h := int(offset / time.Hour)
 	m := int((offset % time.Hour) / time.Minute)
-	return time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, day.Location())
+	return time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, loc)
 }
 
 // splitList splits a comma-separated list, dropping blanks.

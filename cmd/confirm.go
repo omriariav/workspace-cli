@@ -95,8 +95,15 @@ func sensitiveEffect(cmd *cobra.Command) (string, bool) {
 	if cmd == nil {
 		return "", false
 	}
-	if effect, ok := sensitiveCommands[commandKey(cmd)]; ok {
+	key := commandKey(cmd)
+	if effect, ok := sensitiveCommands[key]; ok {
 		return effect, true
+	}
+	// `drive update` is only destructive when it trashes the file.
+	if key == "drive update" {
+		if trashed, err := cmd.Flags().GetBool("trashed"); err == nil && trashed {
+			return "moves a file to Trash", true
+		}
 	}
 	// Only runnable leaf commands: a group such as `gws events
 	// subscriptions` is never the thing being confirmed.

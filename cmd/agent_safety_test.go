@@ -302,6 +302,31 @@ func TestSensitiveEffect_EveryDestructiveNameIsGated(t *testing.T) {
 	walk(rootCmd)
 }
 
+func TestSensitiveEffect_DriveUpdateOnlyWhenTrashing(t *testing.T) {
+	update, _, _ := rootCmd.Find([]string{"drive", "update"})
+	t.Cleanup(func() { _ = update.Flags().Set("trashed", "false") })
+
+	if _, ok := sensitiveEffect(update); ok {
+		t.Error("drive update without --trashed should not require confirmation")
+	}
+	if err := update.Flags().Set("trashed", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := sensitiveEffect(update); !ok {
+		t.Error("drive update --trashed should require confirmation")
+	}
+	// Fails closed without a terminal.
+	var errW bytes.Buffer
+	if err := confirmGate(update, true, false, strings.NewReader(""), &errW, false); err == nil || !strings.Contains(err.Error(), "confirmation required") {
+		t.Errorf("gate error = %v", err)
+	}
+	// --trashed=false untrashes: no confirmation.
+	_ = update.Flags().Set("trashed", "false")
+	if _, ok := sensitiveEffect(update); ok {
+		t.Error("drive update --trashed=false should not require confirmation")
+	}
+}
+
 func TestStoredOAuthLoginActive(t *testing.T) {
 	if !storedOAuthLoginActive() {
 		t.Error("default configuration uses the stored OAuth login")
