@@ -69,6 +69,7 @@ var sensitiveCommands = map[string]string{
 	"drive convert":           "creates a converted copy of a file, which takes on the sharing of the folder it lands in",
 	"drive add-comment":       "posts a comment on a file, visible to everyone with access",
 	"drive reply":             "posts a reply to a comment, visible to everyone with access",
+	"drive comment-approval":  "posts a comment on a file approval, visible to its participants",
 	"drive start-approval":    "sends an approval request to reviewers",
 	"drive reassign-approval": "changes the reviewers of an approval request",
 	"drive delete-revision":   "deletes a file revision",

@@ -807,6 +807,23 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	} else {
 		current, saveErr, err := auth.EnsureFreshToken(context.Background(), clientID, clientSecret, token)
 		switch {
+		case errors.Is(err, auth.ErrLoginRemoved):
+			// Logged out while this command was starting.
+			return p.Print(map[string]interface{}{
+				"authenticated": false,
+				"message":       "Not authenticated, run: gws auth login",
+			})
+		case errors.Is(err, auth.ErrLoginChanged):
+			// Another login replaced the stored one: report on that one,
+			// not on the token this command happened to load first.
+			replaced, loadErr := auth.LoadToken()
+			if loadErr != nil {
+				return p.Print(map[string]interface{}{
+					"authenticated": false,
+					"message":       "Not authenticated, run: gws auth login",
+				})
+			}
+			token = replaced
 		case err != nil && expired:
 			return p.Print(map[string]interface{}{
 				"authenticated": false,

@@ -379,7 +379,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"events", "subscriptions", "renew"}, {"events", "subscriptions", "update"},
 		{"auth", "logout"},
 		{"drive", "start-approval"}, {"drive", "reassign-approval"},
-		{"drive", "add-comment"}, {"drive", "reply"},
+		{"drive", "add-comment"}, {"drive", "reply"}, {"drive", "comment-approval"},
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},
 		{"drive", "move"}, {"drive", "copy"}, {"drive", "convert"},

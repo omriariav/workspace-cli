@@ -372,6 +372,15 @@ func EnsureFreshToken(ctx context.Context, clientID, clientSecret string, loaded
 	}
 
 	unlock, lockErr := LockLoginState()
+	// Another process holds the lock: it may be refreshing this very
+	// token. Refreshing alongside it could send the same refresh token
+	// twice, which, with rotation, can leave a dead credential stored.
+	// Stop before contacting the provider. (A lock that cannot be created
+	// at all, e.g. a read-only config directory, is different: no other
+	// process can hold it either, so the refresh goes ahead unlocked.)
+	if errors.Is(lockErr, errLockTimeout) {
+		return nil, nil, ErrRefreshBusy
+	}
 	if lockErr == nil {
 		defer unlock()
 		// Another process may have acted while this one waited for the
@@ -392,7 +401,9 @@ func EnsureFreshToken(ctx context.Context, clientID, clientSecret string, loaded
 		loaded = current
 	}
 
-	fresh, err := exchangeRefreshToken(ctx, clientID, clientSecret, loaded)
+	exchangeCtx, cancel := context.WithTimeout(ctx, refreshExchangeTimeout)
+	defer cancel()
+	fresh, err := exchangeRefreshToken(exchangeCtx, clientID, clientSecret, loaded)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -414,6 +425,20 @@ func EnsureFreshToken(ctx context.Context, clientID, clientSecret string, loaded
 	}
 	return fresh, saveRefreshedTokenLocked(loaded, fresh), nil
 }
+
+// errLockTimeout marks a lock that could not be taken because another
+// process holds it (as opposed to one that could not be created at all).
+var errLockTimeout = errors.New("timeout waiting for lock")
+
+// ErrRefreshBusy is returned by EnsureFreshToken when another gws process
+// is in the middle of refreshing or changing the stored login. Nothing was
+// sent to Google; running the command again is safe.
+var ErrRefreshBusy = errors.New("another gws command is refreshing or changing the stored login; run the command again")
+
+// refreshExchangeTimeout bounds the network refresh. It is well under the
+// age at which a held lock is treated as stale, so a slow exchange cannot
+// outlive its own lock.
+const refreshExchangeTimeout = staleLockAge * 2 / 3
 
 // Errors returned by EnsureFreshToken when the stored login is no longer
 // the one the command started with. They say what to do, so callers
@@ -631,7 +656,7 @@ func acquireLock(path string) (unlock func(), err error) {
 		}
 
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("timeout waiting for lock: %s", lockPath)
+			return nil, fmt.Errorf("%w: %s", errLockTimeout, lockPath)
 		}
 
 		time.Sleep(lockPollInterval)

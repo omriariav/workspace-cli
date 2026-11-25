@@ -1010,6 +1010,45 @@ func TestEnsureFreshToken_AbortsIfTheLoginChanged(t *testing.T) {
 	}
 }
 
+// While another process holds the login lock, an expired token is not
+// refreshed alongside it: the caller is told to retry, and Google is not
+// contacted.
+func TestEnsureFreshToken_DoesNotRefreshWhileAnotherProcessHoldsTheLock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for the lock timeout")
+	}
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(ctx context.Context, _, _ string, _ *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		if _, bounded := ctx.Deadline(); !bounded {
+			t.Error("the refresh exchange should run with a deadline")
+		}
+		return &oauth2.Token{AccessToken: "fresh", RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	expired := &oauth2.Token{AccessToken: "old", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(expired); err != nil {
+		t.Fatal(err)
+	}
+
+	unlock, err := LockLoginState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = EnsureFreshToken(context.Background(), "id", "secret", expired)
+	if !errors.Is(err, ErrRefreshBusy) || exchanges != 0 {
+		t.Errorf("with the lock held: err = %v after %d exchanges; want ErrRefreshBusy and none", err, exchanges)
+	}
+	unlock()
+
+	// Once the lock is free the refresh goes through, with a deadline.
+	if _, _, err := EnsureFreshToken(context.Background(), "id", "secret", expired); err != nil || exchanges != 1 {
+		t.Errorf("after release: err = %v after %d exchanges", err, exchanges)
+	}
+}
+
 func TestSameAuthorization(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := &oauth2.Token{RefreshToken: "r1"}

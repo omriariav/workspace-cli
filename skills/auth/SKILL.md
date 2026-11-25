@@ -183,6 +183,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`, `unsubscribe`, `move`; Drive `share`, `unshare`,
   `update-permission`, `move`, `copy`, `convert`, `add-comment`, `reply`,
+  `comment-approval`,
   `start-approval`, `reassign-approval`; Chat
   `add-member`, `update-member`).
 - Not covered: creating or editing content, `untrash`, and responding to
