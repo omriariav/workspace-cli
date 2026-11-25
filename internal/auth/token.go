@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -373,14 +374,22 @@ func EnsureFreshToken(ctx context.Context, clientID, clientSecret string, loaded
 	unlock, lockErr := LockLoginState()
 	if lockErr == nil {
 		defer unlock()
-		// Another process may have refreshed, or replaced the login,
-		// while this one waited for the lock.
-		if current, loadErr := LoadToken(); loadErr == nil {
-			if current.Valid() {
-				return current, nil, nil
-			}
-			loaded = current
+		// Another process may have acted while this one waited for the
+		// lock. Only the same authorization may be picked up from disk:
+		// if the login was removed or replaced, this command must not
+		// carry on as whoever is stored now, nor revive credentials that
+		// were just logged out.
+		current, loadErr := LoadToken()
+		if loadErr != nil {
+			return nil, nil, ErrLoginRemoved
 		}
+		if !sameAuthorization(loaded, current) {
+			return nil, nil, ErrLoginChanged
+		}
+		if current.Valid() {
+			return current, nil, nil
+		}
+		loaded = current
 	}
 
 	fresh, err := exchangeRefreshToken(ctx, clientID, clientSecret, loaded)
@@ -404,6 +413,30 @@ func EnsureFreshToken(ctx context.Context, clientID, clientSecret string, loaded
 		return fresh, nil, nil
 	}
 	return fresh, saveRefreshedTokenLocked(loaded, fresh), nil
+}
+
+// Errors returned by EnsureFreshToken when the stored login is no longer
+// the one the command started with. They say what to do, so callers
+// should show them as they are.
+var (
+	ErrLoginRemoved = errors.New("the stored login was removed while this command was starting; run `gws auth login`")
+	ErrLoginChanged = errors.New("the stored login changed while this command was starting; run the command again")
+)
+
+// sameAuthorization reports whether current, read from disk, is the same
+// login as loaded: the identical refresh token, or its replacement after a
+// refresh-token rotation, which the access record vouches for by naming
+// loaded's fingerprint as the one it superseded.
+func sameAuthorization(loaded, current *oauth2.Token) bool {
+	was, now := tokenFingerprint(loaded), tokenFingerprint(current)
+	if was == "" || now == "" {
+		return false
+	}
+	if was == now {
+		return true
+	}
+	record := readGrantedRecordFor(current)
+	return record != nil && record.Token == now && record.PreviousToken == was
 }
 
 // TokenRefreshed reports whether a token source handed back something

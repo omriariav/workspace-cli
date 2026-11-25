@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -117,6 +118,9 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 	// Refresh (if needed) and save under the login lock, so concurrent
 	// commands never race each other's refresh.
 	token, saveErr, err := auth.EnsureFreshToken(ctx, clientID, clientSecret, token)
+	if errors.Is(err, auth.ErrLoginChanged) || errors.Is(err, auth.ErrLoginRemoved) {
+		return nil, err
+	}
 	if err != nil {
 		return nil, fmt.Errorf("token expired, run: gws auth login")
 	}

@@ -921,6 +921,9 @@ func TestEnsureFreshToken(t *testing.T) {
 	if err := SaveToken(expired); err != nil {
 		t.Fatal(err)
 	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "acct", expired); err != nil {
+		t.Fatal(err)
+	}
 	first, saveErr, err := EnsureFreshToken(ctx, "id", "secret", expired)
 	if err != nil || saveErr != nil || first.AccessToken != "fresh-1" || exchanges != 1 {
 		t.Fatalf("first refresh: %+v, %v, %v after %d exchanges", first, saveErr, err, exchanges)
@@ -958,6 +961,88 @@ func TestEnsureFreshToken(t *testing.T) {
 	}
 	if _, _, err := EnsureFreshToken(ctx, "id", "secret", nil); err == nil {
 		t.Error("nil token should be an error")
+	}
+}
+
+// A command that started with one login must never continue as another,
+// nor revive a login that was removed while it waited.
+func TestEnsureFreshToken_AbortsIfTheLoginChanged(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: "fresh", RefreshToken: "fresh-r", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	ctx := context.Background()
+	accountA := &oauth2.Token{AccessToken: "a", RefreshToken: "account-A", Expiry: time.Now().Add(-time.Hour)}
+
+	// Another login (account B) replaced the stored credentials.
+	accountB := &oauth2.Token{AccessToken: "b", RefreshToken: "account-B", Expiry: time.Now().Add(time.Hour)}
+	if err := SaveToken(accountB); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "acct-B", accountB); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := EnsureFreshToken(ctx, "id", "secret", accountA)
+	if !errors.Is(err, ErrLoginChanged) || got != nil {
+		t.Errorf("replaced login: token = %+v, err = %v; want an abort", got, err)
+	}
+	if exchanges != 0 {
+		t.Errorf("the old login must not be refreshed after it was replaced (%d exchanges)", exchanges)
+	}
+	if onDisk, _ := LoadToken(); onDisk.RefreshToken != "account-B" {
+		t.Errorf("the new login was disturbed: %+v", onDisk)
+	}
+
+	// The login was removed (logout) while the command waited.
+	if err := DeleteToken(); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = EnsureFreshToken(ctx, "id", "secret", accountA)
+	if !errors.Is(err, ErrLoginRemoved) || got != nil {
+		t.Errorf("logged-out login: token = %+v, err = %v; want an abort", got, err)
+	}
+	if exchanges != 0 || TokenExists() {
+		t.Errorf("a logged-out login must not be refreshed or written back (%d exchanges, exists=%v)", exchanges, TokenExists())
+	}
+}
+
+func TestSameAuthorization(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a := &oauth2.Token{RefreshToken: "r1"}
+	if !sameAuthorization(a, &oauth2.Token{AccessToken: "x", RefreshToken: "r1"}) {
+		t.Error("the same refresh token is the same authorization")
+	}
+	if sameAuthorization(a, &oauth2.Token{RefreshToken: "r2"}) {
+		t.Error("a different refresh token with no rotation record is a different login")
+	}
+	if sameAuthorization(nil, a) || sameAuthorization(a, nil) || sameAuthorization(a, &oauth2.Token{}) {
+		t.Error("missing tokens are never the same authorization")
+	}
+	// A recorded rotation r1 -> r2 vouches for r2.
+	if err := SaveToken(a); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", a); err != nil {
+		t.Fatal(err)
+	}
+	rotated := &oauth2.Token{AccessToken: "y", RefreshToken: "r2"}
+	if err := SaveRefreshedToken(a, rotated); err != nil {
+		t.Fatal(err)
+	}
+	if !sameAuthorization(a, rotated) {
+		t.Error("a recorded rotation should count as the same authorization")
+	}
+	// A fresh login's record names no predecessor.
+	other := &oauth2.Token{RefreshToken: "r9"}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", other); err != nil {
+		t.Fatal(err)
+	}
+	if sameAuthorization(a, other) {
+		t.Error("a new login is not the same authorization")
 	}
 }
 
