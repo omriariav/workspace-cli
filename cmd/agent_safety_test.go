@@ -180,8 +180,12 @@ func TestIntrospection_ShowScopes(t *testing.T) {
 	if containsStr(ro, "https://www.googleapis.com/auth/gmail.send") || !containsStr(ro, "https://www.googleapis.com/auth/gmail.readonly") {
 		t.Errorf("readonly_scopes wrong: %v", ro)
 	}
-	if result["login_readonly"] != "gws auth login --services gmail --readonly" {
-		t.Errorf("login_readonly = %v", result["login_readonly"])
+	// Suggested logins extend the stored authorization, never replace it.
+	if result["login"] != "gws auth login --add --services gmail" || result["login_readonly"] != "gws auth login --add --services gmail --readonly" {
+		t.Errorf("login = %v, login_readonly = %v", result["login"], result["login_readonly"])
+	}
+	if note, _ := result["login_note"].(string); !strings.Contains(note, "replaces") {
+		t.Errorf("login_note = %v", result["login_note"])
 	}
 
 	activity, _ := runIntrospection(t, "drive", "activity", "--show-scopes")

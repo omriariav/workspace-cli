@@ -197,8 +197,11 @@ func commandScopes(cmd *cobra.Command) map[string]interface{} {
 	result["scopes"] = auth.ScopesForServices(services)
 	result["readonly_scopes"] = auth.ReadOnlyScopesForServices(services)
 	joined := strings.Join(services, ",")
-	result["login"] = fmt.Sprintf("gws auth login --services %s", joined)
-	result["login_readonly"] = fmt.Sprintf("gws auth login --services %s --readonly", joined)
+	// Suggested logins use --add so that following them extends the
+	// stored authorization instead of replacing it.
+	result["login"] = fmt.Sprintf("gws auth login --add --services %s", joined)
+	result["login_readonly"] = fmt.Sprintf("gws auth login --add --services %s --readonly", joined)
+	result["login_note"] = "--add keeps the services already authorized; without it, a login replaces the stored authorization."
 	return result
 }
 
