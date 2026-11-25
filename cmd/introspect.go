@@ -261,8 +261,10 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	var lacking []string
 	onlyReadAccess := true
 	for _, svc := range scopeServicesFor(cmd) {
+		// A service that is not in the record at all was left out of a
+		// scoped login: as much a missing grant as a read-only one.
 		level, ok := access[svc]
-		if !ok || level == auth.AccessFull {
+		if ok && level == auth.AccessFull {
 			continue
 		}
 		lacking = append(lacking, svc)

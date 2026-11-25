@@ -709,6 +709,15 @@ func TestReadOnlyScopeHint(t *testing.T) {
 	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessPartial}); strings.Contains(hint, "--readonly") {
 		t.Errorf("a login with write scopes should not be steered to --readonly: %q", hint)
 	}
+	// A service left out of a scoped login gets a hint too.
+	events, _, _ := rootCmd.Find([]string{"calendar", "events"})
+	if hint := readOnlyScopeHint(events, insufficient, map[string]string{"gmail": auth.AccessReadOnly}); !strings.Contains(hint, "--add --services calendar") {
+		t.Errorf("hint for a service missing from the login = %q", hint)
+	}
+	// With no recorded access at all there is nothing to base a hint on.
+	if hint := readOnlyScopeHint(events, insufficient, nil); hint != "" {
+		t.Errorf("no recorded access should give no hint, got %q", hint)
+	}
 	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessFull}); hint != "" {
 		t.Errorf("no hint expected for full access, got %q", hint)
 	}

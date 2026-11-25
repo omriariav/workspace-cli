@@ -340,13 +340,11 @@ func loginScopes(services []string, readOnly, scoped bool) []string {
 // holds, refreshing it first if needed. A variable so tests can replace
 // the network call.
 var lookupTokenScopes = func(token *oauth2.Token) ([]string, error) {
+	// The token is used as given, never refreshed here: the caller has
+	// already refreshed the stored login through the guarded path.
 	ctx := context.Background()
-	ts := auth.GetTokenSource(ctx, config.GetClientID(), config.GetClientSecret(), token)
-	fresh, err := ts.Token()
-	if err != nil {
-		return nil, err
-	}
-	svc, err := oauth2api.NewService(ctx, option.WithTokenSource(ts))
+	fresh := token
+	svc, err := oauth2api.NewService(ctx, option.WithTokenSource(oauth2.StaticTokenSource(token)))
 	if err != nil {
 		return nil, err
 	}
@@ -807,6 +805,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	} else {
 		current, saveErr, err := auth.EnsureFreshToken(context.Background(), clientID, clientSecret, token)
 		switch {
+		case errors.Is(err, auth.ErrRefreshBusy):
+			// Another command is refreshing this login right now. Status
+			// must not refresh alongside it, and cannot say anything
+			// reliable until it is done.
+			return p.Print(map[string]interface{}{
+				"authenticated": false,
+				"message":       "Another gws command is refreshing the stored login; run gws auth status again",
+			})
 		case errors.Is(err, auth.ErrLoginRemoved):
 			// Logged out while this command was starting.
 			return p.Print(map[string]interface{}{
@@ -854,13 +860,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	return p.Print(result)
 }
 
+// getUserInfo asks Google who the token belongs to. It uses the token
+// exactly as given and never refreshes it: every refresh of the stored
+// login goes through auth.EnsureFreshToken, under the login lock, and a
+// second, private refresh here could race it. Callers pass a token they
+// have already made fresh.
 func getUserInfo(token *oauth2.Token) (*oauth2api.Userinfo, error) {
 	ctx := context.Background()
-	clientID := config.GetClientID()
-	clientSecret := config.GetClientSecret()
-
-	ts := auth.GetTokenSource(ctx, clientID, clientSecret, token)
-	svc, err := oauth2api.NewService(ctx, option.WithTokenSource(ts))
+	svc, err := oauth2api.NewService(ctx, option.WithTokenSource(oauth2.StaticTokenSource(token)))
 	if err != nil {
 		return nil, err
 	}
