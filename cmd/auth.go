@@ -247,7 +247,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	restoreAccessRecord := auth.SnapshotGrantedAccess()
-	errAccess := auth.SaveGrantedAccess(access, grantedScopes, account, token)
+	if err := auth.SaveGrantedAccess(access, grantedScopes, account, token); err != nil {
+		// Without the access record, an interruption right after the new
+		// token is saved would leave it paired with whatever service list
+		// the previous login recorded. Keep the previous login instead.
+		restoreAccessRecord()
+		return p.PrintError(fmt.Errorf("could not record the granted access, so this login was not saved and the previous authorization is unchanged: %w", err))
+	}
 
 	if err := auth.SaveToken(token); err != nil {
 		// The previous token is still the stored one: put its access
@@ -257,12 +263,12 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	// If recording the metadata failed, remove both files: no metadata is
-	// better than metadata that still describes the previous token.
-	errServices := auth.SaveGrantedServices(grantedServiceNames(access))
-	if errServices != nil || errAccess != nil {
+	// The service list goes last. If it cannot be written, remove both
+	// metadata files: no metadata is better than a list that still
+	// describes the previous token.
+	if err := auth.SaveGrantedServices(grantedServiceNames(access)); err != nil {
 		auth.DeleteGrantedMetadata()
-		fmt.Fprintf(os.Stderr, "Warning: failed to record granted access (services: %v, access levels: %v); `gws auth status` will not show per-service access until the next login\n", errServices, errAccess)
+		fmt.Fprintf(os.Stderr, "Warning: failed to record granted services (%v); `gws auth status` will not show per-service access until the next login\n", err)
 	}
 
 	return p.Print(map[string]interface{}{

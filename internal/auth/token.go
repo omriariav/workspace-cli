@@ -731,7 +731,7 @@ func acquireLock(path string) (unlock func(), err error) {
 	for {
 		var f *os.File
 		var createErr error
-		withLockGuard(lockPath, func() {
+		guarded := withLockGuard(lockPath, deadline, func() {
 			f, createErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 			if createErr != nil && os.IsExist(createErr) && removeStaleLock(lockPath) {
 				f, createErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
@@ -741,13 +741,24 @@ func acquireLock(path string) (unlock func(), err error) {
 				f.Close()
 			}
 		})
+		if !guarded {
+			// The guard stayed busy until the deadline: give up on time
+			// instead of waiting on whoever holds it.
+			return nil, fmt.Errorf("%w: %s", errLockTimeout, lockPath)
+		}
 		if createErr == nil {
 			return func() {
-				withLockGuard(lockPath, func() {
+				release := func() {
 					if held, readErr := os.ReadFile(lockPath); readErr == nil && string(held) == owner {
 						os.Remove(lockPath)
 					}
-				})
+				}
+				// Releasing must not hang either: if the guard stays busy,
+				// release without it. The owner check still keeps this from
+				// removing a lock that replaced ours.
+				if !withLockGuard(lockPath, time.Now().Add(lockTimeout), release) {
+					release()
+				}
 			}, nil
 		}
 
