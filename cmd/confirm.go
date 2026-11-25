@@ -276,18 +276,28 @@ func confirmGate(cmd *cobra.Command, enabled, yes bool, in io.Reader, errW io.Wr
 	return fmt.Errorf("cancelled: `gws %s` was not confirmed", key)
 }
 
-// promptValueLimit caps how much of one argument or flag value the
+// promptValueLimit caps how much of a content value (a message body) the
 // confirmation prompt shows.
 const promptValueLimit = 80
+
+// promptContentFlags are flags that carry content rather than say what
+// the command acts on. Only these are shortened in the prompt: everything
+// else (recipients, IDs, roles, labels) is shown in full, because it is
+// what the person approving needs to check.
+var promptContentFlags = map[string]bool{
+	"body": true, "body-html": true, "html": true, "text": true,
+	"content": true, "message": true, "description": true, "notes": true,
+	"quoted-content": true, "values": true, "values-json": true,
+}
 
 // invocationSummary renders the command as it was invoked: its arguments
 // and the flags that were set, for display in the confirmation prompt.
 // Credentials are left out, control characters cannot reach the terminal,
-// and long values (a message body) are shortened.
+// and content values (a message body) are shortened.
 func invocationSummary(cmd *cobra.Command) string {
 	parts := []string{"gws", commandKey(cmd)}
 	for _, arg := range cmd.Flags().Args() {
-		parts = append(parts, promptValue(arg))
+		parts = append(parts, strconv.QuoteToGraphic(arg))
 	}
 	cmd.Flags().Visit(func(f *pflag.Flag) {
 		switch f.Name {
@@ -302,17 +312,11 @@ func invocationSummary(cmd *cobra.Command) string {
 			}
 			return
 		}
-		parts = append(parts, "--"+f.Name, promptValue(f.Value.String()))
+		value := f.Value.String()
+		if runes := []rune(value); promptContentFlags[f.Name] && len(runes) > promptValueLimit {
+			value = string(runes[:promptValueLimit]) + "…"
+		}
+		parts = append(parts, "--"+f.Name, strconv.QuoteToGraphic(value))
 	})
 	return strings.Join(parts, " ")
-}
-
-// promptValue quotes a value for the prompt, escaping anything that is
-// not printable and shortening it to promptValueLimit characters.
-func promptValue(v string) string {
-	runes := []rune(v)
-	if len(runes) > promptValueLimit {
-		v = string(runes[:promptValueLimit]) + "…"
-	}
-	return strconv.QuoteToGraphic(v)
 }

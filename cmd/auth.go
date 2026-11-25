@@ -859,7 +859,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			}
 			warnIfRefreshNotSaved(os.Stderr, checkedSaveErr)
 			token = checked
-		case err != nil && expired:
+		// Checked against the clock now, not only before the attempt: a
+		// token that was merely close to expiry may have run out while
+		// the refresh was failing.
+		case err != nil && (expired || !token.Valid()):
 			return p.Print(map[string]interface{}{
 				"authenticated": false,
 				"message":       "Token expired and refresh failed, run: gws auth login",

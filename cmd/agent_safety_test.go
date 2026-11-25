@@ -1739,7 +1739,10 @@ func TestConfirmGate_PromptShowsTheInvocation(t *testing.T) {
 	cmd.Flags().String("access-token", "", "")
 	cmd.Flags().Bool("yes", false, "")
 	long := strings.Repeat("x", 200)
-	if err := cmd.Flags().Parse([]string{"file-123", "--email", "a@example.com", "--notify", "--message", "hi\x1b[2J" + long, "--access-token", "secret-token"}); err != nil {
+	// Recipients are never shortened: every one of them is being approved.
+	recipients := strings.Repeat("someone@example.com,", 20) + "last@example.com"
+	cmd.Flags().String("to", "", "")
+	if err := cmd.Flags().Parse([]string{"file-123", "--to", recipients, "--email", "a@example.com", "--notify", "--message", "hi\x1b[2J" + long, "--access-token", "secret-token"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1748,7 +1751,7 @@ func TestConfirmGate_PromptShowsTheInvocation(t *testing.T) {
 		t.Fatalf("confirmGate: %v", err)
 	}
 	out := prompt.String()
-	for _, want := range []string{"About to run: gws drive share", `"file-123"`, `--email "a@example.com"`, "--notify", "…"} {
+	for _, want := range []string{"About to run: gws drive share", `"file-123"`, `--email "a@example.com"`, "--notify", "…", recipients} {
 		if !strings.Contains(out, want) {
 			t.Errorf("prompt %q is missing %q", out, want)
 		}
