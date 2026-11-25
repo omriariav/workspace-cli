@@ -82,6 +82,7 @@ var sensitiveCommands = map[string]string{
 	"docs trash":           "moves a document to Trash",
 	"docs replace-content": "replaces the entire body of a document",
 	"sheets delete-sheet":  "deletes a sheet",
+	"sheets merge":         "merges cells, discarding every value in the range except the upper-left one",
 	"sheets copy-to":       "copies a sheet into another spreadsheet, where everyone with access to that spreadsheet can see it",
 	"slides delete-slide":  "deletes a slide",
 

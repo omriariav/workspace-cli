@@ -1896,3 +1896,19 @@ func TestChatSpaceCache_RefusedWithEmptyExternalToken(t *testing.T) {
 		t.Errorf("version: %v", err)
 	}
 }
+
+// Merging cells keeps only the upper-left value of the range, so it is
+// confirmed like other operations that discard data, and --schema says so.
+func TestConfirmGate_SheetsMergeNeedsConfirmation(t *testing.T) {
+	cmd, _, err := rootCmd.Find([]string{"sheets", "merge"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = confirmGate(cmd, true, false, strings.NewReader(""), io.Discard, false)
+	if err == nil || !strings.Contains(err.Error(), "confirmation required") {
+		t.Errorf("sheets merge without a terminal: err = %v, want confirmation required", err)
+	}
+	if schema, _ := runIntrospection(t, "sheets", "merge", "--schema"); schema["sensitive"] != true {
+		t.Errorf("sheets merge --schema: sensitive = %v, want true", schema["sensitive"])
+	}
+}
