@@ -459,10 +459,15 @@ var (
 // Use it under the login lock to decide whether work that started from
 // base may be saved.
 func StoredAuthorizationIs(base *oauth2.Token) bool {
-	current, err := LoadToken()
 	if base == nil {
-		return err != nil
+		// Only a token file that is not there counts as "nothing stored".
+		// One that exists but cannot be read or decoded may be a login
+		// that was just written: it must not be taken for an empty slot
+		// and overwritten.
+		_, statErr := os.Stat(config.GetTokenPath())
+		return errors.Is(statErr, os.ErrNotExist)
 	}
+	current, err := LoadToken()
 	if err != nil {
 		return false
 	}

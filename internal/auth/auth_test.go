@@ -1540,3 +1540,24 @@ func TestAuthURLOptions_NeverAsksForPreviouslyGrantedScopes(t *testing.T) {
 		t.Errorf("auth URL lost PKCE/consent/offline params: %s", url)
 	}
 }
+
+// "Nothing was stored" holds only while the token file is absent. A file
+// that exists but cannot be decoded may be a login written a moment ago,
+// and must not be mistaken for an empty slot that is safe to overwrite.
+func TestStoredAuthorizationIs_UnreadableTokenIsNotAbsent(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	if !StoredAuthorizationIs(nil) {
+		t.Fatal("with no token file, a nil base should match")
+	}
+	path := config.GetTokenPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if StoredAuthorizationIs(nil) {
+		t.Error("an unreadable token file was treated as no stored login")
+	}
+}
