@@ -516,8 +516,10 @@ func unreadableCalendarsError(unavailable []map[string]interface{}, allowPartial
 // calendars that could not be read (with the reason).
 func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem, from, to time.Time) (busy []timeSpan, checked []string, unavailable []map[string]interface{}, err error) {
 	resp, err := svc.Freebusy.Query(&calendar.FreeBusyRequest{
-		TimeMin: from.Format(time.RFC3339),
-		TimeMax: to.Format(time.RFC3339),
+		// Sent in UTC, so the instant is exact whatever the local offset
+		// (RFC3339 cannot express offsets with a seconds component).
+		TimeMin: from.UTC().Format(time.RFC3339),
+		TimeMax: to.UTC().Format(time.RFC3339),
 		Items:   items,
 	}).Do()
 	if err != nil {

@@ -515,7 +515,7 @@ func TestConditionalSensitive_GmailLabelsToTrashOrSpam(t *testing.T) {
 }
 
 func TestConditionalSensitive_RulesResolveAndTrigger(t *testing.T) {
-	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash", "event-types": "google.workspace.chat.message.v1.created", "file": "changes.json"}
+	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash", "event-types": "google.workspace.chat.message.v1.created", "file": "changes.json", "folder": "folder-id", "parent": "folder-id"}
 	for key, rule := range conditionalSensitive {
 		cmd, _, err := rootCmd.Find(strings.Fields(key))
 		if err != nil || commandKey(cmd) != key {

@@ -105,9 +105,14 @@ var conditionalSensitive = map[string]conditionalRule{
 	"calendar update":             {flag: "add-attendees", effect: "invites attendees to an event"},
 	"calendar rsvp":               {flag: "message", effect: "sends a message to all attendees of an event"},
 	"events subscriptions update": {flag: "event-types", effect: "changes which Workspace events a subscription delivers"},
-	"forms update":                {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},
-	"gmail label":                 {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam},
-	"gmail batch-modify":          {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam},
+	// Placing a file in a specific folder gives it that folder's sharing.
+	"drive copy":          {flag: "folder", effect: "puts a copy in a folder, where it takes on that folder's sharing"},
+	"drive convert":       {flag: "folder", effect: "puts the converted file in a folder, where it takes on that folder's sharing"},
+	"drive upload":        {flag: "folder", effect: "uploads a file into a folder, where it takes on that folder's sharing"},
+	"drive create-folder": {flag: "parent", effect: "creates a folder inside another, where it takes on that folder's sharing"},
+	"forms update":        {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},
+	"gmail label":         {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam},
+	"gmail batch-modify":  {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam},
 }
 
 // conditionalRule makes a command sensitive when flag is set, or, if when

@@ -796,6 +796,35 @@ func TestQueryBusySpans_EmptyBusyListIsFreeMissingIsUnknown(t *testing.T) {
 	}
 }
 
+// The free/busy request carries its bounds in UTC, so the instant sent is
+// the instant searched even where the local offset has a seconds part.
+func TestQueryBusySpans_RequestBoundsAreUTC(t *testing.T) {
+	var got calendar.FreeBusyRequest
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"calendars":{"primary":{"busy":[]}}}`))
+	})
+	loc, err := time.LoadLocation("Europe/Paris")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	// Paris in 1900 was on local mean time, +00:09:21.
+	from := time.Date(1900, 6, 1, 9, 0, 0, 0, loc)
+	to := from.Add(8 * time.Hour)
+	if _, _, _, err := queryBusySpans(svc, []*calendar.FreeBusyRequestItem{{Id: "primary"}}, from, to); err != nil {
+		t.Fatal(err)
+	}
+	sentFrom, err1 := time.Parse(time.RFC3339, got.TimeMin)
+	sentTo, err2 := time.Parse(time.RFC3339, got.TimeMax)
+	if err1 != nil || err2 != nil || !sentFrom.Equal(from) || !sentTo.Equal(to) {
+		t.Errorf("request bounds %s - %s do not match the searched instants %s - %s", got.TimeMin, got.TimeMax, from.UTC(), to.UTC())
+	}
+	if !strings.HasSuffix(got.TimeMin, "Z") || !strings.HasSuffix(got.TimeMax, "Z") {
+		t.Errorf("request bounds should be in UTC: %s - %s", got.TimeMin, got.TimeMax)
+	}
+}
+
 func TestQueryBusySpans_NullErrorEntriesDoNotPanic(t *testing.T) {
 	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
