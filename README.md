@@ -156,8 +156,9 @@ Exceptions, all to keep one account's data out of files that belong to the
 stored login: `chat build-cache`, `chat find-group` and `chat find-space`
 refuse to run with an external token, `chat members` skips its local name
 cache and the name lookup that fills it (members are returned as Chat reports
-them), and session hooks (`gws hooks`) add no Workspace context while one is
-set. A token that is supplied but empty is an error, never a fallback to the
+them), session hooks (`gws hooks`) add no Workspace context while one is
+set, and `gws auth logout` refuses to run (it acts on the stored login, which
+may be a different account). A token that is supplied but empty is an error, never a fallback to the
 stored login.
 
 #### Agent safety

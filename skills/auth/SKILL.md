@@ -135,9 +135,14 @@ gws calendar events --days 1
   service-account modes. No login is needed.
 - `gws` uses it as-is: it is never refreshed, stored, or printed. An expired
   or under-scoped token surfaces the API error (exit code 3).
-- The token must carry the scopes the command needs; check them first
-  with `--show-scopes`. A default `gcloud auth print-access-token` token,
-  for example, has no Workspace scopes.
+- The token must carry the scopes the command needs. `--show-scopes`
+  lists what `gws auth login` requests for the command's whole service
+  (plus any known endpoint-specific scope); it does not inspect the token
+  and is not the minimum for that one command. A default
+  `gcloud auth print-access-token` token, for example, has no Workspace
+  scopes.
+- `gws auth logout` refuses to run while an external token is set: it
+  acts on the stored login, which may be a different account.
 - The token is read only from the environment variable or the flag,
   never from `config.yaml`.
 - A token that is supplied but empty (`GWS_ACCESS_TOKEN=""`, or

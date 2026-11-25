@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/api/googleapi"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -741,6 +743,15 @@ func allReadOnly(access map[string]string) bool {
 func runLogout(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 
+	// Logout revokes and removes the stored login. With an external
+	// access token in use, that is a different credential, possibly a
+	// different account, from the one every other command is using right
+	// now; `auth status` does not even describe it. Refuse rather than
+	// revoke something the caller may not have meant.
+	if config.GetAccessToken() != "" {
+		return usageErrorf("gws auth logout acts on the stored login, but an external access token (GWS_ACCESS_TOKEN / --access-token) is in use; gws cannot revoke that token. To log out the stored login, unset the token and run gws auth logout again")
+	}
+
 	// Nothing stored at all: a no-op that needs neither the lock nor a
 	// writable config directory.
 	if !auth.TokenExists() && !auth.GrantedMetadataExists() {
@@ -946,7 +957,19 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// and the access levels always describe one login.
 	addGrantedAccess(result, auth.LoadGrantedAccessFor(token))
 
-	if userInfo, err := getUserInfo(token); err != nil {
+	userInfo, err := getUserInfo(token)
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) && apiErr.Code == http.StatusUnauthorized {
+		// Google itself rejected the token (revoked, or otherwise no
+		// longer valid): that is not an authenticated login, whatever
+		// the expiry on disk says. Other failures (network, timeout) say
+		// nothing about the token and are reported as an unknown user.
+		return p.Print(map[string]interface{}{
+			"authenticated": false,
+			"message":       "Google rejected the stored token (it was revoked or is no longer valid), run: gws auth login",
+		})
+	}
+	if err != nil {
 		result["user"] = "unknown (failed to fetch user info)"
 	} else {
 		result["email"] = userInfo.Email
@@ -959,7 +982,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 // login goes through auth.EnsureFreshToken, under the login lock, and a
 // second, private refresh here could race it. Callers pass a token they
 // have already made fresh.
-func getUserInfo(token *oauth2.Token) (*oauth2api.Userinfo, error) {
+var getUserInfo = func(token *oauth2.Token) (*oauth2api.Userinfo, error) {
 	// Bounded: this runs during login, after consent, and a stalled
 	// request must not leave the command hanging.
 	ctx, cancel := context.WithTimeout(context.Background(), identityLookupTimeout)

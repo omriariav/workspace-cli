@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/googleapi"
+	oauth2api "google.golang.org/api/oauth2/v2"
 )
 
 // --- confirmation gate ---
@@ -2111,5 +2112,62 @@ func TestLogout_UnreadableTokenIsNotReportedAsRevoked(t *testing.T) {
 	}
 	if auth.TokenExists() {
 		t.Error("the local token should still be removed")
+	}
+}
+
+// Logout acts on the stored login. With an external token in use that may
+// be another account's authorization, so logout refuses and leaves the
+// stored login untouched.
+func TestLogout_RefusedWithExternalToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	if err := auth.SaveToken(&oauth2.Token{AccessToken: "stored", RefreshToken: "r", Expiry: time.Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	setTestAccessToken("external-account-token")
+	t.Cleanup(func() { setTestAccessToken("") })
+
+	var err error
+	out := captureStderrStr(t, func() { err = runLogout(logoutCmd, nil) })
+	if err == nil || !strings.Contains(out+err.Error(), "acts on the stored login") {
+		t.Errorf("err = %v, output = %q", err, out)
+	}
+	if !auth.TokenExists() {
+		t.Error("the stored login was removed while an external token was in use")
+	}
+}
+
+// A token Google rejects is not an authenticated login, even if its
+// expiry on disk is in the future. A lookup that merely failed says
+// nothing about the token.
+func TestStatus_RejectedTokenIsNotAuthenticated(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	if err := auth.SaveToken(&oauth2.Token{AccessToken: "revoked", RefreshToken: "r", Expiry: time.Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	original := getUserInfo
+	t.Cleanup(func() { getUserInfo = original })
+
+	status := func() string {
+		out, err := captureStdout(t, func() error { return runStatus(statusCmd, nil) })
+		if err != nil {
+			t.Fatalf("status: %v", err)
+		}
+		return out
+	}
+
+	getUserInfo = func(*oauth2.Token) (*oauth2api.Userinfo, error) {
+		return nil, &googleapi.Error{Code: 401, Message: "Invalid Credentials"}
+	}
+	if out := status(); !strings.Contains(out, `"authenticated": false`) || !strings.Contains(out, "rejected the stored token") {
+		t.Errorf("rejected token: %s", out)
+	}
+
+	getUserInfo = func(*oauth2.Token) (*oauth2api.Userinfo, error) {
+		return nil, errors.New("dial tcp: i/o timeout")
+	}
+	if out := status(); !strings.Contains(out, `"authenticated": true`) || !strings.Contains(out, "unknown (failed to fetch user info)") {
+		t.Errorf("transient failure: %s", out)
 	}
 }
