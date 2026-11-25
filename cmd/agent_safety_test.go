@@ -379,7 +379,7 @@ func TestConditionalSensitive_LiteralFalseAndBracketMessages(t *testing.T) {
 	// "false" and "[]" are real RSVP messages, not empty values.
 	rsvp, _, _ := rootCmd.Find([]string{"calendar", "rsvp"})
 	t.Cleanup(func() { _ = rsvp.Flags().Set("message", "") })
-	for _, msg := range []string{"false", "[]", "ok"} {
+	for _, msg := range []string{"false", "[]", "ok", " ", "\t"} {
 		if err := rsvp.Flags().Set("message", msg); err != nil {
 			t.Fatal(err)
 		}
@@ -387,11 +387,10 @@ func TestConditionalSensitive_LiteralFalseAndBracketMessages(t *testing.T) {
 			t.Errorf("calendar rsvp --message %q should require confirmation", msg)
 		}
 	}
-	for _, msg := range []string{"", "   "} {
-		_ = rsvp.Flags().Set("message", msg)
-		if _, ok := sensitiveEffect(rsvp); ok {
-			t.Errorf("calendar rsvp --message %q should not require confirmation", msg)
-		}
+	// Only a truly empty message sends no update.
+	_ = rsvp.Flags().Set("message", "")
+	if _, ok := sensitiveEffect(rsvp); ok {
+		t.Error("calendar rsvp with an empty --message should not require confirmation")
 	}
 	// Bool flags are judged as bools.
 	update, _, _ := rootCmd.Find([]string{"drive", "update"})

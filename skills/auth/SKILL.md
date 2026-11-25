@@ -85,11 +85,14 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
 - `--readonly` requests only read-only scopes. Commands that create, change,
   or delete data then fail with an insufficient-scope error (exit code 3) and
   a hint naming the login that grants write access.
-- Exception: Workspace Events subscriptions are authorized by read scopes
-  by design, so `gws events subscriptions create`, `update`, `renew`,
-  `reactivate` and `delete` still work after a read-only login that
-  includes the `events` service. Leave `events` out of `--services` if a
-  read-only login must not manage subscriptions.
+- Exception: Workspace Events subscriptions on Chat and Meet resources
+  are authorized by read scopes by design, so `gws events subscriptions
+  create`, `update`, `renew`, `reactivate` and `delete` still work for
+  those targets after a read-only login that includes the `events`
+  service. Drive file and permission subscriptions need the
+  `drive.metadata` scope, which only a full `events` login requests.
+  Leave `events` out of `--services` if a read-only login must not manage
+  subscriptions.
 - `--add` merges the selected services into the existing authorization
   instead of replacing it. It requires `--services` (or a `services` list
   in config), so it can never widen the request to every service. Without `--add`, a login replaces the previous

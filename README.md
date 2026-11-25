@@ -100,9 +100,11 @@ gws auth login --add --services gmail             # add (or upgrade) a service w
 
 `--readonly` requests only read-only scopes; commands that change data then
 fail with an insufficient-scope error and a hint naming the login that grants
-write access. One exception: Workspace Events subscriptions are authorized by
-read scopes, so `gws events subscriptions` commands still work after a
-read-only login that includes the `events` service. `--add` merges into the
+write access. One exception: Workspace Events subscriptions on Chat and Meet
+resources are authorized by read scopes, so `gws events subscriptions`
+commands for those targets still work after a read-only login that includes
+the `events` service. Drive file and permission subscriptions need full
+`events` access. `--add` merges into the
 existing authorization instead of replacing it. `gws auth status` shows the access level per service.
 
 #### External access token

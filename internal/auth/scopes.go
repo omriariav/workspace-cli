@@ -31,6 +31,11 @@ var ServiceScopes = map[string][]string{
 	"userinfo": {"userinfo.email"},
 }
 
+// Note on `events`: the Workspace Events API accepts read scopes for Chat
+// and Meet subscriptions but requires drive.metadata (not its .readonly
+// variant) for Drive ones, so a read-only login covers Chat and Meet
+// subscriptions only.
+//
 // ReadOnlyServiceScopes maps each service to the read-only scopes requested
 // by `gws auth login --readonly`. Every service has at least one read-only
 // scope; commands that create, modify, or delete data fail with an
@@ -50,7 +55,7 @@ var ReadOnlyServiceScopes = map[string][]string{
 	"groups":        {"admin.directory.group.readonly", "admin.directory.group.member.readonly"},
 	"keep":          {"keep.readonly"},
 	"driveactivity": {"drive.activity.readonly"},
-	"events":        {"chat.spaces.readonly", "chat.memberships.readonly", "chat.messages.readonly", "chat.messages.reactions.readonly", "chat.users.readstate.readonly", "drive.metadata.readonly", "meetings.space.readonly"},
+	"events":        {"chat.spaces.readonly", "chat.memberships.readonly", "chat.messages.readonly", "chat.messages.reactions.readonly", "chat.users.readstate.readonly", "meetings.space.readonly"},
 	"userinfo":      {"userinfo.email"},
 }
 

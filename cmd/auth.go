@@ -55,7 +55,7 @@ func init() {
 	loginCmd.Flags().String("client-id", "", "OAuth client ID")
 	loginCmd.Flags().String("client-secret", "", "OAuth client secret")
 	loginCmd.Flags().String("services", "", "Comma-separated list of services to authorize (e.g. gmail,calendar,chat)")
-	loginCmd.Flags().Bool("readonly", false, "Request only read-only scopes for the selected services (events subscriptions can still be managed: they are authorized by read scopes)")
+	loginCmd.Flags().Bool("readonly", false, "Request only read-only scopes for the selected services (Chat and Meet event subscriptions can still be managed: they are authorized by read scopes)")
 	loginCmd.Flags().Bool("add", false, "Add the services named by --services to the existing authorization instead of replacing it")
 	viper.BindPFlag("client_id", loginCmd.Flags().Lookup("client-id"))
 	viper.BindPFlag("client_secret", loginCmd.Flags().Lookup("client-secret"))

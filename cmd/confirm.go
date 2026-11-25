@@ -103,7 +103,8 @@ var conditionalSensitive = map[string]struct{ flag, effect string }{
 
 // flagIsSet reports whether a flag carries a real value, judged by the
 // flag's type: a bool must be true, a slice non-empty, and anything else a
-// non-blank string (so a literal message of "false" or "[]" still counts).
+// non-empty string (so a literal message of "false", "[]" or " " counts,
+// exactly as it does for the command's own handler).
 func flagIsSet(f *pflag.Flag) bool {
 	v := f.Value.String()
 	switch f.Value.Type() {
@@ -112,7 +113,9 @@ func flagIsSet(f *pflag.Flag) bool {
 	case "stringSlice", "stringArray", "intSlice":
 		return v != "[]"
 	default:
-		return strings.TrimSpace(v) != ""
+		// Not trimmed: handlers act on any non-empty value, so a
+		// whitespace-only RSVP message still notifies attendees.
+		return v != ""
 	}
 }
 

@@ -738,6 +738,16 @@ func TestReadOnlyServiceScopes_GrantNoWriteAccess(t *testing.T) {
 	}
 }
 
+func TestReadOnlyEventsScopes_OmitUnsupportedDriveScope(t *testing.T) {
+	// The Workspace Events API does not accept drive.metadata.readonly for
+	// Drive subscriptions, so requesting it would be dead weight.
+	for _, s := range ReadOnlyServiceScopes["events"] {
+		if strings.HasPrefix(s, "drive.") {
+			t.Errorf("read-only events scopes should not include %q", s)
+		}
+	}
+}
+
 func TestServiceForScope_ResolvesReadOnlyOnlyScopes(t *testing.T) {
 	if got := ServiceForScope("https://www.googleapis.com/auth/spreadsheets.readonly"); got != "sheets" {
 		t.Errorf("ServiceForScope(spreadsheets.readonly) = %q, want sheets", got)
