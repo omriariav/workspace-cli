@@ -20,6 +20,9 @@ const (
 	lockSuffix       = ".lock"
 	lockTimeout      = 5 * time.Second
 	lockPollInterval = 50 * time.Millisecond
+	// staleLockAge is how old a legacy lock file must be before it is
+	// treated as left behind by a process that died.
+	staleLockAge = 30 * time.Second
 )
 
 // LoadToken loads the OAuth token from the token file.

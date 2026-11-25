@@ -111,7 +111,9 @@ existing authorization instead of replacing it. `gws auth status` shows the acce
 
 ```bash
 # Any command that prints a Google OAuth access token carrying the scopes
-# the gws command needs (check them with `--show-scopes`).
+# the gws command needs. `--show-scopes` lists what `gws auth login`
+# requests for the command's whole service, not the minimum for that one
+# command: a token with fewer scopes works if the endpoint accepts them.
 export GWS_ACCESS_TOKEN="$(your-token-command)"
 gws calendar events --days 1
 ```

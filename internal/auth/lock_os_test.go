@@ -27,22 +27,67 @@ func TestAcquireLock_BasicAcquireRelease(t *testing.T) {
 	again()
 }
 
-// A lock file with nobody holding it is not a held lock, whatever its
-// age: the process that created it is gone, or it was left by an older
-// version of gws that used the file's existence as the lock.
-func TestAcquireLock_LeftoverLockFileIsNotHeld(t *testing.T) {
+// Versions of gws before the OS lock use the ".lock" file's existence as
+// the lock. One of those files that is recent means such a version holds
+// the lock right now: it is waited for, not ignored.
+func TestAcquireLock_WaitsForAnOlderVersionsLockFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for the lock timeout")
+	}
 	path := filepath.Join(t.TempDir(), "test-file")
-	if err := os.WriteFile(path+lockSuffix, []byte("999999999"), 0600); err != nil {
+	if err := os.WriteFile(path+lockSuffix, []byte("older-version"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	start := time.Now()
 	unlock, err := acquireLock(path)
+	if err == nil {
+		unlock()
+		t.Fatal("acquired the lock while an older version's lock file was present")
+	}
+	if !errors.Is(err, errLockTimeout) {
+		t.Errorf("err = %v, want a lock timeout", err)
+	}
+	if held, _ := os.ReadFile(path + lockSuffix); string(held) != "older-version" {
+		t.Errorf("the older version's lock file was disturbed: %q", held)
+	}
+	// The failed attempt must not keep the OS lock: once the older
+	// version's file is gone, the lock is free.
+	if err := os.Remove(path + lockSuffix); err != nil {
+		t.Fatal(err)
+	}
+	unlock, err = acquireLock(path)
 	if err != nil {
-		t.Fatalf("a leftover lock file blocked the lock: %v", err)
+		t.Fatalf("after the older version released: %v", err)
 	}
 	unlock()
-	if waited := time.Since(start); waited > time.Second {
-		t.Errorf("waited %v for a lock nobody holds", waited)
+}
+
+// One left behind by an older version that died is taken over once it is
+// stale, as those versions do among themselves.
+func TestAcquireLock_TakesOverAStaleOlderLockFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test-file")
+	lockPath := path + lockSuffix
+	if err := os.WriteFile(lockPath, []byte("999999999"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-staleLockAge - time.Second)
+	if err := os.Chtimes(lockPath, past, past); err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := acquireLock(path)
+	if err != nil {
+		t.Fatalf("a stale lock file blocked the lock: %v", err)
+	}
+	// While held, the file older versions look for exists, so they wait.
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Errorf("no lock file for older versions while held: %v", err)
+	}
+	unlock()
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Errorf("the older-version lock file was not removed on release: %v", err)
+	}
+	// The OS lock file stays: it is never removed.
+	if _, err := os.Stat(path + osLockSuffix); err != nil {
+		t.Errorf("the OS lock file should remain: %v", err)
 	}
 }
 
@@ -61,10 +106,12 @@ func TestAcquireLock_HeldLockIsNeverTakenOver(t *testing.T) {
 	}
 	defer unlock()
 
-	// Make the lock file look long abandoned.
+	// Make both lock files look long abandoned.
 	old := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(path+lockSuffix, old, old); err != nil {
-		t.Fatal(err)
+	for _, suffix := range []string{lockSuffix, osLockSuffix} {
+		if err := os.Chtimes(path+suffix, old, old); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	start := time.Now()

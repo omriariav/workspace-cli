@@ -1293,3 +1293,28 @@ func TestDayWindows_TransitionAcrossMidnight(t *testing.T) {
 		}
 	}
 }
+
+// --attendees "$UNSET" must not fall back to checking the default
+// calendar alone and reporting that as everyone's availability.
+func TestCalendarSuggestTime_RejectsAnExplicitlyEmptyList(t *testing.T) {
+	flags := calendarSuggestTimeCmd.Flags()
+	reset := func() {
+		for name, def := range map[string]string{"from": "", "to": "", "attendees": "", "calendars": "primary"} {
+			_ = flags.Set(name, def)
+			flags.Lookup(name).Changed = false
+		}
+	}
+	t.Cleanup(reset)
+
+	for _, name := range []string{"attendees", "calendars"} {
+		reset()
+		_ = flags.Set("from", "2026-03-02")
+		_ = flags.Set("to", "2026-03-03")
+		_ = flags.Set(name, " , ")
+		var err error
+		out := captureStderrStr(t, func() { err = runCalendarSuggestTime(calendarSuggestTimeCmd, nil) })
+		if err == nil || !strings.Contains(out+err.Error(), "--"+name+" was given but names no calendar") {
+			t.Errorf("--%s with no IDs: err = %v, output = %q", name, err, out)
+		}
+	}
+}

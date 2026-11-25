@@ -489,6 +489,15 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 		return usageErrorf("--max must be >= 1")
 	}
 
+	// A flag that was given but names nobody (--attendees "$UNSET") is a
+	// mistake. Carrying on would answer for the default calendar alone
+	// and present that as everyone's availability.
+	for _, name := range []string{"attendees", "calendars"} {
+		if cmd.Flags().Changed(name) && len(splitList(flagString(cmd, name))) == 0 {
+			return usageErrorf("--%s was given but names no calendar", name)
+		}
+	}
+
 	seen := map[string]bool{}
 	var items []*calendar.FreeBusyRequestItem
 	for _, id := range append(splitList(calendarsStr), splitList(attendeesStr)...) {

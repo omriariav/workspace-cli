@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// staleLockAge is how old a lock file must be before it is taken over.
-const staleLockAge = 30 * time.Second
-
 // acquireLock creates path + ".lock" with O_CREATE|O_EXCL and returns a
 // function that removes it. This platform has no OS-enforced file lock
 // wired up, so a lock left by a process that died is taken over once it
