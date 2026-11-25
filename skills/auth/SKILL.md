@@ -145,8 +145,10 @@ gws drive share --schema        # flags (name, type, default, required), usage, 
 gws drive share --show-scopes   # full and read-only scopes of the command's service
 ```
 
-`--schema` also marks commands covered by the confirmation gate with
-`"sensitive": true`. Scope output is per service, not per command.
+`--schema` also shows whether the confirmation gate covers a command:
+`"sensitive": true` (with an `effect`) when it always does, and
+`"sensitive_when": {"flag": "...", "effect": "..."}` when it does only if
+that flag is used. Scope output is per service, not per command.
 
 ## Confirmation Gate for Sensitive Commands
 
@@ -180,8 +182,12 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   `update-permission`, `move`, `start-approval`, `reassign-approval`; Chat
   `add-member`, `update-member`).
 - Not covered: creating or editing content, `untrash`, and responding to
-  a Drive approval (`approve`, `decline`, `cancel-approval`). `gws <command> --schema` shows `"sensitive": true` for a covered
-  command.
+  a Drive approval (`approve`, `decline`, `cancel-approval`).
+- To check before running: `gws <command> --schema` shows
+  `"sensitive": true` for a command that always needs confirmation, and
+  `"sensitive_when"` naming the flag for one that needs it only when that
+  flag is used (for example `calendar create` with `--attendees`). Check
+  both fields.
 
 ## First-Time Setup
 
