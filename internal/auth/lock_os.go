@@ -75,8 +75,15 @@ func acquireLock(path string) (unlock func(), err error) {
 		}
 		// Held by an older version, or left behind by one that died.
 		if info, statErr := os.Stat(legacyPath); statErr == nil && time.Since(info.ModTime()) > staleLockAge {
-			os.Remove(legacyPath)
-			continue
+			if rmErr := os.Remove(legacyPath); rmErr == nil || os.IsNotExist(rmErr) {
+				continue
+			} else {
+				// A stale lock that cannot be removed will not go away by
+				// retrying: give up, and let go of the OS lock so other
+				// commands are not held up behind this one.
+				release()
+				return nil, fmt.Errorf("lock file error: stale lock %s could not be removed: %w", legacyPath, rmErr)
+			}
 		}
 		if time.Now().After(deadline) {
 			release()

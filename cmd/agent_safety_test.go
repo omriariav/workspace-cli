@@ -1987,3 +1987,25 @@ func TestRenderHook_NoWorkspaceContextWithExternalToken(t *testing.T) {
 		t.Errorf("diagnostics = %v, want the external-token explanation", rendered.Diagnostics)
 	}
 }
+
+// Google may report the sign-in scopes as `email` / `profile`. A grant
+// spelled that way holds the same access as one with the full names and
+// must get the same access level, with nothing reported as not granted.
+func TestDeriveGrantedAccess_ShortSignInScopeNames(t *testing.T) {
+	const pfx = "https://www.googleapis.com/auth/"
+	requested := map[string]string{"gmail": auth.AccessReadOnly, "people": auth.AccessReadOnly, "userinfo": auth.AccessReadOnly}
+	long := []string{pfx + "userinfo.email", pfx + "userinfo.profile", pfx + "gmail.readonly", pfx + "contacts.readonly", pfx + "directory.readonly"}
+	short := []string{"openid", "email", "profile", pfx + "gmail.readonly", pfx + "contacts.readonly", pfx + "directory.readonly"}
+
+	wantAccess, wantMissing := deriveGrantedAccess(requested, long)
+	gotAccess, gotMissing := deriveGrantedAccess(requested, short)
+	if len(wantMissing) != 0 || len(gotMissing) != 0 {
+		t.Errorf("not granted: long names %v, short names %v; want none", wantMissing, gotMissing)
+	}
+	if fmt.Sprint(gotAccess) != fmt.Sprint(wantAccess) {
+		t.Errorf("access with short names = %v, with full names = %v", gotAccess, wantAccess)
+	}
+	if gotAccess["gmail"] != auth.AccessReadOnly || gotAccess["people"] != auth.AccessReadOnly {
+		t.Errorf("access = %v, want gmail and people read-only", gotAccess)
+	}
+}

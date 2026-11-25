@@ -33,8 +33,13 @@ func acquireLock(path string) (unlock func(), err error) {
 			return nil, fmt.Errorf("lock file error: %w", createErr)
 		}
 		if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > staleLockAge {
-			os.Remove(lockPath)
-			continue
+			if rmErr := os.Remove(lockPath); rmErr == nil || os.IsNotExist(rmErr) {
+				continue
+			} else {
+				// Retrying would never end: a stale lock that cannot be
+				// removed stays where it is.
+				return nil, fmt.Errorf("lock file error: stale lock %s could not be removed: %w", lockPath, rmErr)
+			}
 		}
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("%w: %s", errLockTimeout, lockPath)

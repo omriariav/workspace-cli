@@ -162,3 +162,45 @@ func TestAcquireLock_IsExclusive(t *testing.T) {
 		t.Error("nobody acquired the lock")
 	}
 }
+
+// A stale older-version lock that cannot be removed must end in an error,
+// not in an endless retry that also keeps the OS lock from everyone else.
+// (Here the "lock file" is a non-empty directory, which os.Remove refuses.)
+func TestAcquireLock_UnremovableStaleLockFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test-file")
+	lockPath := path + lockSuffix
+	if err := os.MkdirAll(filepath.Join(lockPath, "child"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-staleLockAge - time.Minute)
+	if err := os.Chtimes(lockPath, past, past); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		unlock, err := acquireLock(path)
+		if err == nil {
+			unlock()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || errors.Is(err, errLockTimeout) {
+			t.Errorf("err = %v, want a lock file error", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("acquireLock is still retrying a stale lock it cannot remove")
+	}
+
+	// The OS lock was let go: with the obstacle gone, the lock is free.
+	if err := os.RemoveAll(lockPath); err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := acquireLock(path)
+	if err != nil {
+		t.Fatalf("after the obstacle was removed: %v", err)
+	}
+	unlock()
+}

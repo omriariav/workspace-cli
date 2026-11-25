@@ -630,9 +630,11 @@ func mergeGrantedAccess(existing map[string]string, services []string, readOnly 
 // notGranted lists requested services that came back with less than was
 // asked for.
 func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (access map[string]string, notGranted []string) {
+	// Google may report the sign-in scopes by their short names (email,
+	// profile); the service scope lists use the full spellings.
 	granted := make(map[string]bool, len(grantedScopes))
 	for _, s := range grantedScopes {
-		granted[s] = true
+		granted[canonicalScope(s)] = true
 	}
 	hasAll := func(scopes []string) bool {
 		for _, s := range scopes {
