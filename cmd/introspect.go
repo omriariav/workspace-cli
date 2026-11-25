@@ -215,7 +215,7 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	}
 	var readOnly []string
 	for _, svc := range scopeServicesFor(cmd) {
-		if level := access[svc]; level == auth.AccessReadOnly || level == auth.AccessPartial {
+		if level, ok := access[svc]; ok && level != auth.AccessFull {
 			readOnly = append(readOnly, svc)
 		}
 	}

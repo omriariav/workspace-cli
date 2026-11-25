@@ -156,7 +156,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// If either write fails, remove both files: no metadata is better than
 	// metadata that still describes the previous token.
 	errServices := auth.SaveGrantedServices(grantedServiceNames(access))
-	errAccess := auth.SaveGrantedAccess(access)
+	errAccess := auth.SaveGrantedAccess(access, token)
 	if errServices != nil || errAccess != nil {
 		auth.DeleteGrantedMetadata()
 		fmt.Fprintf(os.Stderr, "Warning: failed to record granted access (services: %v, access levels: %v); `gws auth status` will not show per-service access until the next login\n", errServices, errAccess)
@@ -245,6 +245,8 @@ func mergeGrantedAccess(existing map[string]string, services []string, readOnly 
 //   - partial when it holds at least one write scope but not all of them
 //     (the user unticked some on the consent screen) — never read-only;
 //   - read-only when it holds its read-only scopes and no write scope;
+//   - partial-readonly when it was requested and holds only some of its
+//     read-only scopes;
 //   - absent otherwise.
 //
 // Where the full and read-only sets coincide (e.g. groups, whose scopes
@@ -263,6 +265,16 @@ func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (a
 			}
 		}
 		return true
+	}
+
+	// hasAny ignores the userinfo scopes every login carries.
+	hasAny := func(scopes []string) bool {
+		for _, s := range scopes {
+			if granted[s] && !strings.Contains(s, "/auth/userinfo.") {
+				return true
+			}
+		}
+		return false
 	}
 
 	access = map[string]string{}
@@ -302,6 +314,12 @@ func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (a
 			if level == auth.AccessFull {
 				notGranted = append(notGranted, svc+" (write access)")
 			}
+		case wasRequested && hasAny(readOnly):
+			// Some read scopes were unticked. Recorded only for requested
+			// services: read scopes are shared between services, so for an
+			// unrequested one this would just echo another service.
+			access[svc] = auth.AccessPartialReadOnly
+			notGranted = append(notGranted, svc+" (only some scopes)")
 		case wasRequested:
 			notGranted = append(notGranted, svc)
 		}
@@ -335,7 +353,7 @@ func allReadOnly(access map[string]string) bool {
 		return false
 	}
 	for _, level := range access {
-		if level != auth.AccessReadOnly {
+		if level != auth.AccessReadOnly && level != auth.AccessPartialReadOnly {
 			return false
 		}
 	}

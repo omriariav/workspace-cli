@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
+	"github.com/omriariav/workspace-cli/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
@@ -447,13 +449,14 @@ func TestStoredOAuthLoginActive(t *testing.T) {
 
 func TestExistingGrantedAccess_IgnoresMetadataWithoutToken(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}); err != nil {
+	tok := &oauth2.Token{AccessToken: "a", RefreshToken: "r"}
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, tok); err != nil {
 		t.Fatal(err)
 	}
 	if got := existingGrantedAccess(); len(got) != 0 {
 		t.Errorf("metadata without a stored token must be ignored, got %v", got)
 	}
-	if err := auth.SaveToken(&oauth2.Token{AccessToken: "a", RefreshToken: "r"}); err != nil {
+	if err := auth.SaveToken(tok); err != nil {
 		t.Fatal(err)
 	}
 	if got := existingGrantedAccess(); got["gmail"] != auth.AccessFull {
@@ -463,7 +466,7 @@ func TestExistingGrantedAccess_IgnoresMetadataWithoutToken(t *testing.T) {
 
 func TestLogout_ClearsGrantedMetadata(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}); err != nil {
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, &oauth2.Token{RefreshToken: "r"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := auth.SaveGrantedServices([]string{"gmail"}); err != nil {
@@ -472,6 +475,9 @@ func TestLogout_ClearsGrantedMetadata(t *testing.T) {
 	// No token stored: logout makes no network call and still clears metadata.
 	if _, err := captureStdout(t, func() error { return runLogout(logoutCmd, nil) }); err != nil {
 		t.Fatalf("runLogout: %v", err)
+	}
+	if _, err := os.Stat(config.GetGrantedAccessPath()); !os.IsNotExist(err) {
+		t.Error("logout should delete the granted-access file")
 	}
 	if auth.LoadGrantedAccess() != nil || auth.LoadGrantedServices() != nil {
 		t.Error("logout should remove granted-services and granted-access metadata")
@@ -640,6 +646,28 @@ func TestDeriveGrantedAccess(t *testing.T) {
 	contacts, _ := deriveGrantedAccess(map[string]string{"contacts": auth.AccessFull}, auth.ScopesForServices([]string{"contacts"}))
 	if _, ok := contacts["people"]; ok || contacts["contacts"] != auth.AccessFull {
 		t.Errorf("contacts grant = %v", contacts)
+	}
+
+	// Some read scopes unticked, no write scope: the service is kept as
+	// partial-readonly so the scope hint still has something to go on,
+	// and the login as a whole still counts as read-only.
+	chatScopes := []string{pfx + "userinfo.email", pfx + "chat.messages.readonly", pfx + "tasks.readonly"}
+	chat, missing := deriveGrantedAccess(map[string]string{"chat": auth.AccessReadOnly, "tasks": auth.AccessReadOnly}, chatScopes)
+	if chat["chat"] != auth.AccessPartialReadOnly || strings.Join(missing, "; ") != "chat (only some scopes)" {
+		t.Errorf("partial read grant = %v (missing %v)", chat, missing)
+	}
+	if !allReadOnly(chat) {
+		t.Error("a login with only read scopes is read-only")
+	}
+	// ...but an unrequested service sharing those read scopes is not
+	// invented (events shares chat's read scopes).
+	if _, ok := chat["events"]; ok {
+		t.Errorf("unrequested events should not appear: %v", chat)
+	}
+	chatMembers, _, _ := rootCmd.Find([]string{"chat", "members"})
+	insufficientErr := errors.New("googleapi: Error 403: Request had insufficient authentication scopes.")
+	if hint := readOnlyScopeHint(chatMembers, insufficientErr, chat); !strings.Contains(hint, "--add --services chat") {
+		t.Errorf("partial-readonly hint = %q", hint)
 	}
 
 	// Sheets has exactly one scope in each set. A previously granted

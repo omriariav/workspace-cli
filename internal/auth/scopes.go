@@ -61,6 +61,9 @@ const (
 	// AccessPartial marks a service that holds at least one write scope
 	// but not the complete full set (the user unticked some scopes).
 	AccessPartial = "partial"
+	// AccessPartialReadOnly marks a requested service that holds some of
+	// its read-only scopes, but not all of them, and no write scope.
+	AccessPartialReadOnly = "partial-readonly"
 )
 
 // AllScopes is the union of all service scopes. Computed at init time for backward compat.

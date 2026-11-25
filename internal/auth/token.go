@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -163,11 +165,15 @@ func LoadGrantedServices() []string {
 // SaveGrantedAccess persists the access level ("full" or "readonly") granted
 // to each service at login time. It is local metadata only: the token's real
 // scopes are always enforced by Google.
-func SaveGrantedAccess(access map[string]string) error {
+//
+// The record carries a fingerprint of the token it describes, so metadata
+// left behind by another login (an interrupted write, two logins racing)
+// is recognised as stale and ignored on load.
+func SaveGrantedAccess(access map[string]string, token *oauth2.Token) error {
 	if err := config.EnsureConfigDir(); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	data, err := json.Marshal(access)
+	data, err := json.Marshal(grantedAccessRecord{Token: tokenFingerprint(token), Services: access})
 	if err != nil {
 		return fmt.Errorf("failed to marshal granted access: %w", err)
 	}
@@ -198,18 +204,44 @@ func SaveGrantedAccess(access map[string]string) error {
 	return fmt.Errorf("failed to set temp file permissions")
 }
 
-// LoadGrantedAccess loads the per-service access levels. Returns nil when
-// no metadata exists (logins made before access levels were recorded).
+// grantedAccessRecord is the on-disk form of the access metadata.
+type grantedAccessRecord struct {
+	// Token is a fingerprint of the refresh token the levels describe.
+	Token    string            `json:"token"`
+	Services map[string]string `json:"services"`
+}
+
+// tokenFingerprint identifies a stored authorization without revealing
+// it: a truncated SHA-256 of the refresh token, which stays the same
+// across access-token refreshes and changes with every login.
+func tokenFingerprint(token *oauth2.Token) string {
+	if token == nil || token.RefreshToken == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(token.RefreshToken))
+	return hex.EncodeToString(sum[:8])
+}
+
+// LoadGrantedAccess loads the per-service access levels for the stored
+// token. Returns nil when there is no metadata, no stored token, or the
+// metadata describes a different token than the one stored.
 func LoadGrantedAccess() map[string]string {
 	data, err := os.ReadFile(config.GetGrantedAccessPath())
 	if err != nil {
 		return nil
 	}
-	var access map[string]string
-	if err := json.Unmarshal(data, &access); err != nil {
+	var record grantedAccessRecord
+	if err := json.Unmarshal(data, &record); err != nil {
 		return nil
 	}
-	return access
+	token, err := LoadToken()
+	if err != nil {
+		return nil
+	}
+	if fp := tokenFingerprint(token); fp == "" || fp != record.Token {
+		return nil
+	}
+	return record.Services
 }
 
 // DeleteGrantedMetadata removes the granted-services and granted-access

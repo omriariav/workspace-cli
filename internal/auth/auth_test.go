@@ -749,13 +749,50 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	if got := LoadGrantedAccess(); got != nil {
 		t.Errorf("expected nil before any login, got %v", got)
 	}
+	tok := &oauth2.Token{AccessToken: "a1", RefreshToken: "refresh-1"}
 	want := map[string]string{"gmail": AccessReadOnly, "drive": AccessFull}
-	if err := SaveGrantedAccess(want); err != nil {
+	if err := SaveGrantedAccess(want, tok); err != nil {
 		t.Fatalf("SaveGrantedAccess: %v", err)
+	}
+
+	// Metadata without a stored token is ignored.
+	if got := LoadGrantedAccess(); got != nil {
+		t.Errorf("expected nil without a stored token, got %v", got)
+	}
+	if err := SaveToken(tok); err != nil {
+		t.Fatal(err)
 	}
 	got := LoadGrantedAccess()
 	if len(got) != 2 || got["gmail"] != AccessReadOnly || got["drive"] != AccessFull {
 		t.Errorf("round trip = %v", got)
+	}
+
+	// An access-token refresh keeps the refresh token: still valid.
+	if err := SaveToken(&oauth2.Token{AccessToken: "a2", RefreshToken: "refresh-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadGrantedAccess(); len(got) != 2 {
+		t.Errorf("metadata should survive an access-token refresh, got %v", got)
+	}
+
+	// A different login's token: the metadata describes another grant
+	// (interrupted write, or two logins racing) and must be ignored.
+	if err := SaveToken(&oauth2.Token{AccessToken: "b1", RefreshToken: "refresh-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadGrantedAccess(); got != nil {
+		t.Errorf("metadata for another token must be ignored, got %v", got)
+	}
+}
+
+func TestTokenFingerprint(t *testing.T) {
+	if tokenFingerprint(nil) != "" || tokenFingerprint(&oauth2.Token{AccessToken: "a"}) != "" {
+		t.Error("no refresh token means no fingerprint")
+	}
+	a := tokenFingerprint(&oauth2.Token{RefreshToken: "refresh-1"})
+	b := tokenFingerprint(&oauth2.Token{RefreshToken: "refresh-2"})
+	if a == "" || a == b || strings.Contains(a, "refresh") {
+		t.Errorf("fingerprints: %q %q", a, b)
 	}
 }
 

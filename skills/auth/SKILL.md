@@ -102,9 +102,9 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
   full access. To reduce access, run `gws auth logout` (which revokes the
   old grant) and then log in again with the narrower options.
 - `gws auth status` reports the access level per service — `full`,
-  `readonly`, or `partial` (some write scopes were granted, others
-  unticked) — and `read_only: true` only when no service holds a write
-  scope.
+  `readonly`, `partial` (some write scopes were granted, others unticked)
+  or `partial-readonly` (some read scopes were unticked) — and
+  `read_only: true` only when no service holds a write scope.
 
 ## External Access Token
 
@@ -244,7 +244,7 @@ services:
 ## Token Management
 
 - Token stored at: `~/.config/gws/token.json` (atomic writes, file-locked)
-- Granted services tracked in: `~/.config/gws/granted_services.json`; per-service access level (`full` / `readonly` / `partial`) in `~/.config/gws/granted_access.json`
+- Granted services tracked in: `~/.config/gws/granted_services.json`; per-service access level, tied to the stored token, in `~/.config/gws/granted_access.json`
 - Access tokens auto-refresh when expired. Every `gws auth login` stores the new refresh token Google returns and never reuses the previous one; if Google returns none, the login is rejected and the stored authorization is left unchanged
 - Scoped login: use `--services` to request only needed scopes (smaller consent screen)
 - Default services can be set in config.yaml: `services: [gmail, calendar, chat]`
