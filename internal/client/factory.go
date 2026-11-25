@@ -130,7 +130,9 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 	// Refresh (if needed) and save under the login lock, so concurrent
 	// commands never race each other's refresh.
 	token, saveErr, err := auth.EnsureFreshToken(ctx, clientID, clientSecret, token)
-	if errors.Is(err, auth.ErrLoginChanged) || errors.Is(err, auth.ErrLoginRemoved) || errors.Is(err, auth.ErrRefreshBusy) {
+	if errors.Is(err, auth.ErrLoginChanged) || errors.Is(err, auth.ErrLoginRemoved) || errors.Is(err, auth.ErrRefreshBusy) || errors.Is(err, auth.ErrRefreshLockUnavailable) {
+		// Not "run gws auth login": the stored login is fine, and logging
+		// in again would not help.
 		return nil, err
 	}
 	if err != nil {

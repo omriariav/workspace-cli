@@ -852,6 +852,13 @@ func runStatus(cmd *cobra.Command, args []string) error {
 				"authenticated": false,
 				"message":       "Another gws command is refreshing the stored login; run gws auth status again",
 			})
+		case errors.Is(err, auth.ErrRefreshLockUnavailable):
+			// Expired, and not refreshed because the login lock could not
+			// be taken. Logging in again would not fix that.
+			return p.Print(map[string]interface{}{
+				"authenticated": false,
+				"message":       err.Error(),
+			})
 		case errors.Is(err, auth.ErrLoginRemoved):
 			// Logged out while this command was starting.
 			return p.Print(map[string]interface{}{

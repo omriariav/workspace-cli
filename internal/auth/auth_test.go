@@ -1561,3 +1561,40 @@ func TestStoredAuthorizationIs_UnreadableTokenIsNotAbsent(t *testing.T) {
 		t.Error("an unreadable token file was treated as no stored login")
 	}
 }
+
+// A lock that cannot be taken for a reason other than another process
+// holding it (here: the config directory cannot be created) proves nothing
+// about other processes, and leaves no safe way to store a rotated
+// refresh token. The exchange must not be attempted.
+func TestEnsureFreshToken_DoesNotRefreshWhenTheLockIsUnavailable(t *testing.T) {
+	// A regular file where the config root should be: the lock file can
+	// never be created beneath it.
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", blocker)
+
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: "fresh", RefreshToken: "r1", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+
+	expired := &oauth2.Token{AccessToken: "old", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	token, _, err := EnsureFreshToken(context.Background(), "id", "secret", expired)
+	if !errors.Is(err, ErrRefreshLockUnavailable) || errors.Is(err, ErrRefreshBusy) {
+		t.Errorf("err = %v, want ErrRefreshLockUnavailable", err)
+	}
+	if token != nil || exchanges != 0 {
+		t.Errorf("token = %v after %d exchanges; want no token and no exchange", token, exchanges)
+	}
+
+	// A token that is still valid needs neither the lock nor a refresh.
+	valid := &oauth2.Token{AccessToken: "ok", RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}
+	if got, _, err := EnsureFreshToken(context.Background(), "id", "secret", valid); err != nil || got != valid {
+		t.Errorf("valid token: got %v, err %v", got, err)
+	}
+}

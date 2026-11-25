@@ -149,6 +149,15 @@ gws calendar events --days 1
 - `--access-token <token>` also works, but a flag value is visible in process
   listings and shell history — prefer the environment variable.
 
+## Token Refresh Needs a Writable Config Directory
+
+An expired stored token is refreshed under a lock file in the gws config
+directory (`~/.config/gws`). If that lock cannot be created (read-only or
+full directory), gws does not refresh and the command fails with "the
+login lock is unavailable": refreshing without it could invalidate the
+stored login for other gws processes. Make the directory writable, or
+supply a token with `GWS_ACCESS_TOKEN`. Logging in again does not help.
+
 ## Inspecting Commands Without Running Them
 
 Two global flags print JSON and exit without calling any Google API and

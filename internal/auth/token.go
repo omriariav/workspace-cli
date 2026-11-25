@@ -359,7 +359,8 @@ var exchangeRefreshToken = func(ctx context.Context, clientID, clientSecret stri
 // EnsureFreshToken returns a currently valid token for the stored login,
 // refreshing it if needed.
 //
-// The refresh exchange and the save happen together under the login lock,
+// The refresh exchange and the save happen together under the login lock
+// (without the lock there is no refresh: see ErrRefreshLockUnavailable),
 // and the token is re-read from disk once the lock is held. Two processes
 // that find the same expired token therefore refresh one after the other:
 // the second sees the first's result and reuses it instead of refreshing
@@ -380,31 +381,36 @@ func EnsureFreshToken(ctx context.Context, clientID, clientSecret string, loaded
 	// Another process holds the lock: it may be refreshing this very
 	// token. Refreshing alongside it could send the same refresh token
 	// twice, which, with rotation, can leave a dead credential stored.
-	// Stop before contacting the provider. (A lock that cannot be created
-	// at all, e.g. a read-only config directory, is different: no other
-	// process can hold it either, so the refresh goes ahead unlocked.)
+	// Stop before contacting the provider.
 	if errors.Is(lockErr, errLockTimeout) {
 		return nil, nil, ErrRefreshBusy
 	}
-	if lockErr == nil {
-		defer unlock()
-		// Another process may have acted while this one waited for the
-		// lock. Only the same authorization may be picked up from disk:
-		// if the login was removed or replaced, this command must not
-		// carry on as whoever is stored now, nor revive credentials that
-		// were just logged out.
-		current, loadErr := LoadToken()
-		if loadErr != nil {
-			return nil, nil, ErrLoginRemoved
-		}
-		if !sameAuthorization(loaded, current) {
-			return nil, nil, ErrLoginChanged
-		}
-		if current.Valid() {
-			return current, nil, nil
-		}
-		loaded = current
+	// The same goes for a lock that could not be taken for any other
+	// reason (a read-only or full config directory, no file descriptors
+	// left). Failing to create the lock proves nothing about other
+	// processes: one with a writable view of the same directory may hold
+	// it right now. Without the lock there is also no safe way to store a
+	// rotated refresh token, so the exchange is not attempted.
+	if lockErr != nil {
+		return nil, nil, fmt.Errorf("%w: %v", ErrRefreshLockUnavailable, lockErr)
 	}
+	defer unlock()
+	// Another process may have acted while this one waited for the lock.
+	// Only the same authorization may be picked up from disk: if the
+	// login was removed or replaced, this command must not carry on as
+	// whoever is stored now, nor revive credentials that were just logged
+	// out.
+	current, loadErr := LoadToken()
+	if loadErr != nil {
+		return nil, nil, ErrLoginRemoved
+	}
+	if !sameAuthorization(loaded, current) {
+		return nil, nil, ErrLoginChanged
+	}
+	if current.Valid() {
+		return current, nil, nil
+	}
+	loaded = current
 
 	exchangeCtx, cancel := context.WithTimeout(ctx, refreshExchangeTimeout)
 	defer cancel()
@@ -420,16 +426,13 @@ func EnsureFreshToken(ctx context.Context, clientID, clientSecret string, loaded
 	if !TokenRefreshed(loaded, fresh) {
 		return fresh, nil, nil
 	}
-	if lockErr != nil {
-		// Could not serialise with other processes; the refresh still has
-		// to be offered for saving, and the lock failure reported.
-		if err := SaveRefreshedToken(loaded, fresh); err != nil {
-			return fresh, err, nil
-		}
-		return fresh, nil, nil
-	}
 	return fresh, saveRefreshedTokenLocked(loaded, fresh), nil
 }
+
+// ErrRefreshLockUnavailable is returned by EnsureFreshToken when the
+// stored token has expired and the login lock could not be taken, so the
+// token was not refreshed. Nothing was sent to Google.
+var ErrRefreshLockUnavailable = errors.New("the stored token has expired and could not be refreshed safely because the login lock is unavailable (the gws config directory must be writable); fix that, or supply a token with GWS_ACCESS_TOKEN")
 
 // errLockTimeout marks a lock that could not be taken because another
 // process holds it (as opposed to one that could not be created at all).
@@ -598,10 +601,18 @@ func saveRefreshedTokenLocked(stored, refreshed *oauth2.Token) error {
 		// rotation anyway, so another command that loaded the old token
 		// recognises the new one as the same login. A record belonging to
 		// some other login is left exactly as it is.
+		// If the token cannot then be saved, the note is taken back: a
+		// rotation that never happened must not be left on record.
+		restore := func() {}
 		if _, statErr := os.Stat(config.GetGrantedAccessPath()); os.IsNotExist(statErr) {
+			restore = SnapshotGrantedAccess()
 			_ = saveGrantedRecord(grantedAccessRecord{Token: tokenFingerprint(&toSave), PreviousToken: base})
 		}
-		return SaveToken(&toSave)
+		if err := SaveToken(&toSave); err != nil {
+			restore()
+			return err
+		}
+		return nil
 	}
 	restore := SnapshotGrantedAccess()
 	record.PreviousToken = base
