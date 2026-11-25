@@ -78,11 +78,60 @@ func CheckAccessToken() error {
 	return nil
 }
 
-// GetConfirmSensitive reports whether sensitive commands (send, share,
-// delete) must be confirmed before they run (GWS_CONFIRM_SENSITIVE or
-// confirm_sensitive in the config file).
+// ConfirmSensitiveEnv is the environment variable that sets the
+// confirmation policy, overriding the config file.
+const ConfirmSensitiveEnv = "GWS_CONFIRM_SENSITIVE"
+
+// ParseConfirmSetting reads an on/off value for the confirmation gate.
+// Only unambiguous spellings are accepted. Anything else (a typo such as
+// "treu", or an empty value) is an error: for a safety switch, an
+// unreadable setting must not quietly mean "off".
+func ParseConfirmSetting(v string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "t", "yes", "y", "on":
+		return true, nil
+	case "0", "false", "f", "no", "n", "off":
+		return false, nil
+	}
+	return false, fmt.Errorf("%q is not a valid on/off value (use true or false)", v)
+}
+
+// ConfirmSensitivePolicy reports whether sensitive commands (send, share,
+// delete) must be confirmed before they run. The environment variable
+// wins over confirm_sensitive in the config file. An error means a value
+// was given but could not be understood; the caller must then treat the
+// policy as unknown rather than off.
+func ConfirmSensitivePolicy() (bool, error) {
+	if v, set := os.LookupEnv(ConfirmSensitiveEnv); set {
+		on, err := ParseConfirmSetting(v)
+		if err != nil {
+			return false, fmt.Errorf("%s: %w", ConfirmSensitiveEnv, err)
+		}
+		return on, nil
+	}
+	if !viper.InConfig(KeyConfirmSensitive) {
+		return false, nil
+	}
+	switch value := viper.Get(KeyConfirmSensitive).(type) {
+	case bool:
+		return value, nil
+	case nil:
+		return false, fmt.Errorf("%s in the config file has no value", KeyConfirmSensitive)
+	default:
+		on, err := ParseConfirmSetting(fmt.Sprint(value))
+		if err != nil {
+			return false, fmt.Errorf("%s in the config file: %w", KeyConfirmSensitive, err)
+		}
+		return on, nil
+	}
+}
+
+// GetConfirmSensitive reports whether the confirmation gate is on. A
+// setting that cannot be understood counts as on here; callers that can
+// report the problem should use ConfirmSensitivePolicy.
 func GetConfirmSensitive() bool {
-	return viper.GetBool(KeyConfirmSensitive)
+	on, err := ConfirmSensitivePolicy()
+	return on || err != nil
 }
 
 // GetClientID returns the OAuth client ID from config or environment.

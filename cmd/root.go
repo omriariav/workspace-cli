@@ -291,22 +291,29 @@ func initConfig() {
 var configLoadErr error
 
 // confirmPolicyUnknown reports an error when a sensitive command is about
-// to run but the config file that may turn the confirmation gate on could
-// not be loaded. Treating that as "gate off" would let a broken config
-// file silently remove the protection the user asked for. The policy is
-// known when the environment sets it, and --yes is an explicit approval.
+// to run but it cannot be established whether the confirmation gate is
+// on: the setting has a value that is not a recognisable on/off (a typo
+// in GWS_CONFIRM_SENSITIVE or in the config file), or the config file
+// that may turn the gate on could not be loaded and the environment does
+// not settle it. Treating either as "gate off" would silently remove the
+// protection the user asked for. --yes is an explicit approval.
 func confirmPolicyUnknown(cmd *cobra.Command, yes bool) error {
-	if configLoadErr == nil || yes {
-		return nil
-	}
-	if _, set := os.LookupEnv("GWS_CONFIRM_SENSITIVE"); set {
+	if yes {
 		return nil
 	}
 	effect, sensitive := sensitiveEffect(cmd)
 	if !sensitive {
 		return nil
 	}
-	return fmt.Errorf("the config file could not be read (%v), so it is unknown whether confirm_sensitive is on; `gws %s` %s and was not run. Fix the config file, set GWS_CONFIRM_SENSITIVE, or re-run with --yes after the user approves", configLoadErr, commandKey(cmd), effect)
+	if _, policyErr := config.ConfirmSensitivePolicy(); policyErr != nil {
+		return fmt.Errorf("the confirmation setting could not be understood (%v), so it is unknown whether confirm_sensitive is on; `gws %s` %s and was not run. Correct the setting, or re-run with --yes after the user approves", policyErr, commandKey(cmd), effect)
+	}
+	// The setting parsed. If it came from the environment the policy is
+	// known whatever state the config file is in.
+	if _, set := os.LookupEnv(config.ConfirmSensitiveEnv); set || configLoadErr == nil {
+		return nil
+	}
+	return fmt.Errorf("the config file could not be read (%v), so it is unknown whether confirm_sensitive is on; `gws %s` %s and was not run. Fix the config file, set %s to true or false, or re-run with --yes after the user approves", configLoadErr, commandKey(cmd), effect, config.ConfirmSensitiveEnv)
 }
 
 func GetFormat() string {

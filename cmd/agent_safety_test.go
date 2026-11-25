@@ -2226,3 +2226,48 @@ func TestConfirmGate_UnreadableConfigBlocksSensitiveCommands(t *testing.T) {
 		t.Errorf("with a readable config: %v", err)
 	}
 }
+
+// A confirmation setting that is present but not a recognisable on/off
+// value must not read as "off". Sensitive commands are refused until it
+// is corrected; an empty override does not count as a setting either.
+func TestConfirmGate_InvalidSettingBlocksSensitiveCommands(t *testing.T) {
+	originalErr := configLoadErr
+	t.Cleanup(func() { configLoadErr = originalErr })
+	send, _, _ := rootCmd.Find([]string{"gmail", "send"})
+	list, _, _ := rootCmd.Find([]string{"gmail", "list"})
+
+	for _, value := range []string{"treu", "", "  ", "2", "enable"} {
+		configLoadErr = nil
+		t.Setenv("GWS_CONFIRM_SENSITIVE", value)
+		err := confirmPolicyUnknown(send, false)
+		if err == nil || !strings.Contains(err.Error(), "could not be understood") {
+			t.Errorf("GWS_CONFIRM_SENSITIVE=%q: err = %v, want the command refused", value, err)
+		}
+		if err := confirmPolicyUnknown(list, false); err != nil {
+			t.Errorf("GWS_CONFIRM_SENSITIVE=%q: a read command should not be blocked: %v", value, err)
+		}
+		if err := confirmPolicyUnknown(send, true); err != nil {
+			t.Errorf("GWS_CONFIRM_SENSITIVE=%q with --yes: %v", value, err)
+		}
+		// The gate itself also treats an unreadable setting as on.
+		if !config.GetConfirmSensitive() {
+			t.Errorf("GWS_CONFIRM_SENSITIVE=%q: the gate reads as off", value)
+		}
+		// An unreadable config file does not change the answer.
+		configLoadErr = errors.New("yaml: broken")
+		if err := confirmPolicyUnknown(send, false); err == nil {
+			t.Errorf("GWS_CONFIRM_SENSITIVE=%q with an unreadable config: not refused", value)
+		}
+	}
+
+	configLoadErr = nil
+	for value, want := range map[string]bool{"1": true, "true": true, "ON": true, "yes": true, "0": false, "false": false, "off": false, "No": false} {
+		t.Setenv("GWS_CONFIRM_SENSITIVE", value)
+		if err := confirmPolicyUnknown(send, false); err != nil {
+			t.Errorf("GWS_CONFIRM_SENSITIVE=%q: %v", value, err)
+		}
+		if got := config.GetConfirmSensitive(); got != want {
+			t.Errorf("GWS_CONFIRM_SENSITIVE=%q: gate on = %v, want %v", value, got, want)
+		}
+	}
+}
