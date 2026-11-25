@@ -401,8 +401,41 @@ func TestConditionalSensitive_LiteralFalseAndBracketMessages(t *testing.T) {
 	}
 }
 
+func TestConditionalSensitive_GmailLabelsToTrashOrSpam(t *testing.T) {
+	batch, _, _ := rootCmd.Find([]string{"gmail", "batch-modify"})
+	label, _, _ := rootCmd.Find([]string{"gmail", "label"})
+	t.Cleanup(func() {
+		_ = batch.Flags().Set("add-labels", "")
+		_ = label.Flags().Set("add", "")
+	})
+
+	for _, labels := range []string{"TRASH", "trash", "STARRED, Spam", "INBOX,TRASH"} {
+		_ = batch.Flags().Set("add-labels", labels)
+		if _, ok := sensitiveEffect(batch); !ok {
+			t.Errorf("gmail batch-modify --add-labels %q should require confirmation", labels)
+		}
+		_ = label.Flags().Set("add", labels)
+		if _, ok := sensitiveEffect(label); !ok {
+			t.Errorf("gmail label --add %q should require confirmation", labels)
+		}
+	}
+	// Ordinary labels, including names that merely contain the word.
+	for _, labels := range []string{"", "STARRED", "IMPORTANT,Work", "Trash-Reports", "NotSpam"} {
+		_ = batch.Flags().Set("add-labels", labels)
+		if _, ok := sensitiveEffect(batch); ok {
+			t.Errorf("gmail batch-modify --add-labels %q should not require confirmation", labels)
+		}
+	}
+	// Fails closed without a terminal.
+	_ = batch.Flags().Set("add-labels", "TRASH")
+	var errW bytes.Buffer
+	if err := confirmGate(batch, true, false, strings.NewReader(""), &errW, false); err == nil || !strings.Contains(err.Error(), "confirmation required") {
+		t.Errorf("gate error = %v", err)
+	}
+}
+
 func TestConditionalSensitive_RulesResolveAndTrigger(t *testing.T) {
-	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late"}
+	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash"}
 	for key, rule := range conditionalSensitive {
 		cmd, _, err := rootCmd.Find(strings.Fields(key))
 		if err != nil || commandKey(cmd) != key {

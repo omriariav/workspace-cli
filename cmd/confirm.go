@@ -94,12 +94,41 @@ var sensitiveCommands = map[string]string{
 // conditionalSensitive lists commands that send, share or delete only when
 // a specific flag carries a value: the same command without that flag is
 // an ordinary create or edit.
-var conditionalSensitive = map[string]struct{ flag, effect string }{
-	"drive update":     {"trashed", "moves a file to Trash"},
-	"chat setup-space": {"members", "creates a chat space and adds members to it"},
-	"calendar create":  {"attendees", "invites attendees to an event"},
-	"calendar update":  {"add-attendees", "invites attendees to an event"},
-	"calendar rsvp":    {"message", "sends a message to all attendees of an event"},
+var conditionalSensitive = map[string]conditionalRule{
+	"drive update":       {flag: "trashed", effect: "moves a file to Trash"},
+	"chat setup-space":   {flag: "members", effect: "creates a chat space and adds members to it"},
+	"calendar create":    {flag: "attendees", effect: "invites attendees to an event"},
+	"calendar update":    {flag: "add-attendees", effect: "invites attendees to an event"},
+	"calendar rsvp":      {flag: "message", effect: "sends a message to all attendees of an event"},
+	"gmail label":        {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam},
+	"gmail batch-modify": {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam},
+}
+
+// conditionalRule makes a command sensitive when flag is set, or, if when
+// is given, when the flag's value satisfies it.
+type conditionalRule struct {
+	flag, effect string
+	when         func(value string) bool
+}
+
+// triggered reports whether the rule applies to the flag as currently set.
+func (r conditionalRule) triggered(f *pflag.Flag) bool {
+	if r.when != nil {
+		return r.when(f.Value.String())
+	}
+	return flagIsSet(f)
+}
+
+// addsTrashOrSpam reports whether a comma-separated label list includes
+// the TRASH or SPAM system label, in any letter case.
+func addsTrashOrSpam(labels string) bool {
+	for _, label := range strings.Split(labels, ",") {
+		switch strings.ToUpper(strings.TrimSpace(label)) {
+		case "TRASH", "SPAM":
+			return true
+		}
+	}
+	return false
 }
 
 // flagIsSet reports whether a flag carries a real value, judged by the
@@ -137,7 +166,7 @@ func sensitiveEffect(cmd *cobra.Command) (string, bool) {
 	}
 	// Commands that are sensitive only when a particular flag is used.
 	if rule, ok := conditionalSensitive[key]; ok {
-		if f := cmd.Flags().Lookup(rule.flag); f != nil && flagIsSet(f) {
+		if f := cmd.Flags().Lookup(rule.flag); f != nil && rule.triggered(f) {
 			return rule.effect, true
 		}
 	}

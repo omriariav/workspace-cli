@@ -18,6 +18,10 @@
 // Prebuilt binaries for macOS and Linux are attached to each release at
 // https://github.com/omriariav/workspace-cli/releases.
 //
+// When building from a checkout of the repository, use "make install"
+// instead: it embeds the release version, which a plain "go install" of a
+// local tree does not.
+//
 // # Usage
 //
 // Configure an OAuth client, authenticate, and run commands:

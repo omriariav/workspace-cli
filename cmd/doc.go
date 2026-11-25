@@ -14,4 +14,7 @@
 // library with a stable API. Install the binary with:
 //
 //	go install github.com/omriariav/workspace-cli/cmd/gws@latest
+//
+// From a checkout of the repository, use "make install" so the version is
+// embedded.
 package cmd
