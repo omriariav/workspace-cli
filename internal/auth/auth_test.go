@@ -916,6 +916,33 @@ func TestSaveRefreshedToken(t *testing.T) {
 	if scopes := LoadGrantedScopes(); len(scopes) != 1 || scopes[0] != "scope-x" || LoadGrantedAccount() != "acct-9" {
 		t.Errorf("scopes/account did not follow the rotated token: %v / %q", scopes, LoadGrantedAccount())
 	}
+	// Interrupted rotation: the record was rewritten for the new token but
+	// the process stopped before the token itself was saved. The old token
+	// is still on disk and must still have its record.
+	if err := SaveToken(&oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if access := LoadGrantedAccess(); access["gmail"] != AccessReadOnly {
+		t.Errorf("after an interrupted rotation the old token lost its record: %v", access)
+	}
+	// ...and completing it later (the token write) keeps the record too.
+	if err := SaveToken(&oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if access := LoadGrantedAccess(); access["gmail"] != AccessReadOnly {
+		t.Errorf("after the rotation completes the record is missing: %v", access)
+	}
+	// An unrelated token matches neither fingerprint.
+	if err := SaveToken(&oauth2.Token{AccessToken: "x", RefreshToken: "someone-else"}); err != nil {
+		t.Fatal(err)
+	}
+	if LoadGrantedAccess() != nil {
+		t.Error("a record mid-rotation must still be ignored for an unrelated token")
+	}
+	if err := SaveToken(&oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-2"}); err != nil {
+		t.Fatal(err)
+	}
+
 	// A second command still holding the pre-rotation token must not put
 	// it back.
 	if err := SaveRefreshedToken(current, &oauth2.Token{AccessToken: "c3", RefreshToken: "rotating-1"}); err != nil {

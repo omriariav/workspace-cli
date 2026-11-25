@@ -177,10 +177,15 @@ func LoadGrantedServices() []string {
 // account is the stable Google account ID the token belongs to ("" if it
 // could not be determined).
 func SaveGrantedAccess(access map[string]string, scopes []string, account string, token *oauth2.Token) error {
+	return saveGrantedRecord(grantedAccessRecord{Token: tokenFingerprint(token), Services: access, Scopes: scopes, Account: account})
+}
+
+// saveGrantedRecord writes the access record atomically.
+func saveGrantedRecord(record grantedAccessRecord) error {
 	if err := config.EnsureConfigDir(); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	data, err := json.Marshal(grantedAccessRecord{Token: tokenFingerprint(token), Services: access, Scopes: scopes, Account: account})
+	data, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("failed to marshal granted access: %w", err)
 	}
@@ -244,6 +249,11 @@ type grantedAccessRecord struct {
 	Scopes []string `json:"scopes,omitempty"`
 	// Account is the stable Google account ID the token belongs to.
 	Account string `json:"account,omitempty"`
+	// PreviousToken is set only while a refresh-token rotation is being
+	// saved: the fingerprint of the token being replaced. The record is
+	// valid for either token, so an interruption between the two writes
+	// leaves it usable whichever token ends up on disk.
+	PreviousToken string `json:"previous_token,omitempty"`
 }
 
 // tokenFingerprint identifies a stored authorization without revealing
@@ -333,12 +343,24 @@ func SaveRefreshedToken(stored, refreshed *oauth2.Token) error {
 	// must be saved — and the access record, which is bound to the token's
 	// fingerprint, moved over to it. The record is read before the token
 	// is replaced, while it still matches.
+	//
+	// The record is rewritten first, valid for both the old and the new
+	// token, and only then is the token replaced. Whichever of the two
+	// writes an interruption lands between, the token on disk still has
+	// its record; if the token cannot be saved, the record is put back.
 	record := loadGrantedRecord()
-	if err := SaveToken(&toSave); err != nil {
-		return err
+	if record == nil {
+		return SaveToken(&toSave)
 	}
-	if record != nil {
-		return SaveGrantedAccess(record.Services, record.Scopes, record.Account, &toSave)
+	restore := SnapshotGrantedAccess()
+	record.PreviousToken = base
+	record.Token = tokenFingerprint(&toSave)
+	if err := saveGrantedRecord(*record); err != nil {
+		return err // nothing changed: the old token and record stand
+	}
+	if err := SaveToken(&toSave); err != nil {
+		restore()
+		return err
 	}
 	return nil
 }
@@ -399,7 +421,8 @@ func loadGrantedRecord() *grantedAccessRecord {
 	if err != nil {
 		return nil
 	}
-	if fp := tokenFingerprint(token); fp == "" || fp != record.Token {
+	fp := tokenFingerprint(token)
+	if fp == "" || (fp != record.Token && fp != record.PreviousToken) {
 		return nil
 	}
 	return &record
