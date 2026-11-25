@@ -210,6 +210,16 @@ func commandScopes(cmd *cobra.Command) map[string]interface{} {
 			"run `gws <service> <command> --show-scopes` for one service."
 		return result
 	}
+	// `auth status` asks Google who the stored login belongs to.
+	if commandKey(cmd) == "auth status" {
+		identity := auth.ScopesForServices(nil)
+		result["services"] = []string{}
+		result["scopes"] = identity
+		result["readonly_scopes"] = identity
+		result["note"] = "With a stored OAuth login, auth status calls Google's user-info endpoint, which needs the identity scope every login already includes. " +
+			"With an external access token or a service-account mode it only checks local configuration and uses no scopes."
+		return result
+	}
 	if len(services) == 0 {
 		result["services"] = []string{}
 		result["scopes"] = []string{}

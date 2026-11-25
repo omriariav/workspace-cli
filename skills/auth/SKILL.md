@@ -90,7 +90,9 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
   create`, `update`, `renew`, `reactivate` and `delete` still work for
   those targets after a read-only login that includes the `events`
   service. Drive file and permission subscriptions need the
-  `drive.metadata` scope, which only a full `events` login requests.
+  `drive.metadata` scope, and Meet subscriptions made with
+  `--meet-created-scope` need `meetings.space.created`; only a full
+  `events` login requests those.
   Leave `events` out of `--services` if a read-only login must not manage
   subscriptions.
 - `--add` merges the selected services into the existing authorization
@@ -174,7 +176,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   body); `events subscriptions create` and `reactivate` (start or
   resume delivery of events to a Pub/Sub topic); commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
-  `share`, `unshare`, `update-acl`, `unsubscribe`; Drive `share`, `unshare`,
+  `share`, `unshare`, `update-acl`, `unsubscribe`, `move`; Drive `share`, `unshare`,
   `update-permission`, `move`, `start-approval`, `reassign-approval`; Chat
   `add-member`, `update-member`).
 - Not covered: creating or editing content, `untrash`, and responding to

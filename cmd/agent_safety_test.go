@@ -253,10 +253,20 @@ func TestIntrospection_ShowScopes(t *testing.T) {
 	if strings.Contains(loginNote, "does not use Google OAuth scopes") {
 		t.Errorf("auth login note = %q", loginNote)
 	}
-	// Other auth commands really use none.
+	// auth status looks up the account, which needs the identity scope
+	// (and nothing else); no login is suggested for it.
 	status, _ := runIntrospection(t, "auth", "status", "--show-scopes")
-	if len(toStrings(status["scopes"])) != 0 {
-		t.Errorf("auth status scopes = %v", status["scopes"])
+	statusScopes := toStrings(status["scopes"])
+	if len(statusScopes) != 1 || statusScopes[0] != "https://www.googleapis.com/auth/userinfo.email" || status["login"] != nil {
+		t.Errorf("auth status --show-scopes = %v", status)
+	}
+	if note, _ := status["note"].(string); !strings.Contains(note, "user-info") || !strings.Contains(note, "service-account") {
+		t.Errorf("auth status note = %v", status["note"])
+	}
+	// auth logout really uses none.
+	logout, _ := runIntrospection(t, "auth", "logout", "--show-scopes")
+	if len(toStrings(logout["scopes"])) != 0 {
+		t.Errorf("auth logout scopes = %v", logout["scopes"])
 	}
 
 	version, _ := runIntrospection(t, "version", "--show-scopes")
@@ -348,6 +358,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},
 		{"drive", "move"},
+		{"calendar", "move"},
 	}
 	for _, path := range covered {
 		cmd, _, err := rootCmd.Find(path)
