@@ -121,7 +121,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	var existingAccess map[string]string
 	// The authorization this login starts from. --add extends it, so it
 	// must still be the stored one when the result is saved.
-	baseAuthorization := ""
+	var baseAuthorization *oauth2.Token
 	if add {
 		// --add is for adding specific services. Without a selection it
 		// would fall back to every service and ask for full access to all
@@ -136,7 +136,8 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		if err := refreshStoredToken(); err != nil {
 			return p.PrintError(fmt.Errorf("could not refresh the stored authorization (%v), so --add was not started; run `gws auth login` without --add to replace it", err))
 		}
-		baseAuthorization = auth.StoredTokenFingerprint()
+		// nil when nothing is stored yet.
+		baseAuthorization, _ = auth.LoadToken()
 		existingAccess = existingGrantedAccess()
 	}
 	access := mergeGrantedAccess(existingAccess, services, readOnly)
@@ -239,7 +240,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// Another login may have finished while the browser was open. Saving
 	// now would replace its grant with one built from the older state and
 	// silently drop whatever it added.
-	if add && auth.StoredTokenFingerprint() != baseAuthorization {
+	// A refresh-token rotation by a concurrent command is the same login
+	// and does not count as a change.
+	if add && !auth.StoredAuthorizationIs(baseAuthorization) {
 		return p.PrintError(fmt.Errorf("the stored authorization changed while this login was in progress (another `gws auth login` finished first), so this one was not saved; run the --add login again"))
 	}
 

@@ -237,6 +237,17 @@ func commandScopes(cmd *cobra.Command) map[string]interface{} {
 			"run `gws <service> <command> --show-scopes` for one service."
 		return result
 	}
+	// `hooks test` (and the hooks it exercises) can run read-only Workspace
+	// commands under the stored login when the Workspace provider is on.
+	if commandKey(cmd) == "hooks test" {
+		sources := []string{"gmail", "calendar", "tasks", "chat"}
+		result["services"] = sources
+		result["scopes"] = auth.ReadOnlyScopesForServices(sources)
+		result["readonly_scopes"] = auth.ReadOnlyScopesForServices(sources)
+		result["note"] = "Only when the Workspace provider is enabled: the hook then reads from the configured sources (Gmail, Calendar, Tasks, Chat) with the stored login, read-only. " +
+			"With only the time provider it uses no scopes. An external access token is never used for hooks."
+		return result
+	}
 	// `auth status` asks Google who the stored login belongs to.
 	if commandKey(cmd) == "auth status" {
 		identity := auth.ScopesForServices(nil)

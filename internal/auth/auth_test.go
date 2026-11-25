@@ -1213,6 +1213,46 @@ func TestEnsureFreshToken_SavesAnExpiryOnlyRefresh(t *testing.T) {
 	}
 }
 
+func TestStoredAuthorizationIs(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// Nothing stored, and nothing was when the work started.
+	if !StoredAuthorizationIs(nil) {
+		t.Error("nothing stored should match a nil base")
+	}
+	base := &oauth2.Token{AccessToken: "a", RefreshToken: "r1"}
+	if StoredAuthorizationIs(base) {
+		t.Error("a base token cannot match when nothing is stored")
+	}
+	if err := SaveToken(base); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", base); err != nil {
+		t.Fatal(err)
+	}
+	if !StoredAuthorizationIs(base) || StoredAuthorizationIs(nil) {
+		t.Error("the stored token should match itself and not a nil base")
+	}
+	// A concurrent command rotates the refresh token: still the same login,
+	// so an --add that started from `base` may be saved.
+	if err := SaveRefreshedToken(base, &oauth2.Token{AccessToken: "b", RefreshToken: "r2"}); err != nil {
+		t.Fatal(err)
+	}
+	if !StoredAuthorizationIs(base) {
+		t.Error("a recorded rotation must still count as the same login")
+	}
+	// A different login replaces it: not the same.
+	other := &oauth2.Token{AccessToken: "c", RefreshToken: "other"}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", other); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveToken(other); err != nil {
+		t.Fatal(err)
+	}
+	if StoredAuthorizationIs(base) {
+		t.Error("a replaced login must not match")
+	}
+}
+
 func TestSameAuthorization(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := &oauth2.Token{RefreshToken: "r1"}

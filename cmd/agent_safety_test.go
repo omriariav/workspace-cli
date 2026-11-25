@@ -297,6 +297,15 @@ func TestIntrospection_ShowScopes(t *testing.T) {
 		t.Errorf("events subscriptions list should still report scopes: %v", subs)
 	}
 
+	// hooks test can read Workspace data when that provider is enabled.
+	hooksTest, _ := runIntrospection(t, "hooks", "test", "--show-scopes")
+	hookScopes := toStrings(hooksTest["scopes"])
+	hookNote, _ := hooksTest["note"].(string)
+	if !containsStr(hookScopes, "https://www.googleapis.com/auth/gmail.readonly") || !containsStr(hookScopes, "https://www.googleapis.com/auth/calendar.readonly") ||
+		containsStr(hookScopes, "https://www.googleapis.com/auth/gmail.send") || !strings.Contains(hookNote, "Workspace provider") {
+		t.Errorf("hooks test --show-scopes = %v", hooksTest)
+	}
+
 	// auth login is what requests scopes: it must not claim to use none.
 	login, _ := runIntrospection(t, "auth", "login", "--show-scopes")
 	loginNote, _ := login["note"].(string)
@@ -1553,6 +1562,21 @@ func TestAuthLoginCommand_HasReadonlyAndAddFlags(t *testing.T) {
 
 // The config file is not a source for the access token: only the flag and
 // the environment variable are.
+// Hook context is cached per workspace and belongs to the stored login, so
+// the commands a hook runs never receive an external access token.
+func TestHookSubprocessEnv_DropsExternalAccessToken(t *testing.T) {
+	env := hookSubprocessEnv([]string{"PATH=/usr/bin", "GWS_ACCESS_TOKEN=ya29.other-account", "GWS_CLIENT_ID=id", "HOME=/home/u"})
+	joined := strings.Join(env, "\n")
+	if strings.Contains(joined, "GWS_ACCESS_TOKEN") || strings.Contains(joined, "ya29.other-account") {
+		t.Errorf("the external token reached the hook subprocess: %v", env)
+	}
+	for _, want := range []string{"PATH=/usr/bin", "GWS_CLIENT_ID=id", "HOME=/home/u", "GWS_NO_UPDATE_CHECK=1"} {
+		if !containsStr(env, want) {
+			t.Errorf("hook environment is missing %q: %v", want, env)
+		}
+	}
+}
+
 func TestAccessToken_NotReadFromConfigFile(t *testing.T) {
 	setTestAccessToken("")
 	viper.Set("access_token", "left-over-in-config")

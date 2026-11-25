@@ -464,13 +464,29 @@ func hookWorkspaceKey(cwd string) string {
 	return filepath.Clean(path)
 }
 
+// hookSubprocessEnv returns the environment for the gws commands a hook
+// runs to gather Workspace context. Hook context is cached per workspace
+// and belongs to the stored login, so an externally supplied access token
+// is never passed on: otherwise another account's mail or calendar could
+// be cached and shown after that token is gone.
+func hookSubprocessEnv(parent []string) []string {
+	env := make([]string, 0, len(parent)+1)
+	for _, kv := range parent {
+		if strings.HasPrefix(kv, config.AccessTokenEnv+"=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, "GWS_NO_UPDATE_CHECK=1")
+}
+
 func runSelfGWS(ctx context.Context, args []string) ([]byte, error) {
 	self, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 	command := exec.CommandContext(ctx, self, args...)
-	command.Env = append(os.Environ(), "GWS_NO_UPDATE_CHECK=1")
+	command.Env = hookSubprocessEnv(os.Environ())
 	return command.Output()
 }
 

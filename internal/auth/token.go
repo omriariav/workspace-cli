@@ -449,6 +449,22 @@ var (
 	ErrLoginChanged = errors.New("the stored login changed while this command was starting; run the command again")
 )
 
+// StoredAuthorizationIs reports whether the login on disk is still the one
+// `base` was read from: the identical token, or its recorded rotation. A
+// nil base means "nothing was stored", which holds only while nothing is.
+// Use it under the login lock to decide whether work that started from
+// base may be saved.
+func StoredAuthorizationIs(base *oauth2.Token) bool {
+	current, err := LoadToken()
+	if base == nil {
+		return err != nil
+	}
+	if err != nil {
+		return false
+	}
+	return sameAuthorization(base, current)
+}
+
 // sameAuthorization reports whether current, read from disk, is the same
 // login as loaded: the identical refresh token, or its replacement after a
 // refresh-token rotation, which the access record vouches for by naming

@@ -134,6 +134,8 @@ gws calendar events --days 1
   for example, has no Workspace scopes.
 - The token is read only from the environment variable or the flag,
   never from `config.yaml`.
+- Session context hooks (`gws hooks`) never use it: they always read with
+  the stored login, so cached hook context cannot mix accounts.
 - `--access-token <token>` also works, but a flag value is visible in process
   listings and shell history — prefer the environment variable.
 
