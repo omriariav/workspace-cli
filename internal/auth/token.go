@@ -204,6 +204,23 @@ func SaveGrantedAccess(access map[string]string, token *oauth2.Token) error {
 	return fmt.Errorf("failed to set temp file permissions")
 }
 
+// GrantedServicesForToken returns the services granted to the stored
+// token. It prefers the token-bound access record, which cannot describe
+// another login, and falls back to the plain service list written by
+// versions that did not record access levels.
+func GrantedServicesForToken() []string {
+	if access := LoadGrantedAccess(); access != nil {
+		var services []string
+		for _, svc := range ValidServiceNames() {
+			if _, ok := access[svc]; ok {
+				services = append(services, svc)
+			}
+		}
+		return services
+	}
+	return LoadGrantedServices()
+}
+
 // grantedAccessRecord is the on-disk form of the access metadata.
 type grantedAccessRecord struct {
 	// Token is a fingerprint of the refresh token the levels describe.

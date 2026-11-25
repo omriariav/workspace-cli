@@ -302,6 +302,22 @@ func TestSuggestSlots_WorkingHoursBoundaryInSpringForwardGap(t *testing.T) {
 		t.Errorf("civilInstant(ambiguous 01:30) = %v", got.UTC())
 	}
 
+	// Fall back, Sunday 2026-11-01: 01:00-02:00 happens twice. A window
+	// ending at 01:30 must stop at the first 01:30 (EDT, 05:30 UTC), not
+	// run on for another hour to the second one.
+	fallFrom := time.Date(2026, 11, 1, 0, 0, 0, 0, loc)
+	fallTo := time.Date(2026, 11, 2, 0, 0, 0, 0, loc)
+	fall := suggestSlots(nil, fallFrom, fallTo, 30*time.Minute, 0, time.Hour+30*time.Minute, loc, true, 5)
+	if len(fall) != 1 || !fall[0].Start.Equal(mustTime(t, "2026-11-01T04:00:00Z")) || !fall[0].FreeUntil.Equal(mustTime(t, "2026-11-01T05:30:00Z")) {
+		t.Errorf("fall-back window = %v, want 00:00-01:30 EDT (04:00-05:30 UTC)", fall)
+	}
+	for _, m := range []int{0, 15, 30, 59} {
+		got := civilInstant(2026, 11, 1, 1, m, loc)
+		if name, _ := got.In(loc).Zone(); name != "EDT" {
+			t.Errorf("civilInstant(01:%02d) resolved to %s, want the first occurrence (EDT)", m, name)
+		}
+	}
+
 	from := time.Date(2026, 3, 8, 0, 0, 0, 0, loc)
 	to := time.Date(2026, 3, 9, 0, 0, 0, 0, loc)
 	got := suggestSlots(nil, from, to, 30*time.Minute, 2*time.Hour+30*time.Minute, 17*time.Hour, loc, true, 5)

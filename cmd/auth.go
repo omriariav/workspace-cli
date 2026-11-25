@@ -112,12 +112,12 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		// --add is for adding specific services. Without a selection it
 		// would fall back to every service and ask for full access to all
 		// of them, the opposite of an incremental request.
-		if !cmd.Flags().Changed("services") && len(config.GetServices()) == 0 {
+		if !hasServiceSelection(cmd) {
 			return usageErrorf("--add requires --services: name the service(s) to add, e.g. gws auth login --add --services drive")
 		}
 		existingAccess = existingGrantedAccess()
 	}
-	scopes := loginScopes(services, readOnly, cmd.Flags().Changed("services") || len(config.GetServices()) > 0)
+	scopes := loginScopes(services, readOnly, hasServiceSelection(cmd))
 	access := mergeGrantedAccess(existingAccess, services, readOnly)
 
 	if config.GetAccessToken() != "" {
@@ -505,14 +505,24 @@ func getUserInfo(token *oauth2.Token) (*oauth2api.Userinfo, error) {
 	return svc.Userinfo.Get().Do()
 }
 
+// flagString returns a string flag's value, or "" if it is not defined.
+func flagString(cmd *cobra.Command, name string) string {
+	v, _ := cmd.Flags().GetString(name)
+	return v
+}
+
+// hasServiceSelection reports whether the login names specific services,
+// through a non-empty --services value or a configured services list.
+func hasServiceSelection(cmd *cobra.Command) bool {
+	return len(splitList(flagString(cmd, "services"))) > 0 || len(config.GetServices()) > 0
+}
+
 // resolveServices determines which services to authorize from the
 // --services flag, the config file, or (by default) every service.
 func resolveServices(cmd *cobra.Command) []string {
-	if servicesFlag, _ := cmd.Flags().GetString("services"); servicesFlag != "" {
-		services := strings.Split(servicesFlag, ",")
-		for i := range services {
-			services[i] = strings.TrimSpace(services[i])
-		}
+	// Blank entries are dropped, so `--services=` or `--services ,` counts
+	// as no selection rather than as a selection of nothing.
+	if services := splitList(flagString(cmd, "services")); len(services) > 0 {
 		return services
 	}
 	if configServices := config.GetServices(); len(configServices) > 0 {

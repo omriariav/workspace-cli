@@ -775,6 +775,10 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 		t.Errorf("metadata should survive an access-token refresh, got %v", got)
 	}
 
+	if got := strings.Join(GrantedServicesForToken(), ","); got != "gmail,drive" {
+		t.Errorf("GrantedServicesForToken = %q, want the token-bound record", got)
+	}
+
 	// A different login's token: the metadata describes another grant
 	// (interrupted write, or two logins racing) and must be ignored.
 	if err := SaveToken(&oauth2.Token{AccessToken: "b1", RefreshToken: "refresh-2"}); err != nil {
@@ -782,6 +786,13 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	}
 	if got := LoadGrantedAccess(); got != nil {
 		t.Errorf("metadata for another token must be ignored, got %v", got)
+	}
+	// With no matching record, the legacy service list is used.
+	if err := SaveGrantedServices([]string{"tasks"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(GrantedServicesForToken(), ","); got != "tasks" {
+		t.Errorf("GrantedServicesForToken fallback = %q, want tasks", got)
 	}
 }
 

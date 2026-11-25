@@ -130,7 +130,7 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 		ctx:             ctx,
 		authMode:        modeCfg,
 		tokenSource:     ts,
-		grantedServices: auth.LoadGrantedServices(),
+		grantedServices: auth.GrantedServicesForToken(),
 		scopeWarned:     make(map[string]bool),
 	}, nil
 }

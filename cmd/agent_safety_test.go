@@ -702,10 +702,29 @@ func TestAuthLogin_AddRequiresServices(t *testing.T) {
 		loginCmd.Flags().Lookup("add").Changed = false
 	})
 
-	// Fails before any browser flow starts.
-	err := runLogin(loginCmd, nil)
-	if err == nil || !strings.Contains(err.Error(), "--add requires --services") {
-		t.Fatalf("error = %v, want --add requires --services", err)
+	// Fails before any browser flow starts — with the flag absent, empty,
+	// or made only of blanks (Cobra marks all but the first as "changed").
+	t.Cleanup(func() {
+		_ = loginCmd.Flags().Set("services", "")
+		loginCmd.Flags().Lookup("services").Changed = false
+	})
+	for _, value := range []string{"(unset)", "", " ", ",", " , "} {
+		if value != "(unset)" {
+			_ = loginCmd.Flags().Set("services", value)
+		}
+		err := runLogin(loginCmd, nil)
+		if err == nil || !strings.Contains(err.Error(), "--add requires --services") {
+			t.Fatalf("--services %q: error = %v, want --add requires --services", value, err)
+		}
+	}
+
+	// And an empty --services never counts as a scoped selection.
+	if hasServiceSelection(loginCmd) {
+		t.Error("blank --services must not count as a selection")
+	}
+	_ = loginCmd.Flags().Set("services", "gmail, ,drive")
+	if got := strings.Join(resolveServices(loginCmd), ","); got != "gmail,drive" || !hasServiceSelection(loginCmd) {
+		t.Errorf("resolveServices = %q", got)
 	}
 }
 

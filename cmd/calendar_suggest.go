@@ -163,6 +163,13 @@ func civilInstant(year int, month time.Month, day, hour, min int, loc *time.Loca
 
 	t := time.Date(year, month, day, hour, min, 0, 0, loc)
 	if wall(t).Equal(want) {
+		// The time exists. If a fall-back change makes it occur twice,
+		// time.Date may pick either one; take the earliest explicitly.
+		for back := 3 * time.Hour; back > 0; back -= 15 * time.Minute {
+			if earlier := t.Add(-back); wall(earlier).Equal(want) {
+				return earlier
+			}
+		}
 		return t
 	}
 	// The requested time does not exist: scan the surrounding hours.
