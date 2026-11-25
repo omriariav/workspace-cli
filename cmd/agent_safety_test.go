@@ -679,6 +679,26 @@ func TestMissingScopes_ComparesScopeByScope(t *testing.T) {
 	}
 }
 
+func TestAddGrantedAccess(t *testing.T) {
+	// Used by `auth status` on both the success and the failed-lookup
+	// path, so the fields never depend on the user-info call.
+	result := map[string]interface{}{"authenticated": true}
+	addGrantedAccess(result, map[string]string{"gmail": auth.AccessReadOnly})
+	if result["read_only"] != true || result["services"] == nil {
+		t.Errorf("read-only login = %v", result)
+	}
+	result = map[string]interface{}{}
+	addGrantedAccess(result, map[string]string{"gmail": auth.AccessReadOnly, "drive": auth.AccessFull})
+	if result["read_only"] != false {
+		t.Errorf("mixed login = %v", result)
+	}
+	result = map[string]interface{}{}
+	addGrantedAccess(result, nil)
+	if len(result) != 0 {
+		t.Errorf("no recorded access should add nothing: %v", result)
+	}
+}
+
 func TestCheckSameAccount(t *testing.T) {
 	if err := checkSameAccount("acct-A", "acct-A", nil); err != nil {
 		t.Errorf("same account rejected: %v", err)

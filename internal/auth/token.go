@@ -324,10 +324,23 @@ func SaveRefreshedToken(stored, refreshed *oauth2.Token) error {
 	if toSave.RefreshToken == "" {
 		toSave.RefreshToken = stored.RefreshToken
 	}
-	if tokenFingerprint(&toSave) != base {
-		return nil
+	if tokenFingerprint(&toSave) == base {
+		return SaveToken(&toSave)
 	}
-	return SaveToken(&toSave)
+
+	// The provider rotated the refresh token. It is the same grant under a
+	// new credential, and the old one may no longer work, so the new token
+	// must be saved — and the access record, which is bound to the token's
+	// fingerprint, moved over to it. The record is read before the token
+	// is replaced, while it still matches.
+	record := loadGrantedRecord()
+	if err := SaveToken(&toSave); err != nil {
+		return err
+	}
+	if record != nil {
+		return SaveGrantedAccess(record.Services, record.Scopes, record.Account, &toSave)
+	}
+	return nil
 }
 
 // LockLoginState serialises the writes a login makes (token, access

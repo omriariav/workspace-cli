@@ -893,6 +893,38 @@ func TestSaveRefreshedToken(t *testing.T) {
 	if TokenExists() {
 		t.Error("a refresh must not bring back a token after logout")
 	}
+	// Refresh-token rotation: the provider hands back a new refresh token
+	// for the same grant. It must be saved (the old one may be dead), and
+	// the access record must follow it.
+	current := &oauth2.Token{AccessToken: "c1", RefreshToken: "rotating-1"}
+	if err := SaveToken(current); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessReadOnly}, []string{"scope-x"}, "acct-9", current); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveRefreshedToken(current, &oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-2"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = LoadToken()
+	if got.AccessToken != "c2" || got.RefreshToken != "rotating-2" {
+		t.Errorf("rotated token not saved: %+v", got)
+	}
+	if access := LoadGrantedAccess(); access["gmail"] != AccessReadOnly {
+		t.Errorf("access record did not follow the rotated token: %v", access)
+	}
+	if scopes := LoadGrantedScopes(); len(scopes) != 1 || scopes[0] != "scope-x" || LoadGrantedAccount() != "acct-9" {
+		t.Errorf("scopes/account did not follow the rotated token: %v / %q", scopes, LoadGrantedAccount())
+	}
+	// A second command still holding the pre-rotation token must not put
+	// it back.
+	if err := SaveRefreshedToken(current, &oauth2.Token{AccessToken: "c3", RefreshToken: "rotating-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = LoadToken(); got.RefreshToken != "rotating-2" {
+		t.Errorf("a stale holder overwrote the rotated token: %+v", got)
+	}
+
 	// Nil arguments are a no-op.
 	if err := SaveRefreshedToken(nil, stored); err != nil {
 		t.Errorf("nil stored: %v", err)

@@ -273,6 +273,16 @@ func loginTokenToStore(incoming *oauth2.Token) (*oauth2.Token, error) {
 	return incoming, nil
 }
 
+// addGrantedAccess adds the per-service access levels and the read_only
+// summary to a status result. It adds nothing when no levels are recorded.
+func addGrantedAccess(result map[string]interface{}, access map[string]string) {
+	if len(access) == 0 {
+		return
+	}
+	result["services"] = access
+	result["read_only"] = allReadOnly(access)
+}
+
 // existingGrantedAccess returns the access levels recorded by earlier
 // logins, or nothing when no authorization is stored. Logins made before access levels were recorded only have a
 // service list; those services were granted full access.
@@ -762,23 +772,18 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get user info
-	userInfo, err := getUserInfo(token)
-	if err != nil {
-		return p.Print(map[string]interface{}{
-			"authenticated": true,
-			"expires":       token.Expiry.Format(time.RFC3339),
-			"user":          "unknown (failed to fetch user info)",
-		})
-	}
-
 	result := map[string]interface{}{
 		"authenticated": true,
-		"email":         userInfo.Email,
 		"expires":       token.Expiry.Format(time.RFC3339),
 	}
-	if access := auth.LoadGrantedAccess(); len(access) > 0 {
-		result["services"] = access
-		result["read_only"] = allReadOnly(access)
+	// The recorded access levels are local: report them whether or not
+	// the user-info lookup below succeeds.
+	addGrantedAccess(result, auth.LoadGrantedAccess())
+
+	if userInfo, err := getUserInfo(token); err != nil {
+		result["user"] = "unknown (failed to fetch user info)"
+	} else {
+		result["email"] = userInfo.Email
 	}
 	return p.Print(result)
 }
