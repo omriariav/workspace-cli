@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -34,6 +35,7 @@ type Factory struct {
 	authMode        *auth.AuthModeConfig
 	tokenSource     oauth2.TokenSource
 	grantedServices []string        // services granted at login time
+	grantedScopes   []string        // exact scopes granted at login time, when recorded
 	scopeWarned     map[string]bool // track warnings to avoid repeats
 
 	gmail         *gmail.Service
@@ -56,6 +58,22 @@ type Factory struct {
 // while the service-account modes mint credentials from the configured JSON
 // key (with the DWD mode impersonating the configured Workspace user).
 func NewFactory(ctx context.Context) (*Factory, error) {
+	// An externally managed access token takes precedence over every other
+	// credential source. It is used as-is: never refreshed, never stored.
+	// One that was supplied but is empty is an error, never a reason to
+	// fall back to a different identity.
+	if err := config.CheckAccessToken(); err != nil {
+		return nil, err
+	}
+	if tok := config.GetAccessToken(); tok != "" {
+		return &Factory{
+			ctx:         ctx,
+			authMode:    &auth.AuthModeConfig{Mode: auth.AuthModeOAuth},
+			tokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: tok}),
+			scopeWarned: make(map[string]bool),
+		}, nil
+	}
+
 	modeCfg, err := auth.ResolveAuthMode(
 		config.GetAuthMode(),
 		config.GetServiceAccountKeyFile(),
@@ -102,24 +120,38 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 		return nil, fmt.Errorf("missing OAuth credentials")
 	}
 
-	ts := auth.GetTokenSource(ctx, clientID, clientSecret, token)
+	// The command at hand still works if a refresh cannot be saved, but if
+	// the refresh token was rotated the stored login may stop working, so
+	// say so. The error is a file or lock error and carries no credential.
+	warnSaveFailed := func(saveErr error) {
+		fmt.Fprintf(os.Stderr, "Warning: the refreshed login could not be saved (%v); if later commands fail to authenticate, run `gws auth login` again\n", saveErr)
+	}
 
-	// Check if token is valid by trying to get a token
-	newToken, err := ts.Token()
+	// Refresh (if needed) and save under the login lock, so concurrent
+	// commands never race each other's refresh.
+	token, saveErr, err := auth.EnsureFreshToken(ctx, clientID, clientSecret, token)
+	if errors.Is(err, auth.ErrLoginChanged) || errors.Is(err, auth.ErrLoginRemoved) || errors.Is(err, auth.ErrRefreshBusy) || errors.Is(err, auth.ErrRefreshLockUnavailable) {
+		// Not "run gws auth login": the stored login is fine, and logging
+		// in again would not help.
+		return nil, err
+	}
 	if err != nil {
 		return nil, fmt.Errorf("token expired, run: gws auth login")
 	}
-
-	// Save refreshed token if it changed
-	if newToken.AccessToken != token.AccessToken {
-		_ = auth.SaveToken(newToken)
+	if saveErr != nil {
+		warnSaveFailed(saveErr)
 	}
+	// Refreshes later in the same command take the same guarded path.
+	ts := auth.GuardedTokenSource(ctx, clientID, clientSecret, token, warnSaveFailed)
 
 	return &Factory{
-		ctx:             ctx,
-		authMode:        modeCfg,
-		tokenSource:     ts,
-		grantedServices: auth.LoadGrantedServices(),
+		ctx:         ctx,
+		authMode:    modeCfg,
+		tokenSource: ts,
+		// Read for the token this factory actually uses, not whatever is
+		// on disk by now.
+		grantedServices: auth.GrantedServicesFor(token),
+		grantedScopes:   auth.LoadGrantedScopesFor(token),
 		scopeWarned:     make(map[string]bool),
 	}, nil
 }
@@ -181,15 +213,46 @@ func (f *Factory) checkServiceScopes(service string) {
 		}
 	}
 
+	// Scopes are shared between services (events and chat, people and
+	// contacts), so a service that was never named at login can still be
+	// partly usable. If the token holds any of this service's scopes, do
+	// not claim it lacks permission; a real gap surfaces as the API's own
+	// insufficient-scope error.
+	if f.holdsAnyScopeOf(canonical) || f.holdsAnyScopeOf(service) {
+		return
+	}
+
 	// Only warn once per service per session
 	if f.scopeWarned[service] {
 		return
 	}
 	f.scopeWarned[service] = true
 
-	allServices := append(f.grantedServices, service)
-	fmt.Fprintf(os.Stderr, "%s requires additional permissions. Re-authorize with:\n  gws auth login --services %s\n",
-		service, strings.Join(allServices, ","))
+	// Suggest adding just the missing service, so following the hint
+	// neither replaces the stored authorization nor widens other
+	// services, and offer the read-only variant.
+	fmt.Fprintf(os.Stderr, "%s requires additional permissions. Add it with:\n  gws auth login --add --services %s\n(append --readonly if read-only access is enough)\n",
+		service, service)
+}
+
+// holdsAnyScopeOf reports whether the recorded grant includes at least one
+// of the service's own scopes (full or read-only). The userinfo scopes
+// every login carries do not count.
+func (f *Factory) holdsAnyScopeOf(service string) bool {
+	if len(f.grantedScopes) == 0 {
+		return false
+	}
+	held := make(map[string]bool, len(f.grantedScopes))
+	for _, s := range f.grantedScopes {
+		held[s] = true
+	}
+	one := []string{service}
+	for _, s := range append(auth.ScopesForServices(one), auth.ReadOnlyScopesForServices(one)...) {
+		if held[s] && !strings.Contains(s, "/auth/userinfo.") {
+			return true
+		}
+	}
+	return false
 }
 
 // canonicalService returns the canonical name for a service, resolving any

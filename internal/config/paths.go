@@ -11,6 +11,7 @@ const (
 	tokenFileName       = "token.json"
 	configName          = "config.yaml"
 	grantedServicesFile = "granted_services.json"
+	grantedAccessFile   = "granted_access.json"
 )
 
 // GetConfigDir returns the configuration directory path.
@@ -42,6 +43,12 @@ func GetConfigPath() string {
 // GetGrantedServicesPath returns the full path to the granted services file.
 func GetGrantedServicesPath() string {
 	return filepath.Join(GetConfigDir(), grantedServicesFile)
+}
+
+// GetGrantedAccessPath returns the full path to the per-service access-level
+// file written at login time.
+func GetGrantedAccessPath() string {
+	return filepath.Join(GetConfigDir(), grantedAccessFile)
 }
 
 // EnsureConfigDir creates the configuration directory if it doesn't exist.

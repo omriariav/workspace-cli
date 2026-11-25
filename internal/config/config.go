@@ -1,6 +1,12 @@
 package config
 
 import (
+	"fmt"
+	"gopkg.in/yaml.v3"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/spf13/viper"
 )
 
@@ -24,7 +30,156 @@ const (
 	KeyAuthMode          = "auth_mode"
 	KeyServiceAccountKey = "service_account_key_file"
 	KeyImpersonateUser   = "impersonate_user"
+	KeyConfirmSensitive  = "confirm_sensitive"
 )
+
+// AccessTokenEnv is the environment variable that carries an externally
+// managed access token.
+const AccessTokenEnv = "GWS_ACCESS_TOKEN"
+
+// AccessTokenFlag returns the value of the --access-token flag. The cmd
+// package sets it; it is nil where there is no flag (library use, tests).
+var AccessTokenFlag func() string
+
+// AccessTokenFlagSet reports whether --access-token was given on the
+// command line, whatever its value. Set by the cmd package alongside
+// AccessTokenFlag.
+var AccessTokenFlagSet func() bool
+
+// GetAccessToken returns an externally managed OAuth access token. When
+// set, gws uses it as-is: no login, no refresh.
+//
+// Only the --access-token flag and the GWS_ACCESS_TOKEN environment
+// variable are read. The config file is deliberately not a source: a
+// token left in config.yaml would silently take precedence over the
+// stored login or a service account long after it was put there.
+func GetAccessToken() string {
+	if AccessTokenFlag != nil {
+		if v := strings.TrimSpace(AccessTokenFlag()); v != "" {
+			return v
+		}
+	}
+	return strings.TrimSpace(os.Getenv(AccessTokenEnv))
+}
+
+// CheckAccessToken rejects an external access token that was supplied but
+// is empty or blank, for example because the command that was meant to
+// produce it printed nothing. Treating that as "no token" would quietly
+// run the command with the stored login or a service account instead: a
+// different identity than the caller selected.
+func CheckAccessToken() error {
+	if AccessTokenFlagSet != nil && AccessTokenFlagSet() {
+		if AccessTokenFlag == nil || strings.TrimSpace(AccessTokenFlag()) == "" {
+			return fmt.Errorf("--access-token was given but is empty; not falling back to another credential. Pass a token, or remove the flag to use the stored login")
+		}
+		return nil
+	}
+	if v, ok := os.LookupEnv(AccessTokenEnv); ok && strings.TrimSpace(v) == "" {
+		return fmt.Errorf("%s is set but empty; not falling back to another credential. Set it to a token, or unset it to use the stored login", AccessTokenEnv)
+	}
+	return nil
+}
+
+// ConfirmSensitiveEnv is the environment variable that sets the
+// confirmation policy, overriding the config file.
+const ConfirmSensitiveEnv = "GWS_CONFIRM_SENSITIVE"
+
+// ParseConfirmSetting reads an on/off value for the confirmation gate.
+// Only unambiguous spellings are accepted. Anything else (a typo such as
+// "treu", or an empty value) is an error: for a safety switch, an
+// unreadable setting must not quietly mean "off".
+func ParseConfirmSetting(v string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "t", "yes", "y", "on":
+		return true, nil
+	case "0", "false", "f", "no", "n", "off":
+		return false, nil
+	}
+	return false, fmt.Errorf("%q is not a valid on/off value (use true or false)", v)
+}
+
+// ConfirmSensitivePolicy reports whether sensitive commands (send, share,
+// delete) must be confirmed before they run. The environment variable
+// wins over confirm_sensitive in the config file. An error means a value
+// was given but could not be understood; the caller must then treat the
+// policy as unknown rather than off.
+func ConfirmSensitivePolicy() (bool, error) {
+	if v, set := os.LookupEnv(ConfirmSensitiveEnv); set {
+		on, err := ParseConfirmSetting(v)
+		if err != nil {
+			return false, fmt.Errorf("%s: %w", ConfirmSensitiveEnv, err)
+		}
+		return on, nil
+	}
+	// viper's own view of the file comes first: it is the snapshot every
+	// other setting is read from, in whatever format the file is (YAML,
+	// TOML, JSON). One case it gets wrong for this purpose: a YAML key
+	// written with no value (`confirm_sensitive:` or `: null`, or a JSON
+	// null) looks
+	// absent to it, and a key that is there but empty must not mean
+	// "off". Only for that case is the YAML file looked at directly.
+	var raw interface{}
+	if viper.InConfig(KeyConfirmSensitive) {
+		raw = viper.Get(KeyConfirmSensitive)
+	} else if value, present := yamlConfigFileValue(KeyConfirmSensitive); present && value == nil {
+		raw = nil
+	} else {
+		return false, nil
+	}
+	switch value := raw.(type) {
+	case bool:
+		return value, nil
+	case nil:
+		return false, fmt.Errorf("%s in the config file has no value", KeyConfirmSensitive)
+	default:
+		on, err := ParseConfirmSetting(fmt.Sprint(value))
+		if err != nil {
+			return false, fmt.Errorf("%s in the config file: %w", KeyConfirmSensitive, err)
+		}
+		return on, nil
+	}
+}
+
+// yamlConfigFileValue returns the value a top-level key has in the YAML
+// config file viper loaded, and whether the key is written there at all
+// (with any value, including none). Keys are matched without regard to
+// case, as viper does. A file in another format, or one that cannot be
+// read or parsed, has no keys here.
+func yamlConfigFileValue(key string) (value interface{}, present bool) {
+	path := viper.ConfigFileUsed()
+	if path == "" {
+		return nil, false
+	}
+	// JSON is read with the same parser (it is a subset of YAML) and has
+	// the same explicit null. TOML has no null to detect.
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".yaml", ".yml", ".json":
+	default:
+		return nil, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var settings map[string]interface{}
+	if err := yaml.Unmarshal(data, &settings); err != nil {
+		return nil, false
+	}
+	for k, v := range settings {
+		if strings.EqualFold(k, key) {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+// GetConfirmSensitive reports whether the confirmation gate is on. A
+// setting that cannot be understood counts as on here; callers that can
+// report the problem should use ConfirmSensitivePolicy.
+func GetConfirmSensitive() bool {
+	on, err := ConfirmSensitivePolicy()
+	return on || err != nil
+}
 
 // GetClientID returns the OAuth client ID from config or environment.
 func GetClientID() string {

@@ -462,6 +462,57 @@ Usage: gws calendar update-acl [flags]
 
 ---
 
+## gws calendar suggest-time
+
+Suggests free meeting slots across one or more calendars.
+
+```
+Usage: gws calendar suggest-time [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--from` | string | | Yes | Start of the search range |
+| `--to` | string | | Yes | End of the search range; a date-only value includes that day |
+| `--duration` | string | `30m` | No | Meeting length in whole minutes, up to 24 hours: e.g. `30m`, `1h30m`, or minutes as a number |
+| `--calendars` | string | `primary` | No | Comma-separated calendar IDs that must be free |
+| `--attendees` | string | | No | Comma-separated attendee emails that must also be free |
+| `--working-hours` | string | `09:00-17:00` | No | Daily window `HH:MM-HH:MM`, or `any` for the whole day |
+| `--timezone` | string | local | No | IANA timezone for working hours and output |
+| `--max` | int | `5` | No | Maximum number of suggestions |
+| `--include-weekends` | bool | `false` | No | Also search Saturdays and Sundays |
+| `--allow-partial` | bool | `false` | No | Suggest times even if some (not all) calendars could not be read |
+
+### Output
+
+```json
+{
+  "time_min": "2026-12-01T00:00:00Z",
+  "time_max": "2026-12-06T00:00:00Z",
+  "timezone": "UTC",
+  "duration_minutes": 30,
+  "calendars_checked": ["primary", "a@example.com"],
+  "unavailable": [],
+  "partial": false,
+  "suggestions": [
+    {"start": "2026-12-01T12:00:00Z", "end": "2026-12-01T12:30:00Z", "free_until": "2026-12-01T13:00:00Z", "free_minutes": 60}
+  ],
+  "count": 1
+}
+```
+
+Each suggestion is the earliest slot of one free window. If any requested
+calendar cannot be read the command fails. With `--allow-partial` it
+continues as long as at least one calendar could be read: `partial` is `true`
+and `unavailable` lists each unread calendar as
+`{"calendar": "...", "reason": "..."}` — their availability is unknown. If no
+calendar at all could be read, the command fails even with `--allow-partial`. At most 50
+calendars can be checked at once, over a range of at most 92 days. A group
+address counts as its members (up to 100 per group) toward that 50; a group
+or request over the limit is reported as unavailable.
+
+---
+
 ## gws calendar freebusy
 
 Queries free/busy information for one or more calendars.

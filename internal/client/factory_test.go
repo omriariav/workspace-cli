@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
+	"github.com/omriariav/workspace-cli/internal/config"
+	"github.com/spf13/viper"
 )
 
 // captureStderr swaps os.Stderr for a pipe, runs fn, and returns whatever was
@@ -168,5 +170,112 @@ func TestUserModes_AllowServiceClients(t *testing.T) {
 		if err := f.requireUserAuth("gmail"); err != nil {
 			t.Errorf("mode %+v: unexpected rejection: %v", mode, err)
 		}
+	}
+}
+
+func TestMissingServiceHint_SuggestsIncrementalLogin(t *testing.T) {
+	f := &Factory{grantedServices: []string{"gmail"}, scopeWarned: map[string]bool{}}
+	out := captureStderr(t, func() { f.checkServiceScopes("calendar") })
+
+	if !strings.Contains(out, "gws auth login --add --services calendar") {
+		t.Errorf("hint should add only the missing service: %q", out)
+	}
+	if !strings.Contains(out, "--readonly") {
+		t.Errorf("hint should offer the read-only variant: %q", out)
+	}
+	// It must not suggest re-requesting (and widening) other services.
+	if strings.Contains(out, "gmail") {
+		t.Errorf("hint should not mention already-granted services: %q", out)
+	}
+}
+
+func TestMissingServiceHint_NotShownWhenSharedScopesCoverTheService(t *testing.T) {
+	const pfx = "https://www.googleapis.com/auth/"
+	// An `events --readonly` login: chat was never named, but the token
+	// holds Chat read scopes that the events service shares.
+	f := &Factory{
+		grantedServices: []string{"events"},
+		grantedScopes:   []string{pfx + "userinfo.email", pfx + "chat.messages.readonly", pfx + "chat.spaces.readonly"},
+		scopeWarned:     map[string]bool{},
+	}
+	if out := captureStderr(t, func() { f.checkServiceScopes("chat") }); out != "" {
+		t.Errorf("no warning expected when the token already holds Chat scopes: %q", out)
+	}
+	// A service the token holds nothing for still gets the hint; the
+	// shared userinfo scope does not count as coverage.
+	if out := captureStderr(t, func() { f.checkServiceScopes("drive") }); !strings.Contains(out, "--add --services drive") {
+		t.Errorf("drive should still be reported as missing: %q", out)
+	}
+}
+
+func TestNewFactory_AccessTokenTakesPrecedence(t *testing.T) {
+	// No stored token, no client credentials, and a service-account mode
+	// configured: the external token must still win and be used verbatim.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	setTestAccessToken("  external-token  ")
+	viper.Set("auth_mode", "service-account-app")
+	viper.Set("service_account_key_file", "/nonexistent/key.json")
+	t.Cleanup(func() {
+		setTestAccessToken("")
+		viper.Set("auth_mode", "")
+		viper.Set("service_account_key_file", "")
+	})
+
+	f, err := NewFactory(context.Background())
+	if err != nil {
+		t.Fatalf("NewFactory with access token: %v", err)
+	}
+	if f.AuthMode().Mode != auth.AuthModeOAuth {
+		t.Errorf("auth mode = %q, want %q", f.AuthMode().Mode, auth.AuthModeOAuth)
+	}
+	tok, err := f.TokenSource().Token()
+	if err != nil {
+		t.Fatalf("Token(): %v", err)
+	}
+	if tok.AccessToken != "external-token" {
+		t.Errorf("access token = %q, want the trimmed external token", tok.AccessToken)
+	}
+	if tok.RefreshToken != "" {
+		t.Error("an external token must not carry a refresh token")
+	}
+}
+
+// setTestAccessToken sets (or, with "", clears) the external access token
+// the way a user would: through the environment variable.
+func setTestAccessToken(value string) {
+	if value == "" {
+		_ = os.Unsetenv("GWS_ACCESS_TOKEN")
+		return
+	}
+	_ = os.Setenv("GWS_ACCESS_TOKEN", value)
+}
+
+// A token variable that is set but empty (a broker that printed nothing)
+// must fail, not fall back to the stored login or a service account: that
+// would run the command as a different identity than the caller selected.
+func TestNewFactory_EmptyAccessTokenIsRejected(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, value := range []string{"", "   "} {
+		t.Setenv(config.AccessTokenEnv, value)
+		if _, err := NewFactory(context.Background()); err == nil || !strings.Contains(err.Error(), "is set but empty") {
+			t.Errorf("GWS_ACCESS_TOKEN=%q: err = %v, want an empty-token error", value, err)
+		}
+	}
+
+	// The same for an explicit, empty --access-token, even when the
+	// environment holds a usable token.
+	t.Setenv(config.AccessTokenEnv, "env-token")
+	origValue, origSet := config.AccessTokenFlag, config.AccessTokenFlagSet
+	t.Cleanup(func() { config.AccessTokenFlag, config.AccessTokenFlagSet = origValue, origSet })
+	config.AccessTokenFlag = func() string { return " " }
+	config.AccessTokenFlagSet = func() bool { return true }
+	if _, err := NewFactory(context.Background()); err == nil || !strings.Contains(err.Error(), "--access-token was given but is empty") {
+		t.Errorf("empty flag: err = %v, want an empty-flag error", err)
+	}
+
+	// A flag that carries a token is fine.
+	config.AccessTokenFlag = func() string { return "flag-token" }
+	if _, err := NewFactory(context.Background()); err != nil {
+		t.Errorf("flag token: %v", err)
 	}
 }

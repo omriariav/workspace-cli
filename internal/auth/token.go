@@ -1,10 +1,15 @@
 package auth
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/config"
@@ -15,7 +20,9 @@ const (
 	lockSuffix       = ".lock"
 	lockTimeout      = 5 * time.Second
 	lockPollInterval = 50 * time.Millisecond
-	staleLockAge     = 30 * time.Second
+	// staleLockAge is how old a legacy lock file must be before it is
+	// treated as left behind by a process that died.
+	staleLockAge = 30 * time.Second
 )
 
 // LoadToken loads the OAuth token from the token file.
@@ -160,62 +167,571 @@ func LoadGrantedServices() []string {
 	return services
 }
 
+// SaveGrantedAccess persists the access level ("full" or "readonly") granted
+// to each service at login time. It is local metadata only: the token's real
+// scopes are always enforced by Google.
+//
+// The record carries a fingerprint of the token it describes, so metadata
+// left behind by another login (an interrupted write, two logins racing)
+// is recognised as stale and ignored on load.
+//
+// scopes is the exact scope list the token was granted. It is what later
+// logins compare against: access levels are a summary for people, and two
+// different scope sets can share a level.
+//
+// account is the stable Google account ID the token belongs to ("" if it
+// could not be determined).
+func SaveGrantedAccess(access map[string]string, scopes []string, account string, token *oauth2.Token) error {
+	return saveGrantedRecord(grantedAccessRecord{Token: tokenFingerprint(token), Services: access, Scopes: scopes, Account: account})
+}
+
+// saveGrantedRecord writes the access record atomically. A variable so
+// tests can make the write fail.
+var saveGrantedRecord = func(record grantedAccessRecord) error {
+	if err := config.EnsureConfigDir(); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+	data, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("failed to marshal granted access: %w", err)
+	}
+	// Atomic replace, so a failed or interrupted write never leaves a
+	// truncated or half-old file behind.
+	path := config.GetGrantedAccessPath()
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".granted-access-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if err := tmp.Chmod(0600); err == nil {
+		_, err = tmp.Write(data)
+		if cerr := tmp.Close(); err == nil {
+			err = cerr
+		}
+		if err == nil {
+			err = os.Rename(tmpPath, path)
+		}
+		if err != nil {
+			os.Remove(tmpPath)
+			return fmt.Errorf("failed to write granted access: %w", err)
+		}
+		return nil
+	}
+	tmp.Close()
+	os.Remove(tmpPath)
+	return fmt.Errorf("failed to set temp file permissions")
+}
+
+// GrantedServicesForToken returns the services granted to the stored
+// token. It prefers the token-bound access record, which cannot describe
+// another login, and falls back to the plain service list written by
+// versions that did not record access levels.
+func GrantedServicesForToken() []string {
+	token, err := LoadToken()
+	if err != nil {
+		token = nil
+	}
+	return GrantedServicesFor(token)
+}
+
+// LoadGrantedScopesFor returns the exact scopes recorded for the given
+// token, or nil if the record on disk belongs to another one.
+func LoadGrantedScopesFor(token *oauth2.Token) []string {
+	if record := readGrantedRecordFor(token); record != nil {
+		return record.Scopes
+	}
+	return nil
+}
+
+// GrantedServicesFor is GrantedServicesForToken for a specific token, so
+// a caller that already holds one reads metadata for that same login even
+// if another login replaces the stored one in the meantime.
+func GrantedServicesFor(token *oauth2.Token) []string {
+	// An access record that exists but does not match the token was
+	// written by another login, and so was the plain service list beside
+	// it: use neither.
+	if _, err := os.Stat(config.GetGrantedAccessPath()); err == nil {
+		record := readGrantedRecordFor(token)
+		if record == nil {
+			return nil
+		}
+		// A record with no services only notes a refresh-token rotation
+		// for a login that predates access records; the plain service
+		// list is still that login's own.
+		access := record.Services
+		if access == nil {
+			return LoadGrantedServices()
+		}
+		var services []string
+		for _, svc := range ValidServiceNames() {
+			if _, ok := access[svc]; ok {
+				services = append(services, svc)
+			}
+		}
+		return services
+	}
+	return LoadGrantedServices()
+}
+
+// grantedAccessRecord is the on-disk form of the access metadata.
+type grantedAccessRecord struct {
+	// Token is a fingerprint of the refresh token the levels describe.
+	Token    string            `json:"token"`
+	Services map[string]string `json:"services"`
+	// Scopes is the exact scope list granted to that token.
+	Scopes []string `json:"scopes,omitempty"`
+	// Account is the stable Google account ID the token belongs to.
+	Account string `json:"account,omitempty"`
+	// PreviousToken is set only while a refresh-token rotation is being
+	// saved: the fingerprint of the token being replaced. The record is
+	// valid for either token, so an interruption between the two writes
+	// leaves it usable whichever token ends up on disk.
+	PreviousToken string `json:"previous_token,omitempty"`
+}
+
+// tokenFingerprint identifies a stored authorization without revealing
+// it: a truncated SHA-256 of the refresh token, which stays the same
+// across access-token refreshes and changes with every login.
+func tokenFingerprint(token *oauth2.Token) string {
+	if token == nil || token.RefreshToken == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(token.RefreshToken))
+	return hex.EncodeToString(sum[:8])
+}
+
+// LoadGrantedAccess loads the per-service access levels for the stored
+// token. Returns nil when there is no metadata, no stored token, or the
+// metadata describes a different token than the one stored.
+func LoadGrantedAccess() map[string]string {
+	if record := loadGrantedRecord(); record != nil {
+		return record.Services
+	}
+	return nil
+}
+
+// LoadGrantedAccessFor returns the access levels recorded for the given
+// token, or nil if the record on disk belongs to another one. Use it when
+// the levels are reported next to something else derived from that same
+// token, so a login finishing in between cannot mix the two.
+func LoadGrantedAccessFor(token *oauth2.Token) map[string]string {
+	if record := readGrantedRecordFor(token); record != nil {
+		return record.Services
+	}
+	return nil
+}
+
+// LoadGrantedScopes returns the exact scopes granted to the stored token,
+// or nil when they are not known (no record, or a record for another
+// token).
+func LoadGrantedScopes() []string {
+	if record := loadGrantedRecord(); record != nil {
+		return record.Scopes
+	}
+	return nil
+}
+
+// LoadGrantedAccount returns the Google account ID recorded for the
+// stored token, or "" when it is not known.
+func LoadGrantedAccount() string {
+	if record := loadGrantedRecord(); record != nil {
+		return record.Account
+	}
+	return ""
+}
+
+// StoredTokenFingerprint identifies the authorization currently stored on
+// disk without revealing it. Returns "" when nothing is stored. Two calls
+// return the same value exactly when no login has replaced the token in
+// between.
+func StoredTokenFingerprint() string {
+	token, err := LoadToken()
+	if err != nil {
+		return ""
+	}
+	return tokenFingerprint(token)
+}
+
+// exchangeRefreshToken performs the network refresh. A variable so tests
+// can replace it.
+var exchangeRefreshToken = func(ctx context.Context, clientID, clientSecret string, token *oauth2.Token) (*oauth2.Token, error) {
+	return GetTokenSource(ctx, clientID, clientSecret, token).Token()
+}
+
+// EnsureFreshToken returns a currently valid token for the stored login,
+// refreshing it if needed.
+//
+// The refresh exchange and the save happen together under the login lock
+// (without the lock there is no refresh: see ErrRefreshLockUnavailable),
+// and the token is re-read from disk once the lock is held. Two processes
+// that find the same expired token therefore refresh one after the other:
+// the second sees the first's result and reuses it instead of refreshing
+// again, so a provider that rotates refresh tokens can never leave an
+// already-invalidated one as the last thing written.
+//
+// saveErr is non-nil when the refresh worked but could not be stored; the
+// returned token is still usable for the current command.
+func EnsureFreshToken(ctx context.Context, clientID, clientSecret string, loaded *oauth2.Token) (token *oauth2.Token, saveErr, err error) {
+	if loaded == nil {
+		return nil, nil, fmt.Errorf("no token")
+	}
+	if loaded.Valid() {
+		return loaded, nil, nil
+	}
+
+	unlock, lockErr := LockLoginState()
+	// Another process holds the lock: it may be refreshing this very
+	// token. Refreshing alongside it could send the same refresh token
+	// twice, which, with rotation, can leave a dead credential stored.
+	// Stop before contacting the provider.
+	if errors.Is(lockErr, errLockTimeout) {
+		return nil, nil, ErrRefreshBusy
+	}
+	// The same goes for a lock that could not be taken for any other
+	// reason (a read-only or full config directory, no file descriptors
+	// left). Failing to create the lock proves nothing about other
+	// processes: one with a writable view of the same directory may hold
+	// it right now. Without the lock there is also no safe way to store a
+	// rotated refresh token, so the exchange is not attempted.
+	if lockErr != nil {
+		return nil, nil, fmt.Errorf("%w: %v", ErrRefreshLockUnavailable, lockErr)
+	}
+	defer unlock()
+	// Another process may have acted while this one waited for the lock.
+	// Only the same authorization may be picked up from disk: if the
+	// login was removed or replaced, this command must not carry on as
+	// whoever is stored now, nor revive credentials that were just logged
+	// out.
+	current, loadErr := LoadToken()
+	if loadErr != nil {
+		return nil, nil, ErrLoginRemoved
+	}
+	if !sameAuthorization(loaded, current) {
+		return nil, nil, ErrLoginChanged
+	}
+	if current.Valid() {
+		return current, nil, nil
+	}
+	loaded = current
+
+	exchangeCtx, cancel := context.WithTimeout(ctx, refreshExchangeTimeout)
+	defer cancel()
+	fresh, err := exchangeRefreshToken(exchangeCtx, clientID, clientSecret, loaded)
+	if err != nil {
+		return nil, nil, err
+	}
+	if fresh.RefreshToken == "" {
+		copied := *fresh
+		copied.RefreshToken = loaded.RefreshToken
+		fresh = &copied
+	}
+	if !TokenRefreshed(loaded, fresh) {
+		return fresh, nil, nil
+	}
+	return fresh, saveRefreshedTokenLocked(loaded, fresh), nil
+}
+
+// ErrRefreshLockUnavailable is returned by EnsureFreshToken when the
+// stored token has expired and the login lock could not be taken, so the
+// token was not refreshed. Nothing was sent to Google.
+var ErrRefreshLockUnavailable = errors.New("the stored token has expired and could not be refreshed safely because the login lock is unavailable (the gws config directory must be writable); fix that, or supply a token with GWS_ACCESS_TOKEN")
+
+// errLockTimeout marks a lock that could not be taken because another
+// process holds it (as opposed to one that could not be created at all).
+var errLockTimeout = errors.New("timeout waiting for lock")
+
+// ErrRefreshBusy is returned by EnsureFreshToken when another gws process
+// is in the middle of refreshing or changing the stored login. Nothing was
+// sent to Google; running the command again is safe.
+var ErrRefreshBusy = errors.New("another gws command is refreshing or changing the stored login; run the command again")
+
+// refreshExchangeTimeout bounds the network refresh, which runs while the
+// login lock is held: a stalled request must not keep other commands
+// waiting on the lock indefinitely.
+const refreshExchangeTimeout = 20 * time.Second
+
+// Errors returned by EnsureFreshToken when the stored login is no longer
+// the one the command started with. They say what to do, so callers
+// should show them as they are.
+var (
+	ErrLoginRemoved = errors.New("the stored login was removed while this command was starting; run `gws auth login`")
+	ErrLoginChanged = errors.New("the stored login changed while this command was starting; run the command again")
+)
+
+// StoredAuthorizationIs reports whether the login on disk is still the one
+// `base` was read from: the identical token, or its recorded rotation. A
+// nil base means "nothing was stored", which holds only while nothing is.
+// Use it under the login lock to decide whether work that started from
+// base may be saved.
+func StoredAuthorizationIs(base *oauth2.Token) bool {
+	if base == nil {
+		// Only a token file that is not there counts as "nothing stored".
+		// One that exists but cannot be read or decoded may be a login
+		// that was just written: it must not be taken for an empty slot
+		// and overwritten.
+		_, statErr := os.Stat(config.GetTokenPath())
+		return errors.Is(statErr, os.ErrNotExist)
+	}
+	current, err := LoadToken()
+	if err != nil {
+		return false
+	}
+	return sameAuthorization(base, current)
+}
+
+// sameAuthorization reports whether current, read from disk, is the same
+// login as loaded: the identical refresh token, or its replacement after a
+// refresh-token rotation, which the access record vouches for by naming
+// loaded's fingerprint as the one it superseded.
+func sameAuthorization(loaded, current *oauth2.Token) bool {
+	was, now := tokenFingerprint(loaded), tokenFingerprint(current)
+	if was == "" || now == "" {
+		return false
+	}
+	if was == now {
+		return true
+	}
+	record := readGrantedRecordFor(current)
+	return record != nil && record.Token == now && record.PreviousToken == was
+}
+
+// GuardedTokenSource returns a token source for the stored login whose
+// every refresh goes through EnsureFreshToken: under the login lock,
+// checked against what is on disk, and saved. A long-running command
+// whose token expires midway therefore refreshes the same safe way a new
+// command does, instead of refreshing privately and discarding the result.
+func GuardedTokenSource(ctx context.Context, clientID, clientSecret string, token *oauth2.Token, onSaveError func(error)) oauth2.TokenSource {
+	return &guardedTokenSource{ctx: ctx, clientID: clientID, clientSecret: clientSecret, current: token, onSaveError: onSaveError}
+}
+
+type guardedTokenSource struct {
+	mu           sync.Mutex
+	ctx          context.Context
+	clientID     string
+	clientSecret string
+	current      *oauth2.Token
+	onSaveError  func(error)
+}
+
+func (g *guardedTokenSource) Token() (*oauth2.Token, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	token, saveErr, err := EnsureFreshToken(g.ctx, g.clientID, g.clientSecret, g.current)
+	if err != nil {
+		return nil, err
+	}
+	if saveErr != nil && g.onSaveError != nil {
+		g.onSaveError(saveErr)
+	}
+	g.current = token
+	return token, nil
+}
+
+// TokenRefreshed reports whether a token source handed back something
+// other than the stored token: a new access token, a rotated refresh
+// token (which can arrive even when the access token is unchanged), or
+// the same strings with a later expiry.
+func TokenRefreshed(stored, current *oauth2.Token) bool {
+	if stored == nil || current == nil {
+		return false
+	}
+	if current.AccessToken != stored.AccessToken {
+		return true
+	}
+	if current.RefreshToken != "" && current.RefreshToken != stored.RefreshToken {
+		return true
+	}
+	// The same token strings with a later expiry: still worth saving, or
+	// every new command would find an expired token on disk and refresh
+	// again.
+	return current.Expiry.After(stored.Expiry)
+}
+
+// SaveRefreshedToken stores an access-token refresh of the given stored
+// token. It takes the login lock and saves only if `stored` is still the
+// authorization on disk: if a login or logout replaced it in the meantime
+// (for example a read-only login narrowing access), writing the refresh
+// would put the old, wider grant back. In that case nothing is written;
+// the refreshed token still works for the command that obtained it.
+func SaveRefreshedToken(stored, refreshed *oauth2.Token) error {
+	if stored == nil || refreshed == nil {
+		return nil
+	}
+	unlock, err := LockLoginState()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return saveRefreshedTokenLocked(stored, refreshed)
+}
+
+// saveRefreshedTokenLocked is SaveRefreshedToken for a caller that already
+// holds the login lock.
+func saveRefreshedTokenLocked(stored, refreshed *oauth2.Token) error {
+	base := tokenFingerprint(stored)
+	if base == "" || StoredTokenFingerprint() != base {
+		return nil
+	}
+	// A refresh response may omit the refresh token; keep the stored one
+	// so the token on disk stays the same authorization.
+	toSave := *refreshed
+	if toSave.RefreshToken == "" {
+		toSave.RefreshToken = stored.RefreshToken
+	}
+	if tokenFingerprint(&toSave) == base {
+		return SaveToken(&toSave)
+	}
+
+	// The provider rotated the refresh token. It is the same grant under a
+	// new credential, and the old one may no longer work, so the new token
+	// must be saved — and the access record, which is bound to the token's
+	// fingerprint, moved over to it. The record is read before the token
+	// is replaced, while it still matches.
+	//
+	// The record is rewritten first, valid for both the old and the new
+	// token, and only then is the token replaced. Whichever of the two
+	// writes an interruption lands between, the token on disk still has
+	// its record; if the token cannot be saved, the record is put back.
+	// Only a record that belongs to the token being rotated is carried
+	// over. A record left by another login (for instance one interrupted
+	// before it saved its own token) is not this token's, and binding it
+	// here would attach that login's account and scopes to this one.
+	record := readGrantedRecordFor(stored)
+	if record == nil {
+		// No record of this token's own. If there is no record on disk at
+		// all, this is a login that predates access records: note the
+		// rotation anyway, so another command that loaded the old token
+		// recognises the new one as the same login. A record belonging to
+		// some other login is left exactly as it is.
+		// If the token cannot then be saved, the note is taken back: a
+		// rotation that never happened must not be left on record.
+		restore := func() {}
+		var noteErr error
+		if _, statErr := os.Stat(config.GetGrantedAccessPath()); os.IsNotExist(statErr) {
+			restore = SnapshotGrantedAccess()
+			noteErr = saveGrantedRecord(grantedAccessRecord{Token: tokenFingerprint(&toSave), PreviousToken: base})
+		}
+		if err := SaveToken(&toSave); err != nil {
+			restore()
+			return err
+		}
+		if noteErr != nil {
+			// The rotated token is saved, which is what matters most. But
+			// without the note, a command that loaded the old token will
+			// take the new one for a different login; say so.
+			return fmt.Errorf("the rotated token was saved, but the rotation could not be recorded (a gws command already running may report that the login changed; running it again fixes that): %w", noteErr)
+		}
+		return nil
+	}
+	restore := SnapshotGrantedAccess()
+	record.PreviousToken = base
+	record.Token = tokenFingerprint(&toSave)
+	if recordErr := saveGrantedRecord(*record); recordErr != nil {
+		// The rotated token still has to be saved: the old refresh token
+		// may already be dead, and losing the credential is far worse than
+		// losing its metadata. Report the metadata failure afterwards.
+		if err := SaveToken(&toSave); err != nil {
+			return err
+		}
+		return fmt.Errorf("the rotated token was saved, but its access record could not be updated (auth status will not show per-service access until the next login): %w", recordErr)
+	}
+	if err := SaveToken(&toSave); err != nil {
+		restore()
+		return err
+	}
+	return nil
+}
+
+// LockLoginState serialises the writes a login makes (token, access
+// record, service list) across processes. The returned function releases
+// the lock.
+func LockLoginState() (unlock func(), err error) {
+	if err := config.EnsureConfigDir(); err != nil {
+		return nil, fmt.Errorf("failed to create config directory: %w", err)
+	}
+	unlock, err = acquireLock(filepath.Join(config.GetConfigDir(), "login"))
+	if err != nil {
+		return nil, fmt.Errorf("another gws login appears to be in progress: %w", err)
+	}
+	return unlock, nil
+}
+
+// SnapshotGrantedAccess captures the access record as it is on disk and
+// returns a function that puts it back (or removes the file if there was
+// none). Used to undo a metadata write when the token it describes could
+// not be saved.
+func SnapshotGrantedAccess() (restore func()) {
+	path := config.GetGrantedAccessPath()
+	previous, err := os.ReadFile(path)
+	existed := err == nil
+	return func() {
+		if !existed {
+			os.Remove(path)
+			return
+		}
+		tmp, err := os.CreateTemp(filepath.Dir(path), ".granted-access-*.tmp")
+		if err != nil {
+			return
+		}
+		tmpPath := tmp.Name()
+		_ = tmp.Chmod(0600)
+		_, werr := tmp.Write(previous)
+		cerr := tmp.Close()
+		if werr != nil || cerr != nil || os.Rename(tmpPath, path) != nil {
+			os.Remove(tmpPath)
+		}
+	}
+}
+
+// loadGrantedRecord reads the access record and returns it only if it
+// belongs to the stored token.
+func loadGrantedRecord() *grantedAccessRecord {
+	token, err := LoadToken()
+	if err != nil {
+		return nil
+	}
+	return readGrantedRecordFor(token)
+}
+
+// readGrantedRecordFor reads the access record and returns it only if it
+// belongs to the given token.
+func readGrantedRecordFor(token *oauth2.Token) *grantedAccessRecord {
+	data, err := os.ReadFile(config.GetGrantedAccessPath())
+	if err != nil {
+		return nil
+	}
+	var record grantedAccessRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return nil
+	}
+	fp := tokenFingerprint(token)
+	if fp == "" || (fp != record.Token && fp != record.PreviousToken) {
+		return nil
+	}
+	return &record
+}
+
+// GrantedMetadataExists reports whether either granted-metadata file is
+// present.
+func GrantedMetadataExists() bool {
+	for _, path := range []string{config.GetGrantedServicesPath(), config.GetGrantedAccessPath()} {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// DeleteGrantedMetadata removes the granted-services and granted-access
+// files. Missing files are not an error.
+func DeleteGrantedMetadata() {
+	os.Remove(config.GetGrantedServicesPath())
+	os.Remove(config.GetGrantedAccessPath())
+}
+
 // TokenExists checks if a token file exists.
 func TokenExists() bool {
 	tokenPath := config.GetTokenPath()
 	_, err := os.Stat(tokenPath)
 	return err == nil
-}
-
-// acquireLock creates a .lock file for the given path using O_CREATE|O_EXCL
-// for cross-platform mutual exclusion. Returns an unlock function.
-func acquireLock(path string) (unlock func(), err error) {
-	lockPath := path + lockSuffix
-	deadline := time.Now().Add(lockTimeout)
-
-	for {
-		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if err == nil {
-			// Write PID to lock file for debugging
-			fmt.Fprintf(f, "%d", os.Getpid())
-			f.Close()
-
-			return func() {
-				os.Remove(lockPath)
-			}, nil
-		}
-
-		if !os.IsExist(err) {
-			return nil, fmt.Errorf("lock file error: %w", err)
-		}
-
-		// Check for stale lock
-		if removeStaleLock(lockPath) {
-			continue // Retry immediately after cleaning stale lock
-		}
-
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("timeout waiting for lock: %s", lockPath)
-		}
-
-		time.Sleep(lockPollInterval)
-	}
-}
-
-// removeStaleLock removes a lock file if it's older than staleLockAge.
-// A token write takes milliseconds, so a 30s-old lock is reliably stale.
-// We use age-only detection (no PID probing) for cross-platform safety.
-// Returns true if the lock was removed.
-func removeStaleLock(lockPath string) bool {
-	info, err := os.Stat(lockPath)
-	if err != nil {
-		return false
-	}
-
-	if time.Since(info.ModTime()) > staleLockAge {
-		os.Remove(lockPath)
-		return true
-	}
-
-	return false
 }

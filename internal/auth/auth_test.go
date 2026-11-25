@@ -1,7 +1,10 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -457,47 +460,6 @@ func TestSaveToken_JSONFormat(t *testing.T) {
 
 // --- Lock Tests ---
 
-func TestAcquireLock_BasicAcquireRelease(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "test-file")
-
-	unlock, err := acquireLock(path)
-	if err != nil {
-		t.Fatalf("failed to acquire lock: %v", err)
-	}
-
-	// Lock file should exist
-	lockPath := path + lockSuffix
-	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
-		t.Error("lock file should exist while held")
-	}
-
-	unlock()
-
-	// Lock file should be removed
-	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
-		t.Error("lock file should be removed after unlock")
-	}
-}
-
-func TestAcquireLock_StaleLockCleanup(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "test-file")
-	lockPath := path + lockSuffix
-
-	// Create a stale lock file with a non-existent PID
-	os.WriteFile(lockPath, []byte("999999999"), 0600)
-	// Set modification time to the past
-	past := time.Now().Add(-staleLockAge - time.Second)
-	os.Chtimes(lockPath, past, past)
-
-	unlock, err := acquireLock(path)
-	if err != nil {
-		t.Fatalf("should acquire lock after cleaning stale lock: %v", err)
-	}
-	unlock()
-}
-
 // --- MergeToken Tests ---
 
 func TestMergeToken_PreservesRefresh(t *testing.T) {
@@ -560,47 +522,6 @@ func TestMergeToken_NilIncoming(t *testing.T) {
 }
 
 // --- Lock Timeout Test ---
-
-func TestAcquireLock_Timeout(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "test-file")
-
-	// Hold the lock
-	unlock, err := acquireLock(path)
-	if err != nil {
-		t.Fatalf("failed to acquire initial lock: %v", err)
-	}
-	defer unlock()
-
-	// Try to acquire again — should timeout
-	_, err = acquireLock(path)
-	if err == nil {
-		t.Fatal("expected timeout error when lock is held")
-	}
-	if !strings.Contains(err.Error(), "timeout") {
-		t.Errorf("expected timeout error, got: %v", err)
-	}
-}
-
-func TestAcquireLock_RecentLockNotStale(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "test-file")
-	lockPath := path + lockSuffix
-
-	// Create a recent lock (should NOT be cleaned as stale)
-	os.WriteFile(lockPath, []byte("999999999"), 0600)
-
-	// Should timeout, not clean the recent lock
-	_, err := acquireLock(path)
-	if err == nil {
-		t.Fatal("expected timeout — recent lock should not be treated as stale")
-	}
-
-	// Lock file should still exist
-	if _, statErr := os.Stat(lockPath); os.IsNotExist(statErr) {
-		t.Error("recent lock file should not have been removed")
-	}
-}
 
 // --- DeleteToken Lock Coordination Test ---
 
@@ -692,5 +613,851 @@ func TestLoadGrantedServices_NotExists(t *testing.T) {
 	loaded := LoadGrantedServices()
 	if loaded != nil {
 		t.Errorf("expected nil for non-existent file, got: %v", loaded)
+	}
+}
+
+func TestReadOnlyScopesForServices(t *testing.T) {
+	scopes := ReadOnlyScopesForServices([]string{"gmail", "drive"})
+	expected := []string{
+		"https://www.googleapis.com/auth/userinfo.email",
+		"https://www.googleapis.com/auth/gmail.readonly",
+		"https://www.googleapis.com/auth/drive.readonly",
+	}
+	if len(scopes) != len(expected) {
+		t.Fatalf("expected %d scopes, got %d: %v", len(expected), len(scopes), scopes)
+	}
+	for i, want := range expected {
+		if scopes[i] != want {
+			t.Errorf("scope %d = %s, want %s", i, scopes[i], want)
+		}
+	}
+}
+
+func TestReadOnlyServiceScopes_CoverEveryService(t *testing.T) {
+	for svc := range ServiceScopes {
+		ro, ok := ReadOnlyServiceScopes[svc]
+		if !ok || len(ro) == 0 {
+			t.Errorf("service %q has no read-only scopes", svc)
+		}
+	}
+	for svc := range ReadOnlyServiceScopes {
+		if _, ok := ServiceScopes[svc]; !ok {
+			t.Errorf("read-only table has unknown service %q", svc)
+		}
+	}
+}
+
+func TestReadOnlyServiceScopes_GrantNoWriteAccess(t *testing.T) {
+	// Scopes that are read-only without carrying a ".readonly" suffix.
+	allowed := map[string]bool{"userinfo.email": true, "userinfo.profile": true}
+	for svc, scopes := range ReadOnlyServiceScopes {
+		for _, s := range scopes {
+			if !strings.HasSuffix(s, ".readonly") && !allowed[s] {
+				t.Errorf("service %q read-only scope %q is not read-only", svc, s)
+			}
+		}
+	}
+}
+
+func TestReadOnlyEventsScopes_OmitUnsupportedDriveScope(t *testing.T) {
+	// The Workspace Events API does not accept drive.metadata.readonly for
+	// Drive subscriptions, so requesting it would be dead weight.
+	for _, s := range ReadOnlyServiceScopes["events"] {
+		if strings.HasPrefix(s, "drive.") {
+			t.Errorf("read-only events scopes should not include %q", s)
+		}
+	}
+}
+
+func TestServiceForScope_ResolvesReadOnlyOnlyScopes(t *testing.T) {
+	if got := ServiceForScope("https://www.googleapis.com/auth/spreadsheets.readonly"); got != "sheets" {
+		t.Errorf("ServiceForScope(spreadsheets.readonly) = %q, want sheets", got)
+	}
+}
+
+func TestGrantedAccess_RoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if got := LoadGrantedAccess(); got != nil {
+		t.Errorf("expected nil before any login, got %v", got)
+	}
+	tok := &oauth2.Token{AccessToken: "a1", RefreshToken: "refresh-1"}
+	want := map[string]string{"gmail": AccessReadOnly, "drive": AccessFull}
+	wantScopes := []string{"scope-a", "scope-b"}
+	if err := SaveGrantedAccess(want, wantScopes, "acct-1", tok); err != nil {
+		t.Fatalf("SaveGrantedAccess: %v", err)
+	}
+
+	// Metadata without a stored token is ignored.
+	if got := LoadGrantedAccess(); got != nil {
+		t.Errorf("expected nil without a stored token, got %v", got)
+	}
+	if err := SaveToken(tok); err != nil {
+		t.Fatal(err)
+	}
+	got := LoadGrantedAccess()
+	if len(got) != 2 || got["gmail"] != AccessReadOnly || got["drive"] != AccessFull {
+		t.Errorf("round trip = %v", got)
+	}
+	if account := LoadGrantedAccount(); account != "acct-1" {
+		t.Errorf("LoadGrantedAccount = %q", account)
+	}
+	// Bound to a specific token: the right one sees it, another does not,
+	// whatever happens to be on disk.
+	if got := LoadGrantedAccessFor(tok); got["gmail"] != AccessReadOnly {
+		t.Errorf("LoadGrantedAccessFor(matching token) = %v", got)
+	}
+	if got := LoadGrantedAccessFor(&oauth2.Token{RefreshToken: "someone-else"}); got != nil {
+		t.Errorf("LoadGrantedAccessFor(other token) = %v, want nil", got)
+	}
+	if got := LoadGrantedAccessFor(nil); got != nil {
+		t.Errorf("LoadGrantedAccessFor(nil) = %v, want nil", got)
+	}
+	if scopes := LoadGrantedScopes(); strings.Join(scopes, ",") != "scope-a,scope-b" {
+		t.Errorf("LoadGrantedScopes = %v", scopes)
+	}
+
+	// An access-token refresh keeps the refresh token: still valid.
+	if err := SaveToken(&oauth2.Token{AccessToken: "a2", RefreshToken: "refresh-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadGrantedAccess(); len(got) != 2 {
+		t.Errorf("metadata should survive an access-token refresh, got %v", got)
+	}
+
+	if got := strings.Join(GrantedServicesForToken(), ","); got != "gmail,drive" {
+		t.Errorf("GrantedServicesForToken = %q, want the token-bound record", got)
+	}
+
+	// A different login's token: the metadata describes another grant
+	// (interrupted write, or two logins racing) and must be ignored.
+	if err := SaveToken(&oauth2.Token{AccessToken: "b1", RefreshToken: "refresh-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadGrantedAccess(); got != nil {
+		t.Errorf("metadata for another token must be ignored, got %v", got)
+	}
+	if scopes := LoadGrantedScopes(); scopes != nil {
+		t.Errorf("scopes for another token must be ignored, got %v", scopes)
+	}
+	// The plain service list beside a mismatched record came from the same
+	// other login: it must not be used either.
+	if err := SaveGrantedServices([]string{"tasks"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := GrantedServicesForToken(); got != nil {
+		t.Errorf("GrantedServicesForToken with a stale record = %v, want nil", got)
+	}
+	// With no access record at all (a login from an older version), the
+	// plain list is the only metadata there is.
+	if err := os.Remove(config.GetGrantedAccessPath()); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(GrantedServicesForToken(), ","); got != "tasks" {
+		t.Errorf("GrantedServicesForToken legacy fallback = %q, want tasks", got)
+	}
+}
+
+func TestStoredTokenFingerprint_ChangesOnlyWhenTheLoginIsReplaced(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if StoredTokenFingerprint() != "" {
+		t.Error("nothing stored should give an empty fingerprint")
+	}
+	if err := SaveToken(&oauth2.Token{AccessToken: "a1", RefreshToken: "login-1"}); err != nil {
+		t.Fatal(err)
+	}
+	base := StoredTokenFingerprint()
+	if base == "" {
+		t.Fatal("a stored login should have a fingerprint")
+	}
+	// An access-token refresh is the same login.
+	if err := SaveToken(&oauth2.Token{AccessToken: "a2", RefreshToken: "login-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if StoredTokenFingerprint() != base {
+		t.Error("an access-token refresh must not look like a new login")
+	}
+	// Another login finishing in the meantime is detected.
+	if err := SaveToken(&oauth2.Token{AccessToken: "b1", RefreshToken: "login-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if StoredTokenFingerprint() == base {
+		t.Error("a replaced login must change the fingerprint")
+	}
+}
+
+// If the access record cannot be rewritten during a rotation, the rotated
+// token is still saved: the old refresh token may no longer work.
+func TestSaveRefreshedToken_RotationSurvivesMetadataFailure(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	current := &oauth2.Token{AccessToken: "c1", RefreshToken: "rotating-1"}
+	if err := SaveToken(current); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", current); err != nil {
+		t.Fatal(err)
+	}
+
+	original := saveGrantedRecord
+	saveGrantedRecord = func(grantedAccessRecord) error { return errors.New("disk full") }
+	t.Cleanup(func() { saveGrantedRecord = original })
+
+	err := SaveRefreshedToken(current, &oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-2"})
+	// The metadata failure is reported...
+	if err == nil || !strings.Contains(err.Error(), "access record could not be updated") || !strings.Contains(err.Error(), "disk full") {
+		t.Errorf("error = %v, want the metadata failure reported", err)
+	}
+	// ...but the rotated credential is on disk.
+	got, loadErr := LoadToken()
+	if loadErr != nil || got.AccessToken != "c2" || got.RefreshToken != "rotating-2" {
+		t.Errorf("rotated token not saved: %+v, %v", got, loadErr)
+	}
+	// The stale record no longer matches and is simply ignored.
+	if LoadGrantedAccess() != nil {
+		t.Error("the old record must not be read as describing the rotated token")
+	}
+}
+
+func TestEnsureFreshToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(_ context.Context, _, _ string, tok *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: fmt.Sprintf("fresh-%d", exchanges), RefreshToken: fmt.Sprintf("rotated-%d", exchanges), Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	ctx := context.Background()
+
+	// A valid token is returned as is: no exchange, nothing written.
+	valid := &oauth2.Token{AccessToken: "ok", RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}
+	if got, saveErr, err := EnsureFreshToken(ctx, "id", "secret", valid); err != nil || saveErr != nil || got != valid || exchanges != 0 {
+		t.Fatalf("valid token: %v, %v, %v after %d exchanges", got, saveErr, err, exchanges)
+	}
+
+	// An expired stored token is refreshed once and the rotation saved.
+	expired := &oauth2.Token{AccessToken: "old", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(expired); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "acct", expired); err != nil {
+		t.Fatal(err)
+	}
+	first, saveErr, err := EnsureFreshToken(ctx, "id", "secret", expired)
+	if err != nil || saveErr != nil || first.AccessToken != "fresh-1" || exchanges != 1 {
+		t.Fatalf("first refresh: %+v, %v, %v after %d exchanges", first, saveErr, err, exchanges)
+	}
+	if onDisk, _ := LoadToken(); onDisk.RefreshToken != "rotated-1" {
+		t.Errorf("rotated token not on disk: %+v", onDisk)
+	}
+
+	// A second process that loaded the same expired token before the
+	// first one refreshed must reuse the first's result, not exchange the
+	// now-retired refresh token again and overwrite the rotation.
+	second, saveErr, err := EnsureFreshToken(ctx, "id", "secret", expired)
+	if err != nil || saveErr != nil || exchanges != 1 {
+		t.Fatalf("second caller exchanged again: %v, %v after %d exchanges", saveErr, err, exchanges)
+	}
+	if second.AccessToken != "fresh-1" || second.RefreshToken != "rotated-1" {
+		t.Errorf("second caller got %+v, want the first refresh's token", second)
+	}
+	if onDisk, _ := LoadToken(); onDisk.RefreshToken != "rotated-1" {
+		t.Errorf("token on disk changed: %+v", onDisk)
+	}
+
+	// A failed exchange is an error and leaves the stored token alone.
+	if err := SaveToken(expired); err != nil {
+		t.Fatal(err)
+	}
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		return nil, errors.New("invalid_grant")
+	}
+	if _, _, err := EnsureFreshToken(ctx, "id", "secret", expired); err == nil {
+		t.Error("a failed refresh should be an error")
+	}
+	if onDisk, _ := LoadToken(); onDisk.RefreshToken != "r0" {
+		t.Errorf("a failed refresh must not change the stored token: %+v", onDisk)
+	}
+	if _, _, err := EnsureFreshToken(ctx, "id", "secret", nil); err == nil {
+		t.Error("nil token should be an error")
+	}
+}
+
+// A command that started with one login must never continue as another,
+// nor revive a login that was removed while it waited.
+func TestEnsureFreshToken_AbortsIfTheLoginChanged(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: "fresh", RefreshToken: "fresh-r", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	ctx := context.Background()
+	accountA := &oauth2.Token{AccessToken: "a", RefreshToken: "account-A", Expiry: time.Now().Add(-time.Hour)}
+
+	// Another login (account B) replaced the stored credentials.
+	accountB := &oauth2.Token{AccessToken: "b", RefreshToken: "account-B", Expiry: time.Now().Add(time.Hour)}
+	if err := SaveToken(accountB); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "acct-B", accountB); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := EnsureFreshToken(ctx, "id", "secret", accountA)
+	if !errors.Is(err, ErrLoginChanged) || got != nil {
+		t.Errorf("replaced login: token = %+v, err = %v; want an abort", got, err)
+	}
+	if exchanges != 0 {
+		t.Errorf("the old login must not be refreshed after it was replaced (%d exchanges)", exchanges)
+	}
+	if onDisk, _ := LoadToken(); onDisk.RefreshToken != "account-B" {
+		t.Errorf("the new login was disturbed: %+v", onDisk)
+	}
+
+	// The login was removed (logout) while the command waited.
+	if err := DeleteToken(); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = EnsureFreshToken(ctx, "id", "secret", accountA)
+	if !errors.Is(err, ErrLoginRemoved) || got != nil {
+		t.Errorf("logged-out login: token = %+v, err = %v; want an abort", got, err)
+	}
+	if exchanges != 0 || TokenExists() {
+		t.Errorf("a logged-out login must not be refreshed or written back (%d exchanges, exists=%v)", exchanges, TokenExists())
+	}
+}
+
+// While another process holds the login lock, an expired token is not
+// refreshed alongside it: the caller is told to retry, and Google is not
+// contacted.
+func TestEnsureFreshToken_DoesNotRefreshWhileAnotherProcessHoldsTheLock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for the lock timeout")
+	}
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(ctx context.Context, _, _ string, _ *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		if _, bounded := ctx.Deadline(); !bounded {
+			t.Error("the refresh exchange should run with a deadline")
+		}
+		return &oauth2.Token{AccessToken: "fresh", RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	expired := &oauth2.Token{AccessToken: "old", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(expired); err != nil {
+		t.Fatal(err)
+	}
+
+	unlock, err := LockLoginState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = EnsureFreshToken(context.Background(), "id", "secret", expired)
+	if !errors.Is(err, ErrRefreshBusy) || exchanges != 0 {
+		t.Errorf("with the lock held: err = %v after %d exchanges; want ErrRefreshBusy and none", err, exchanges)
+	}
+	unlock()
+
+	// Once the lock is free the refresh goes through, with a deadline.
+	if _, _, err := EnsureFreshToken(context.Background(), "id", "secret", expired); err != nil || exchanges != 1 {
+		t.Errorf("after release: err = %v after %d exchanges", err, exchanges)
+	}
+}
+
+// A command that outlives its access token refreshes through the guarded
+// path: the result is saved, and a logout in the meantime stops it.
+func TestGuardedTokenSource(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: fmt.Sprintf("fresh-%d", exchanges), RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	start := &oauth2.Token{AccessToken: "start", RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}
+	if err := SaveToken(start); err != nil {
+		t.Fatal(err)
+	}
+	var saveErrors []error
+	ts := GuardedTokenSource(context.Background(), "id", "secret", start, func(err error) { saveErrors = append(saveErrors, err) })
+
+	// Still valid: handed back as is.
+	if tok, err := ts.Token(); err != nil || tok.AccessToken != "start" || exchanges != 0 {
+		t.Fatalf("valid token: %+v, %v after %d exchanges", tok, err, exchanges)
+	}
+
+	// The token expires mid-command: refreshed once, and saved to disk.
+	start.Expiry = time.Now().Add(-time.Minute)
+	if err := SaveToken(start); err != nil {
+		t.Fatal(err)
+	}
+	tok, err := ts.Token()
+	if err != nil || tok.AccessToken != "fresh-1" || exchanges != 1 {
+		t.Fatalf("mid-command refresh: %+v, %v after %d exchanges", tok, err, exchanges)
+	}
+	if onDisk, _ := LoadToken(); onDisk.AccessToken != "fresh-1" {
+		t.Errorf("the mid-command refresh was not saved: %+v", onDisk)
+	}
+	// The refreshed token is reused, not refreshed again.
+	if tok, err := ts.Token(); err != nil || tok.AccessToken != "fresh-1" || exchanges != 1 {
+		t.Errorf("reuse: %+v, %v after %d exchanges", tok, err, exchanges)
+	}
+	if len(saveErrors) != 0 {
+		t.Errorf("unexpected save errors: %v", saveErrors)
+	}
+
+	// Logged out while the command runs: its next refresh is refused.
+	expired := &oauth2.Token{AccessToken: "x", RefreshToken: "r0", Expiry: time.Now().Add(-time.Minute)}
+	ts = GuardedTokenSource(context.Background(), "id", "secret", expired, nil)
+	if err := DeleteToken(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ts.Token(); !errors.Is(err, ErrLoginRemoved) {
+		t.Errorf("after logout: err = %v, want ErrLoginRemoved", err)
+	}
+}
+
+// A refresh that returns the same token strings with a later expiry is
+// saved, so the next command does not find an expired token and refresh
+// all over again.
+func TestEnsureFreshToken_SavesAnExpiryOnlyRefresh(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	later := time.Now().Add(time.Hour)
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: "same", RefreshToken: "r0", Expiry: later}, nil
+	}
+	expired := &oauth2.Token{AccessToken: "same", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(expired); err != nil {
+		t.Fatal(err)
+	}
+	if _, saveErr, err := EnsureFreshToken(context.Background(), "id", "secret", expired); err != nil || saveErr != nil {
+		t.Fatalf("refresh: %v, %v", saveErr, err)
+	}
+	onDisk, _ := LoadToken()
+	if !onDisk.Expiry.After(time.Now()) {
+		t.Errorf("the extended expiry was not saved: %v", onDisk.Expiry)
+	}
+	// The next command loads a valid token and does not refresh again.
+	if _, _, err := EnsureFreshToken(context.Background(), "id", "secret", onDisk); err != nil || exchanges != 1 {
+		t.Errorf("second command: err = %v after %d exchanges, want no new exchange", err, exchanges)
+	}
+}
+
+func TestStoredAuthorizationIs(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// Nothing stored, and nothing was when the work started.
+	if !StoredAuthorizationIs(nil) {
+		t.Error("nothing stored should match a nil base")
+	}
+	base := &oauth2.Token{AccessToken: "a", RefreshToken: "r1"}
+	if StoredAuthorizationIs(base) {
+		t.Error("a base token cannot match when nothing is stored")
+	}
+	if err := SaveToken(base); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", base); err != nil {
+		t.Fatal(err)
+	}
+	if !StoredAuthorizationIs(base) || StoredAuthorizationIs(nil) {
+		t.Error("the stored token should match itself and not a nil base")
+	}
+	// A concurrent command rotates the refresh token: still the same login,
+	// so an --add that started from `base` may be saved.
+	if err := SaveRefreshedToken(base, &oauth2.Token{AccessToken: "b", RefreshToken: "r2"}); err != nil {
+		t.Fatal(err)
+	}
+	if !StoredAuthorizationIs(base) {
+		t.Error("a recorded rotation must still count as the same login")
+	}
+	// A different login replaces it: not the same.
+	other := &oauth2.Token{AccessToken: "c", RefreshToken: "other"}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", other); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveToken(other); err != nil {
+		t.Fatal(err)
+	}
+	if StoredAuthorizationIs(base) {
+		t.Error("a replaced login must not match")
+	}
+}
+
+// Two commands start with the same token from a login that predates access
+// records. One refreshes and the token is rotated; the other must see the
+// result as the same login, not as a different one.
+func TestEnsureFreshToken_LegacyLoginRotationIsRecognised(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: "fresh", RefreshToken: "rotated", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	legacy := &oauth2.Token{AccessToken: "old", RefreshToken: "legacy", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(legacy); err != nil {
+		t.Fatal(err)
+	}
+	// A pre-upgrade login: a plain service list, no access record.
+	if err := SaveGrantedServices([]string{"gmail", "drive"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	if _, saveErr, err := EnsureFreshToken(ctx, "id", "secret", legacy); err != nil || saveErr != nil {
+		t.Fatalf("first caller: %v, %v", saveErr, err)
+	}
+	second, _, err := EnsureFreshToken(ctx, "id", "secret", legacy)
+	if err != nil || second.RefreshToken != "rotated" || exchanges != 1 {
+		t.Fatalf("second caller: token = %+v, err = %v after %d exchanges; want the rotated token reused", second, err, exchanges)
+	}
+	// The login's own service list is still used; no levels are invented.
+	rotated, _ := LoadToken()
+	if got := strings.Join(GrantedServicesFor(rotated), ","); got != "gmail,drive" {
+		t.Errorf("services after a legacy rotation = %q, want the legacy list", got)
+	}
+	if LoadGrantedAccess() != nil || LoadGrantedScopes() != nil {
+		t.Errorf("a legacy rotation must not invent access levels or scopes: %v / %v", LoadGrantedAccess(), LoadGrantedScopes())
+	}
+}
+
+func TestSameAuthorization(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a := &oauth2.Token{RefreshToken: "r1"}
+	if !sameAuthorization(a, &oauth2.Token{AccessToken: "x", RefreshToken: "r1"}) {
+		t.Error("the same refresh token is the same authorization")
+	}
+	if sameAuthorization(a, &oauth2.Token{RefreshToken: "r2"}) {
+		t.Error("a different refresh token with no rotation record is a different login")
+	}
+	if sameAuthorization(nil, a) || sameAuthorization(a, nil) || sameAuthorization(a, &oauth2.Token{}) {
+		t.Error("missing tokens are never the same authorization")
+	}
+	// A recorded rotation r1 -> r2 vouches for r2.
+	if err := SaveToken(a); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", a); err != nil {
+		t.Fatal(err)
+	}
+	rotated := &oauth2.Token{AccessToken: "y", RefreshToken: "r2"}
+	if err := SaveRefreshedToken(a, rotated); err != nil {
+		t.Fatal(err)
+	}
+	if !sameAuthorization(a, rotated) {
+		t.Error("a recorded rotation should count as the same authorization")
+	}
+	// A fresh login's record names no predecessor.
+	other := &oauth2.Token{RefreshToken: "r9"}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", other); err != nil {
+		t.Fatal(err)
+	}
+	if sameAuthorization(a, other) {
+		t.Error("a new login is not the same authorization")
+	}
+}
+
+func TestGrantedMetadataFor_UsesTheGivenToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	mine := &oauth2.Token{AccessToken: "a", RefreshToken: "mine"}
+	if err := SaveToken(mine); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessReadOnly}, []string{"scope-mine"}, "", mine); err != nil {
+		t.Fatal(err)
+	}
+	// Another login replaces the stored credentials and metadata.
+	other := &oauth2.Token{AccessToken: "b", RefreshToken: "other"}
+	if err := SaveGrantedAccess(map[string]string{"drive": AccessFull}, []string{"scope-other"}, "", other); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveToken(other); err != nil {
+		t.Fatal(err)
+	}
+	// A factory still holding the first token must not pick up the other
+	// login's metadata.
+	if got := GrantedServicesFor(mine); got != nil {
+		t.Errorf("GrantedServicesFor(replaced token) = %v, want nil", got)
+	}
+	if got := LoadGrantedScopesFor(mine); got != nil {
+		t.Errorf("LoadGrantedScopesFor(replaced token) = %v, want nil", got)
+	}
+	if got := strings.Join(GrantedServicesFor(other), ","); got != "drive" {
+		t.Errorf("GrantedServicesFor(current token) = %q", got)
+	}
+	if got := LoadGrantedScopesFor(other); len(got) != 1 || got[0] != "scope-other" {
+		t.Errorf("LoadGrantedScopesFor(current token) = %v", got)
+	}
+}
+
+// A record left on disk by another login must not be carried over to a
+// token being rotated: it would attach that login's account and scopes.
+func TestSaveRefreshedToken_RotationIgnoresAnotherLoginsRecord(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	mine := &oauth2.Token{AccessToken: "m1", RefreshToken: "mine-1"}
+	if err := SaveToken(mine); err != nil {
+		t.Fatal(err)
+	}
+	// A replacing login wrote its access record and was interrupted before
+	// saving its token, so my token is still the stored one.
+	interrupted := &oauth2.Token{RefreshToken: "someone-else"}
+	if err := SaveGrantedAccess(map[string]string{"drive": AccessFull}, []string{"their-scope"}, "their-account", interrupted); err != nil {
+		t.Fatal(err)
+	}
+
+	// My token is rotated.
+	if err := SaveRefreshedToken(mine, &oauth2.Token{AccessToken: "m2", RefreshToken: "mine-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := LoadToken(); got.RefreshToken != "mine-2" {
+		t.Fatalf("rotated token not saved: %+v", got)
+	}
+	// The other login's metadata is not mine now.
+	if LoadGrantedAccess() != nil || LoadGrantedScopes() != nil || LoadGrantedAccount() != "" {
+		t.Errorf("another login's record was bound to the rotated token: access=%v scopes=%v account=%q",
+			LoadGrantedAccess(), LoadGrantedScopes(), LoadGrantedAccount())
+	}
+}
+
+func TestTokenRefreshed(t *testing.T) {
+	stored := &oauth2.Token{AccessToken: "a1", RefreshToken: "r1"}
+	cases := []struct {
+		name    string
+		current *oauth2.Token
+		want    bool
+	}{
+		{"unchanged", &oauth2.Token{AccessToken: "a1", RefreshToken: "r1"}, false},
+		{"refresh token omitted from response", &oauth2.Token{AccessToken: "a1"}, false},
+		{"new access token", &oauth2.Token{AccessToken: "a2", RefreshToken: "r1"}, true},
+		{"rotated refresh token, same access token", &oauth2.Token{AccessToken: "a1", RefreshToken: "r2"}, true},
+		{"same strings, later expiry", &oauth2.Token{AccessToken: "a1", RefreshToken: "r1", Expiry: time.Now().Add(time.Hour)}, true},
+		{"nil", nil, false},
+	}
+	for _, c := range cases {
+		if got := TokenRefreshed(stored, c.current); got != c.want {
+			t.Errorf("%s: TokenRefreshed = %v, want %v", c.name, got, c.want)
+		}
+	}
+	if TokenRefreshed(nil, stored) {
+		t.Error("nil stored token cannot have been refreshed")
+	}
+}
+
+func TestSaveRefreshedToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	stored := &oauth2.Token{AccessToken: "a1", RefreshToken: "login-1"}
+	if err := SaveToken(stored); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ordinary refresh: saved, and the refresh token is kept even when
+	// the refresh response omits it.
+	if err := SaveRefreshedToken(stored, &oauth2.Token{AccessToken: "a2"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := LoadToken()
+	if got.AccessToken != "a2" || got.RefreshToken != "login-1" {
+		t.Errorf("after refresh = %+v", got)
+	}
+
+	// A read-only login replaces the authorization while an API command
+	// that started earlier is still refreshing the old, wider token.
+	if err := SaveToken(&oauth2.Token{AccessToken: "ro1", RefreshToken: "login-2-readonly"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveRefreshedToken(stored, &oauth2.Token{AccessToken: "a3", RefreshToken: "login-1"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = LoadToken()
+	if got.AccessToken != "ro1" || got.RefreshToken != "login-2-readonly" {
+		t.Errorf("a stale refresh overwrote the new login: %+v", got)
+	}
+
+	// After logout there is nothing to refresh into.
+	if err := DeleteToken(); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveRefreshedToken(stored, &oauth2.Token{AccessToken: "a4", RefreshToken: "login-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if TokenExists() {
+		t.Error("a refresh must not bring back a token after logout")
+	}
+	// Refresh-token rotation: the provider hands back a new refresh token
+	// for the same grant. It must be saved (the old one may be dead), and
+	// the access record must follow it.
+	current := &oauth2.Token{AccessToken: "c1", RefreshToken: "rotating-1"}
+	if err := SaveToken(current); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessReadOnly}, []string{"scope-x"}, "acct-9", current); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveRefreshedToken(current, &oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-2"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = LoadToken()
+	if got.AccessToken != "c2" || got.RefreshToken != "rotating-2" {
+		t.Errorf("rotated token not saved: %+v", got)
+	}
+	if access := LoadGrantedAccess(); access["gmail"] != AccessReadOnly {
+		t.Errorf("access record did not follow the rotated token: %v", access)
+	}
+	if scopes := LoadGrantedScopes(); len(scopes) != 1 || scopes[0] != "scope-x" || LoadGrantedAccount() != "acct-9" {
+		t.Errorf("scopes/account did not follow the rotated token: %v / %q", scopes, LoadGrantedAccount())
+	}
+	// Interrupted rotation: the record was rewritten for the new token but
+	// the process stopped before the token itself was saved. The old token
+	// is still on disk and must still have its record.
+	if err := SaveToken(&oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if access := LoadGrantedAccess(); access["gmail"] != AccessReadOnly {
+		t.Errorf("after an interrupted rotation the old token lost its record: %v", access)
+	}
+	// ...and completing it later (the token write) keeps the record too.
+	if err := SaveToken(&oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if access := LoadGrantedAccess(); access["gmail"] != AccessReadOnly {
+		t.Errorf("after the rotation completes the record is missing: %v", access)
+	}
+	// An unrelated token matches neither fingerprint.
+	if err := SaveToken(&oauth2.Token{AccessToken: "x", RefreshToken: "someone-else"}); err != nil {
+		t.Fatal(err)
+	}
+	if LoadGrantedAccess() != nil {
+		t.Error("a record mid-rotation must still be ignored for an unrelated token")
+	}
+	if err := SaveToken(&oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-2"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A second command still holding the pre-rotation token must not put
+	// it back.
+	if err := SaveRefreshedToken(current, &oauth2.Token{AccessToken: "c3", RefreshToken: "rotating-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = LoadToken(); got.RefreshToken != "rotating-2" {
+		t.Errorf("a stale holder overwrote the rotated token: %+v", got)
+	}
+
+	// Nil arguments are a no-op.
+	if err := SaveRefreshedToken(nil, stored); err != nil {
+		t.Errorf("nil stored: %v", err)
+	}
+}
+
+func TestTokenFingerprint(t *testing.T) {
+	if tokenFingerprint(nil) != "" || tokenFingerprint(&oauth2.Token{AccessToken: "a"}) != "" {
+		t.Error("no refresh token means no fingerprint")
+	}
+	a := tokenFingerprint(&oauth2.Token{RefreshToken: "refresh-1"})
+	b := tokenFingerprint(&oauth2.Token{RefreshToken: "refresh-2"})
+	if a == "" || a == b || strings.Contains(a, "refresh") {
+		t.Errorf("fingerprints: %q %q", a, b)
+	}
+}
+
+func TestAuthURLOptions_NeverAsksForPreviouslyGrantedScopes(t *testing.T) {
+	c := NewOAuthClient("id", "secret", []string{"scope-a"})
+	url := c.config.AuthCodeURL("state", c.authURLOptions("challenge")...)
+	if strings.Contains(url, "include_granted_scopes") {
+		t.Errorf("login must not pull in scopes from earlier grants: %s", url)
+	}
+	if !strings.Contains(url, "code_challenge=challenge") || !strings.Contains(url, "prompt=consent") || !strings.Contains(url, "access_type=offline") {
+		t.Errorf("auth URL lost PKCE/consent/offline params: %s", url)
+	}
+}
+
+// "Nothing was stored" holds only while the token file is absent. A file
+// that exists but cannot be decoded may be a login written a moment ago,
+// and must not be mistaken for an empty slot that is safe to overwrite.
+func TestStoredAuthorizationIs_UnreadableTokenIsNotAbsent(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	if !StoredAuthorizationIs(nil) {
+		t.Fatal("with no token file, a nil base should match")
+	}
+	path := config.GetTokenPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if StoredAuthorizationIs(nil) {
+		t.Error("an unreadable token file was treated as no stored login")
+	}
+}
+
+// A lock that cannot be taken for a reason other than another process
+// holding it (here: the config directory cannot be created) proves nothing
+// about other processes, and leaves no safe way to store a rotated
+// refresh token. The exchange must not be attempted.
+func TestEnsureFreshToken_DoesNotRefreshWhenTheLockIsUnavailable(t *testing.T) {
+	// A regular file where the config root should be: the lock file can
+	// never be created beneath it.
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", blocker)
+
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: "fresh", RefreshToken: "r1", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+
+	expired := &oauth2.Token{AccessToken: "old", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	token, _, err := EnsureFreshToken(context.Background(), "id", "secret", expired)
+	if !errors.Is(err, ErrRefreshLockUnavailable) || errors.Is(err, ErrRefreshBusy) {
+		t.Errorf("err = %v, want ErrRefreshLockUnavailable", err)
+	}
+	if token != nil || exchanges != 0 {
+		t.Errorf("token = %v after %d exchanges; want no token and no exchange", token, exchanges)
+	}
+
+	// A token that is still valid needs neither the lock nor a refresh.
+	valid := &oauth2.Token{AccessToken: "ok", RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}
+	if got, _, err := EnsureFreshToken(context.Background(), "id", "secret", valid); err != nil || got != valid {
+		t.Errorf("valid token: got %v, err %v", got, err)
+	}
+}
+
+// A login without an access record whose refresh token is rotated: if the
+// note linking old and new token cannot be written, the rotated token is
+// still saved (losing it would lose the login) and the failure is
+// reported rather than swallowed.
+func TestSaveRefreshedToken_LegacyRotationReportsAFailedNote(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	stored := &oauth2.Token{AccessToken: "a0", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(stored); err != nil {
+		t.Fatal(err)
+	}
+	original := saveGrantedRecord
+	saveGrantedRecord = func(grantedAccessRecord) error { return errors.New("disk full") }
+	t.Cleanup(func() { saveGrantedRecord = original })
+
+	rotated := &oauth2.Token{AccessToken: "a1", RefreshToken: "r1", Expiry: time.Now().Add(time.Hour)}
+	err := SaveRefreshedToken(stored, rotated)
+	if err == nil || !strings.Contains(err.Error(), "rotation could not be recorded") {
+		t.Errorf("err = %v, want the failed note reported", err)
+	}
+	if now, loadErr := LoadToken(); loadErr != nil || now.RefreshToken != "r1" {
+		t.Errorf("stored token = %+v (%v), want the rotated one saved", now, loadErr)
 	}
 }

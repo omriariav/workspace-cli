@@ -21,6 +21,21 @@ type OAuthClient struct {
 	config *oauth2.Config
 }
 
+// authURLOptions returns the authorization-URL parameters for the flow.
+//
+// include_granted_scopes is deliberately not sent: it would let Google
+// fold scopes from earlier grants into the new token, so a login could
+// come back with more access than it asked for. Callers that want to keep
+// earlier access request those scopes explicitly.
+func (c *OAuthClient) authURLOptions(challenge string) []oauth2.AuthCodeOption {
+	return []oauth2.AuthCodeOption{
+		oauth2.SetAuthURLParam("code_challenge", challenge),
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+		oauth2.SetAuthURLParam("access_type", "offline"),
+		oauth2.SetAuthURLParam("prompt", "consent"),
+	}
+}
+
 // NewOAuthClient creates a new OAuth client with the given credentials and scopes.
 func NewOAuthClient(clientID, clientSecret string, scopes []string) *OAuthClient {
 	return &OAuthClient{
@@ -59,12 +74,7 @@ func (c *OAuthClient) Login(ctx context.Context) (*oauth2.Token, error) {
 	}
 
 	// Build authorization URL with PKCE
-	authURL := c.config.AuthCodeURL(state,
-		oauth2.SetAuthURLParam("code_challenge", challenge),
-		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-		oauth2.SetAuthURLParam("access_type", "offline"),
-		oauth2.SetAuthURLParam("prompt", "consent"),
-	)
+	authURL := c.config.AuthCodeURL(state, c.authURLOptions(challenge)...)
 
 	// Channel to receive the authorization code
 	codeChan := make(chan string, 1)

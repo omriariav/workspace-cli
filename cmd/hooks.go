@@ -445,7 +445,25 @@ func runHooksRun(cmd *cobra.Command, args []string) error {
 	return writeHookEnvelope(cmd, eventValue, rendered.AdditionalContext)
 }
 
+// externalTokenHookDiagnostic explains why Workspace context is left out
+// of a hook that runs with an external access token.
+const externalTokenHookDiagnostic = "Workspace context was skipped: an external access token (GWS_ACCESS_TOKEN / --access-token) is in use, and hook context is gathered and cached with the stored login, which may be a different account."
+
 func renderHook(ctx context.Context, event pluginhooks.Event, cfg pluginhooks.Config, cwd string) pluginhooks.RenderedContext {
+	// Hook context is read with the stored login and cached per
+	// workspace. A session that runs on an external token may belong to
+	// another account, so it gets no Workspace context at all: neither a
+	// fresh read with the stored login nor its cached snapshot.
+	if config.GetAccessToken() != "" && cfg.Providers.Workspace.Enabled {
+		cfg.Providers.Workspace.Enabled = false
+		rendered := renderHookWith(ctx, event, cfg, cwd)
+		rendered.Diagnostics = append(rendered.Diagnostics, externalTokenHookDiagnostic)
+		return rendered
+	}
+	return renderHookWith(ctx, event, cfg, cwd)
+}
+
+func renderHookWith(ctx context.Context, event pluginhooks.Event, cfg pluginhooks.Config, cwd string) pluginhooks.RenderedContext {
 	return pluginhooks.Runtime{
 		Run:          runSelfGWS,
 		Store:        pluginhooks.FileStore{Path: hookSnapshotPath()},
@@ -464,13 +482,31 @@ func hookWorkspaceKey(cwd string) string {
 	return filepath.Clean(path)
 }
 
+// hookSubprocessEnv returns the environment for the gws commands a hook
+// runs to gather Workspace context. Hook context is cached per workspace
+// and belongs to the stored login, so an externally supplied access token
+// is never passed on: otherwise another account's mail or calendar could
+// be cached and shown after that token is gone.
+func hookSubprocessEnv(parent []string) []string {
+	env := make([]string, 0, len(parent)+1)
+	for _, kv := range parent {
+		// Compared without regard to case: Windows environment names are
+		// case-insensitive, so `gws_access_token` is the same variable.
+		if name, _, found := strings.Cut(kv, "="); found && strings.EqualFold(name, config.AccessTokenEnv) {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, "GWS_NO_UPDATE_CHECK=1")
+}
+
 func runSelfGWS(ctx context.Context, args []string) ([]byte, error) {
 	self, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 	command := exec.CommandContext(ctx, self, args...)
-	command.Env = append(os.Environ(), "GWS_NO_UPDATE_CHECK=1")
+	command.Env = hookSubprocessEnv(os.Environ())
 	return command.Output()
 }
 
