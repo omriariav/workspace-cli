@@ -17,7 +17,7 @@
 
 **Upgrade notes**
 
-- A blank `GWS_ACCESS_TOKEN=` in a shell profile now makes every command fail until it is unset.
+- A blank `GWS_ACCESS_TOKEN=` in a shell profile now makes commands fail with a "set but empty" error until it is unset. Not affected: `gws version`, shell completion, `--help`, and the `--schema` / `--show-scopes` introspection flags, which are answered before the check.
 - With a malformed `config.yaml`, sensitive commands are refused until the file is fixed, `GWS_CONFIRM_SENSITIVE` is set, or `--yes` is given.
 - Upgrade every gws binary that shares a config directory: the refresh guarantee holds only between copies of this version or later.
 
