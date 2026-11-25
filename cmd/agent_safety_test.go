@@ -18,6 +18,7 @@ import (
 	pluginhooks "github.com/omriariav/workspace-cli/internal/hooks"
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/googleapi"
@@ -2011,5 +2012,72 @@ func TestDeriveGrantedAccess_ShortSignInScopeNames(t *testing.T) {
 	}
 	if gotAccess["gmail"] != auth.AccessReadOnly || gotAccess["people"] != auth.AccessReadOnly {
 		t.Errorf("access = %v, want gmail and people read-only", gotAccess)
+	}
+}
+
+// Writing an empty value to a cell clears it, so a Sheets write whose
+// payload contains one is confirmed like `sheets clear`; an ordinary
+// write is not.
+func TestConfirmGate_SheetsWritesThatClearCells(t *testing.T) {
+	needs := func(cmd *cobra.Command) bool {
+		err := confirmGate(cmd, true, false, strings.NewReader(""), io.Discard, false)
+		return err != nil && strings.Contains(err.Error(), "confirmation required")
+	}
+
+	write, _, err := rootCmd.Find([]string{"sheets", "write"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resetWrite := func() {
+		for _, name := range []string{"values", "values-json"} {
+			_ = write.Flags().Set(name, "")
+			write.Flags().Lookup(name).Changed = false
+		}
+	}
+	t.Cleanup(resetWrite)
+	for payload, want := range map[string]bool{
+		`[["a","b"]]`:    false,
+		`[[""]]`:         true,
+		`[["a"],[null]]`: true,
+		`[[0, false]]`:   false,
+		`not json`:       false, // the command rejects it itself
+	} {
+		resetWrite()
+		_ = write.Flags().Set("values-json", payload)
+		if got := needs(write); got != want {
+			t.Errorf("sheets write --values-json %s: confirmation = %v, want %v", payload, got, want)
+		}
+	}
+	for payload, want := range map[string]bool{"a,b;c,d": false, "a,,c": true} {
+		resetWrite()
+		_ = write.Flags().Set("values", payload)
+		if got := needs(write); got != want {
+			t.Errorf("sheets write --values %q: confirmation = %v, want %v", payload, got, want)
+		}
+	}
+
+	batch, _, err := rootCmd.Find([]string{"sheets", "batch-write"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := batch.Flags().Lookup("values")
+	resetBatch := func() {
+		_ = values.Value.(pflag.SliceValue).Replace(nil)
+		values.Changed = false
+	}
+	t.Cleanup(resetBatch)
+	_ = batch.Flags().Set("values", `[["x"]]`)
+	if needs(batch) {
+		t.Error("sheets batch-write with no empty cell should not need confirmation")
+	}
+	_ = batch.Flags().Set("values", `[["y",""]]`)
+	if !needs(batch) {
+		t.Error("sheets batch-write with an empty cell should need confirmation")
+	}
+
+	schema, _ := runIntrospection(t, "sheets", "write", "--schema")
+	when, _ := schema["sensitive_when"].(map[string]interface{})
+	if when == nil || when["condition"] != "a cell value is empty" {
+		t.Errorf("sheets write --schema sensitive_when = %v", schema["sensitive_when"])
 	}
 }

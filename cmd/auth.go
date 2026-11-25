@@ -768,11 +768,13 @@ func runLogout(cmd *cobra.Command, args []string) error {
 	}
 
 	// Best-effort server-side revocation with timeout before deleting local token
+	revokeFailed := false
 	token, err := auth.LoadToken()
 	if err == nil && token != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), revokeTimeout)
 		defer cancel()
 		if revokeErr := auth.RevokeToken(ctx, token); revokeErr != nil {
+			revokeFailed = true
 			fmt.Fprintf(os.Stderr, "Warning: failed to revoke token server-side: %v\n", revokeErr)
 		}
 	}
@@ -784,8 +786,19 @@ func runLogout(cmd *cobra.Command, args []string) error {
 	// just removed.
 	auth.DeleteGrantedMetadata()
 
+	if revokeFailed {
+		// The local credentials are gone either way, but the grant itself
+		// may still be active at Google. Say so: a caller narrowing access
+		// must not assume the old grant was withdrawn.
+		return p.Print(map[string]interface{}{
+			"status":  "success",
+			"revoked": false,
+			"message": "Logged out locally, but the grant could not be revoked at Google and may still be active. Remove it at https://myaccount.google.com/permissions before relying on a narrower login.",
+		})
+	}
 	return p.Print(map[string]interface{}{
 		"status":  "success",
+		"revoked": true,
 		"message": "Logged out successfully",
 	})
 }

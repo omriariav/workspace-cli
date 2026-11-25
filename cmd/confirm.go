@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -138,6 +139,58 @@ var conditionalSensitive = map[string]conditionalRule{
 	"gmail batch-modify":       {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
 }
 
+// payloadSensitive lists commands that are sensitive depending on what
+// their payload contains, which a single flag-and-value rule cannot
+// express. flags and condition describe the rule for --schema.
+var payloadSensitive = map[string]payloadRule{
+	// The Sheets API treats an empty string as "clear this cell".
+	"sheets write":       {flags: []string{"values", "values-json"}, condition: "a cell value is empty", effect: "clears the cells it writes an empty value to", check: sheetsWriteClearsCells},
+	"sheets batch-write": {flags: []string{"values"}, condition: "a cell value is empty", effect: "clears the cells it writes an empty value to", check: sheetsBatchWriteClearsCells},
+}
+
+type payloadRule struct {
+	flags     []string
+	condition string
+	effect    string
+	check     func(cmd *cobra.Command) bool
+}
+
+// hasEmptyCell reports whether any cell is an empty string or null: both
+// clear the cell they are written to.
+func hasEmptyCell(rows [][]interface{}) bool {
+	for _, row := range rows {
+		for _, cell := range row {
+			if cell == nil {
+				return true
+			}
+			if text, ok := cell.(string); ok && text == "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sheetsWriteClearsCells reads the values exactly as `sheets write` will.
+// A payload that does not parse is left to the command to reject.
+func sheetsWriteClearsCells(cmd *cobra.Command) bool {
+	values, err := parseValues(cmd)
+	return err == nil && hasEmptyCell(values)
+}
+
+// sheetsBatchWriteClearsCells does the same for each --values of
+// `sheets batch-write`.
+func sheetsBatchWriteClearsCells(cmd *cobra.Command) bool {
+	payloads, _ := cmd.Flags().GetStringArray("values")
+	for _, payload := range payloads {
+		var rows [][]interface{}
+		if err := json.Unmarshal([]byte(payload), &rows); err == nil && hasEmptyCell(rows) {
+			return true
+		}
+	}
+	return false
+}
+
 // conditionalRule makes a command sensitive when flag is set, or, if when
 // is given, when the flag's value satisfies it.
 //
@@ -219,6 +272,9 @@ func sensitiveEffect(cmd *cobra.Command) (string, bool) {
 		if f := cmd.Flags().Lookup(rule.flag); f != nil && rule.triggered(f) {
 			return rule.effect, true
 		}
+	}
+	if rule, ok := payloadSensitive[key]; ok && rule.check(cmd) {
+		return rule.effect, true
 	}
 	// Only runnable leaf commands: a group such as `gws events
 	// subscriptions` is never the thing being confirmed.

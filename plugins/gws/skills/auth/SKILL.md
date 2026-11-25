@@ -109,7 +109,12 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
   so unticking a scope on the consent screen is reflected in `auth status`.
 - Adding a service read-only never downgrades a service that already has
   full access. To reduce access, run `gws auth logout` (which revokes the
-  old grant) and then log in again with the narrower options.
+  old grant) and then log in again with the narrower options. Check the
+  logout output: if it says `"revoked": false`, Google could not be
+  reached and the old grant may still be active; the local credentials
+  are deleted regardless, so remove the grant at
+  https://myaccount.google.com/permissions before relying on the narrower
+  login.
 - `gws auth status` reports the access level per service — `full`,
   `readonly`, `partial` (some write scopes were granted, others unticked)
   or `partial-readonly` (some read scopes were unticked) — and
@@ -203,7 +208,8 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   batch-modify --add-labels` when the labels include `TRASH` or `SPAM`, and
   `docs replace`, `slides replace-text` and `sheets find-replace` when
   `--replace` is empty, and `docs replace-named-range` when `--text` is
-  empty (that deletes every match).
+  empty (that deletes every match), and `sheets write` / `sheets
+  batch-write` when a cell value is empty (that clears the cell).
 - Covered explicitly: `docs replace-content` (replaces the whole document
   body); `sheets merge` (discards every value in the range except the upper-left one); `sheets copy-to` (copies a sheet into another spreadsheet); `events subscriptions create`, `reactivate`, `renew` and
   `update` (start, resume, extend or change delivery of events to a

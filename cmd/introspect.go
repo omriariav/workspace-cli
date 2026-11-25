@@ -218,6 +218,14 @@ func commandSchema(cmd *cobra.Command) map[string]interface{} {
 		}
 		schema["sensitive_when"] = when
 	}
+	// Commands that need confirmation depending on their payload.
+	if rule, ok := payloadSensitive[commandKey(cmd)]; ok {
+		schema["sensitive_when"] = map[string]interface{}{
+			"flags":     rule.flags,
+			"condition": rule.condition,
+			"effect":    rule.effect,
+		}
+	}
 	return schema
 }
 
