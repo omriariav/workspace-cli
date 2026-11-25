@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
@@ -33,6 +34,7 @@ type Factory struct {
 	authMode        *auth.AuthModeConfig
 	tokenSource     oauth2.TokenSource
 	grantedServices []string        // services granted at login time
+	grantedScopes   []string        // exact scopes granted at login time, when recorded
 	scopeWarned     map[string]bool // track warnings to avoid repeats
 
 	gmail         *gmail.Service
@@ -130,6 +132,7 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 		authMode:        modeCfg,
 		tokenSource:     ts,
 		grantedServices: auth.GrantedServicesForToken(),
+		grantedScopes:   auth.LoadGrantedScopes(),
 		scopeWarned:     make(map[string]bool),
 	}, nil
 }
@@ -191,6 +194,15 @@ func (f *Factory) checkServiceScopes(service string) {
 		}
 	}
 
+	// Scopes are shared between services (events and chat, people and
+	// contacts), so a service that was never named at login can still be
+	// partly usable. If the token holds any of this service's scopes, do
+	// not claim it lacks permission; a real gap surfaces as the API's own
+	// insufficient-scope error.
+	if f.holdsAnyScopeOf(canonical) || f.holdsAnyScopeOf(service) {
+		return
+	}
+
 	// Only warn once per service per session
 	if f.scopeWarned[service] {
 		return
@@ -202,6 +214,26 @@ func (f *Factory) checkServiceScopes(service string) {
 	// services, and offer the read-only variant.
 	fmt.Fprintf(os.Stderr, "%s requires additional permissions. Add it with:\n  gws auth login --add --services %s\n(append --readonly if read-only access is enough)\n",
 		service, service)
+}
+
+// holdsAnyScopeOf reports whether the recorded grant includes at least one
+// of the service's own scopes (full or read-only). The userinfo scopes
+// every login carries do not count.
+func (f *Factory) holdsAnyScopeOf(service string) bool {
+	if len(f.grantedScopes) == 0 {
+		return false
+	}
+	held := make(map[string]bool, len(f.grantedScopes))
+	for _, s := range f.grantedScopes {
+		held[s] = true
+	}
+	one := []string{service}
+	for _, s := range append(auth.ScopesForServices(one), auth.ReadOnlyScopesForServices(one)...) {
+		if held[s] && !strings.Contains(s, "/auth/userinfo.") {
+			return true
+		}
+	}
+	return false
 }
 
 // canonicalService returns the canonical name for a service, resolving any

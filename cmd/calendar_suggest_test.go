@@ -622,6 +622,51 @@ func TestQueryBusySpans_ExpandsGroups(t *testing.T) {
 	}
 }
 
+// A partly unreadable group must give the same answer whatever order
+// Google lists its members in.
+func TestQueryBusySpans_GroupMemberOrderDoesNotMatter(t *testing.T) {
+	from := mustTime(t, "2026-12-01T00:00:00Z")
+	to := mustTime(t, "2026-12-02T00:00:00Z")
+	items := []*calendar.FreeBusyRequestItem{{Id: "primary"}, {Id: "team@example.com"}}
+
+	run := func(members []string) (string, []suggestion) {
+		svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
+				Groups: map[string]calendar.FreeBusyGroup{"team@example.com": {Calendars: members}},
+				Calendars: map[string]calendar.FreeBusyCalendar{
+					"primary":            {},
+					"busy@example.com":   {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T09:00:00Z", End: "2026-12-01T13:00:00Z"}}},
+					"hidden@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
+				},
+			})
+		})
+		busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(checked, ",") != "primary" || len(unavailable) != 1 || unavailable[0]["calendar"] != "team@example.com" {
+			t.Errorf("members %v: checked = %v, unavailable = %v", members, checked, unavailable)
+		}
+		slots := suggestSlots(busy, from, to, time.Hour, 9*time.Hour, 17*time.Hour, time.UTC, true, 5)
+		var starts []string
+		for _, s := range slots {
+			starts = append(starts, s.Start.Format(time.RFC3339))
+		}
+		return strings.Join(starts, ","), slots
+	}
+
+	first, slots := run([]string{"busy@example.com", "hidden@example.com"})
+	second, _ := run([]string{"hidden@example.com", "busy@example.com"})
+	if first != second {
+		t.Errorf("suggestions depend on member order: %q vs %q", first, second)
+	}
+	// Either way, the readable member's morning is blocked.
+	if len(slots) != 1 || !slots[0].Start.Equal(mustTime(t, "2026-12-01T13:00:00Z")) {
+		t.Errorf("suggestions = %v, want a single window from 13:00", slots)
+	}
+}
+
 func newSuggestTestService(t *testing.T, handler http.HandlerFunc) *calendar.Service {
 	t.Helper()
 	server := httptest.NewServer(handler)

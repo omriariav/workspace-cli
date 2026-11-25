@@ -188,6 +188,25 @@ func TestMissingServiceHint_SuggestsIncrementalLogin(t *testing.T) {
 	}
 }
 
+func TestMissingServiceHint_NotShownWhenSharedScopesCoverTheService(t *testing.T) {
+	const pfx = "https://www.googleapis.com/auth/"
+	// An `events --readonly` login: chat was never named, but the token
+	// holds Chat read scopes that the events service shares.
+	f := &Factory{
+		grantedServices: []string{"events"},
+		grantedScopes:   []string{pfx + "userinfo.email", pfx + "chat.messages.readonly", pfx + "chat.spaces.readonly"},
+		scopeWarned:     map[string]bool{},
+	}
+	if out := captureStderr(t, func() { f.checkServiceScopes("chat") }); out != "" {
+		t.Errorf("no warning expected when the token already holds Chat scopes: %q", out)
+	}
+	// A service the token holds nothing for still gets the hint; the
+	// shared userinfo scope does not count as coverage.
+	if out := captureStderr(t, func() { f.checkServiceScopes("drive") }); !strings.Contains(out, "--add --services drive") {
+		t.Errorf("drive should still be reported as missing: %q", out)
+	}
+}
+
 func TestNewFactory_AccessTokenTakesPrecedence(t *testing.T) {
 	// No stored token, no client credentials, and a service-account mode
 	// configured: the external token must still win and be used verbatim.
