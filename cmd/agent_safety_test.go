@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -2079,5 +2080,35 @@ func TestConfirmGate_SheetsWritesThatClearCells(t *testing.T) {
 	when, _ := schema["sensitive_when"].(map[string]interface{})
 	if when == nil || when["condition"] != "a cell value is empty" {
 		t.Errorf("sheets write --schema sensitive_when = %v", schema["sensitive_when"])
+	}
+}
+
+// Logout may only claim the grant was revoked when Google confirmed it.
+// A token file that exists but cannot be read is deleted locally, but no
+// revocation was attempted, so the result must say "revoked": false.
+func TestLogout_UnreadableTokenIsNotReportedAsRevoked(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	path := config.GetTokenPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout string
+	var err error
+	_ = captureStderrStr(t, func() {
+		stdout, err = captureStdout(t, func() error { return runLogout(logoutCmd, nil) })
+	})
+	if err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	if !strings.Contains(stdout, `"revoked": false`) || strings.Contains(stdout, `"revoked": true`) {
+		t.Errorf("logout output = %s, want revoked: false", stdout)
+	}
+	if auth.TokenExists() {
+		t.Error("the local token should still be removed")
 	}
 }

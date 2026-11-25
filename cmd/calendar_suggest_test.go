@@ -1318,3 +1318,47 @@ func TestCalendarSuggestTime_RejectsAnExplicitlyEmptyList(t *testing.T) {
 		}
 	}
 }
+
+// A date-only --to includes the whole day, including the part of it that
+// repeats after the next date has briefly begun (St. John's, 2010-11-06:
+// Sunday 00:01 became Saturday 23:01).
+func TestEndOfDateOnly_DateResumesAfterMidnight(t *testing.T) {
+	loc, err := time.LoadLocation("America/St_Johns")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	before := time.Date(2010, 11, 7, 2, 30, 0, 0, time.UTC).In(loc)
+	if before.Day() != 7 || before.Add(2*time.Minute).Day() != 6 {
+		t.Skipf("tzdata does not model the midnight-crossing change")
+	}
+
+	end, err := endOfDateOnly("2010-11-06", loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last := end.Add(-time.Second).In(loc); last.Day() != 6 || last.Hour() != 23 || last.Minute() != 59 {
+		t.Errorf("the search ends just after %v, want Saturday 23:59:59 (second occurrence)", last)
+	}
+	if first := end.In(loc); first.Day() != 7 {
+		t.Errorf("the boundary reads %v, want Sunday", first)
+	}
+
+	// Through the slot search: the repeated Saturday evening is offered.
+	from := startOfCivilDate(2010, 11, 6, loc)
+	slots := suggestSlots(nil, from, end, 30*time.Minute, 23*time.Hour, 24*time.Hour, loc, true, 10)
+	repeated := false
+	for _, slot := range slots {
+		if slot.Start.After(before) && slot.Start.In(loc).Day() == 6 {
+			repeated = true
+		}
+	}
+	if !repeated {
+		t.Errorf("no slot in the repeated Saturday evening: %v", slots)
+	}
+
+	// An ordinary day still ends at the next midnight.
+	plain, _ := endOfDateOnly("2010-06-10", loc)
+	if l := plain.In(loc); l.Day() != 11 || l.Hour() != 0 || l.Minute() != 0 {
+		t.Errorf("ordinary day ends at %v, want the next midnight", l)
+	}
+}

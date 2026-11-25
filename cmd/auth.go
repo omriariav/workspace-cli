@@ -768,15 +768,20 @@ func runLogout(cmd *cobra.Command, args []string) error {
 	}
 
 	// Best-effort server-side revocation with timeout before deleting local token
-	revokeFailed := false
+	// Assumed not revoked until Google confirms it: a token file that is
+	// there but cannot be read means no revocation was even attempted.
+	revokeFailed := true
 	token, err := auth.LoadToken()
 	if err == nil && token != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), revokeTimeout)
 		defer cancel()
 		if revokeErr := auth.RevokeToken(ctx, token); revokeErr != nil {
-			revokeFailed = true
 			fmt.Fprintf(os.Stderr, "Warning: failed to revoke token server-side: %v\n", revokeErr)
+		} else {
+			revokeFailed = false
 		}
+	} else {
+		fmt.Fprintf(os.Stderr, "Warning: the stored token could not be read (%v), so it was not revoked server-side\n", err)
 	}
 
 	if err := auth.DeleteToken(); err != nil {

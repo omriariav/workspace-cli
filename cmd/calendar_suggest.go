@@ -238,7 +238,25 @@ func endOfDateOnly(date string, loc *time.Location) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
-	return startOfCivilDate(d.Year(), d.Month(), d.Day()+1, loc), nil
+	end := startOfCivilDate(d.Year(), d.Month(), d.Day()+1, loc)
+
+	// When clocks roll back across midnight, the requested date comes
+	// round again after the next date has begun (St. John's, 2010:
+	// Sunday 00:01 became Saturday 23:01). The day is only over after its
+	// last such instant. Only looked for when the zone's offset changes
+	// around the boundary.
+	const reach = 26 * time.Hour
+	_, before := end.Add(-time.Second).In(loc).Zone()
+	_, after := end.Add(reach).In(loc).Zone()
+	if before == after {
+		return end, nil
+	}
+	for c := end; c.Before(end.Add(reach)); c = c.Add(time.Second) {
+		if l := c.In(loc); l.Year() == d.Year() && l.Month() == d.Month() && l.Day() == d.Day() {
+			end = c.Add(time.Second)
+		}
+	}
+	return end, nil
 }
 
 // mergeSpans sorts spans and merges the ones that overlap or touch.
