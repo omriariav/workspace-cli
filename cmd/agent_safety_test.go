@@ -233,6 +233,16 @@ func TestIntrospection_ShowScopes(t *testing.T) {
 		t.Errorf("docs read scopes = %v, want Docs scopes", docsRead["scopes"])
 	}
 
+	// events decode only parses stdin: no scopes, no login suggestion.
+	decode, _ := runIntrospection(t, "events", "decode", "--show-scopes")
+	if len(toStrings(decode["scopes"])) != 0 || decode["login"] != nil || decode["note"] == nil {
+		t.Errorf("events decode --show-scopes = %v", decode)
+	}
+	subs, _ := runIntrospection(t, "events", "subscriptions", "list", "--show-scopes")
+	if len(toStrings(subs["scopes"])) == 0 {
+		t.Errorf("events subscriptions list should still report scopes: %v", subs)
+	}
+
 	// auth login is what requests scopes: it must not claim to use none.
 	login, _ := runIntrospection(t, "auth", "login", "--show-scopes")
 	loginNote, _ := login["note"].(string)
@@ -494,7 +504,7 @@ func TestConditionalSensitive_GmailLabelsToTrashOrSpam(t *testing.T) {
 }
 
 func TestConditionalSensitive_RulesResolveAndTrigger(t *testing.T) {
-	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash", "event-types": "google.workspace.chat.message.v1.created"}
+	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash", "event-types": "google.workspace.chat.message.v1.created", "file": "changes.json"}
 	for key, rule := range conditionalSensitive {
 		cmd, _, err := rootCmd.Find(strings.Fields(key))
 		if err != nil || commandKey(cmd) != key {

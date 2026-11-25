@@ -485,6 +485,18 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 	})
 }
 
+// firstErrorReason returns the reason of the first usable entry in a
+// free/busy error list. The list holds pointers, so a null entry in the
+// response arrives as nil.
+func firstErrorReason(errs []*calendar.Error) string {
+	for _, e := range errs {
+		if e != nil && e.Reason != "" {
+			return e.Reason
+		}
+	}
+	return "unspecified error"
+}
+
 // unreadableCalendarsError returns an error when some requested calendars
 // could not be read and partial results were not asked for: a suggestion
 // is only meaningful if everyone's availability is known.
@@ -529,7 +541,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 			return false, "missing from response", nil
 		}
 		if len(fb.Errors) > 0 {
-			return false, fb.Errors[0].Reason, nil
+			return false, firstErrorReason(fb.Errors), nil
 		}
 		// A readable calendar always carries a busy list, empty when it
 		// is free ("busy": []). No list at all — a null or empty entry —
@@ -573,7 +585,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		// is; otherwise part of the group's availability is unknown.
 		if group, isGroup := resp.Groups[item.Id]; isGroup {
 			if len(group.Errors) > 0 {
-				markUnavailable(item.Id, group.Errors[0].Reason)
+				markUnavailable(item.Id, firstErrorReason(group.Errors))
 				continue
 			}
 			if len(group.Calendars) == 0 {

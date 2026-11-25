@@ -41,6 +41,8 @@ var commandScopeOverrides = map[string][]string{
 	"drive activity": {"driveactivity"},
 	// Trashes or deletes the file through the Drive API.
 	"docs trash": {"drive"},
+	// Decodes a CloudEvent from stdin; never calls Google.
+	"events decode": {},
 }
 
 // scopeServicesFor returns the scope services a command uses.

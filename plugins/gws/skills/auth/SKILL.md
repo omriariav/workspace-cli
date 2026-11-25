@@ -167,7 +167,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
 - Covered when a flag is used: `drive update --trashed`, `chat setup-space
   --members`, `calendar create --attendees`, `calendar update
   --add-attendees`, `calendar rsvp --message`, `events subscriptions update
-  --event-types`, and `gmail label --add` / `gmail
+  --event-types`, `forms update --file`, and `gmail label --add` / `gmail
   batch-modify --add-labels` when the labels include `TRASH` or `SPAM`.
 - Covered explicitly: `docs replace-content` (replaces the whole document
   body); `events subscriptions create` and `reactivate` (start or

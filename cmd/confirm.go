@@ -104,6 +104,7 @@ var conditionalSensitive = map[string]conditionalRule{
 	"calendar update":             {flag: "add-attendees", effect: "invites attendees to an event"},
 	"calendar rsvp":               {flag: "message", effect: "sends a message to all attendees of an event"},
 	"events subscriptions update": {flag: "event-types", effect: "changes which Workspace events a subscription delivers"},
+	"forms update":                {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},
 	"gmail label":                 {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam},
 	"gmail batch-modify":          {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam},
 }

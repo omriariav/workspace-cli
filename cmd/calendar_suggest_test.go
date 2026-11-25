@@ -796,6 +796,32 @@ func TestQueryBusySpans_EmptyBusyListIsFreeMissingIsUnknown(t *testing.T) {
 	}
 }
 
+func TestQueryBusySpans_NullErrorEntriesDoNotPanic(t *testing.T) {
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"calendars":{"a@example.com":{"errors":[null]},"b@example.com":{"errors":[null,{"reason":"notFound"}]},"primary":{"busy":[]}},"groups":{"team@example.com":{"errors":[null]}}}`))
+	})
+	from := mustTime(t, "2026-12-01T00:00:00Z")
+	to := mustTime(t, "2026-12-02T00:00:00Z")
+	items := []*calendar.FreeBusyRequestItem{{Id: "a@example.com"}, {Id: "b@example.com"}, {Id: "team@example.com"}, {Id: "primary"}}
+
+	_, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := map[string]string{}
+	for _, u := range unavailable {
+		reasons[u["calendar"].(string)] = u["reason"].(string)
+	}
+	if strings.Join(checked, ",") != "primary" || len(reasons) != 3 ||
+		reasons["a@example.com"] != "unspecified error" || reasons["b@example.com"] != "notFound" || reasons["team@example.com"] != "unspecified error" {
+		t.Errorf("checked = %v, unavailable = %v", checked, reasons)
+	}
+	if got := firstErrorReason(nil); got != "unspecified error" {
+		t.Errorf("firstErrorReason(nil) = %q", got)
+	}
+}
+
 func newSuggestTestService(t *testing.T, handler http.HandlerFunc) *calendar.Service {
 	t.Helper()
 	server := httptest.NewServer(handler)
