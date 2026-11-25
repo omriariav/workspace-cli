@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
+	"github.com/omriariav/workspace-cli/internal/config"
 	"github.com/spf13/viper"
 )
 
@@ -247,4 +248,34 @@ func setTestAccessToken(value string) {
 		return
 	}
 	_ = os.Setenv("GWS_ACCESS_TOKEN", value)
+}
+
+// A token variable that is set but empty (a broker that printed nothing)
+// must fail, not fall back to the stored login or a service account: that
+// would run the command as a different identity than the caller selected.
+func TestNewFactory_EmptyAccessTokenIsRejected(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, value := range []string{"", "   "} {
+		t.Setenv(config.AccessTokenEnv, value)
+		if _, err := NewFactory(context.Background()); err == nil || !strings.Contains(err.Error(), "is set but empty") {
+			t.Errorf("GWS_ACCESS_TOKEN=%q: err = %v, want an empty-token error", value, err)
+		}
+	}
+
+	// The same for an explicit, empty --access-token, even when the
+	// environment holds a usable token.
+	t.Setenv(config.AccessTokenEnv, "env-token")
+	origValue, origSet := config.AccessTokenFlag, config.AccessTokenFlagSet
+	t.Cleanup(func() { config.AccessTokenFlag, config.AccessTokenFlagSet = origValue, origSet })
+	config.AccessTokenFlag = func() string { return " " }
+	config.AccessTokenFlagSet = func() bool { return true }
+	if _, err := NewFactory(context.Background()); err == nil || !strings.Contains(err.Error(), "--access-token was given but is empty") {
+		t.Errorf("empty flag: err = %v, want an empty-flag error", err)
+	}
+
+	// A flag that carries a token is fine.
+	config.AccessTokenFlag = func() string { return "flag-token" }
+	if _, err := NewFactory(context.Background()); err != nil {
+		t.Errorf("flag token: %v", err)
+	}
 }

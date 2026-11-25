@@ -60,6 +60,11 @@ type Factory struct {
 func NewFactory(ctx context.Context) (*Factory, error) {
 	// An externally managed access token takes precedence over every other
 	// credential source. It is used as-is: never refreshed, never stored.
+	// One that was supplied but is empty is an error, never a reason to
+	// fall back to a different identity.
+	if err := config.CheckAccessToken(); err != nil {
+		return nil, err
+	}
 	if tok := config.GetAccessToken(); tok != "" {
 		return &Factory{
 			ctx:         ctx,

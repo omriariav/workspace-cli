@@ -242,6 +242,9 @@ func init() {
 		v, _ := rootCmd.PersistentFlags().GetString("access-token")
 		return v
 	}
+	config.AccessTokenFlagSet = func() bool {
+		return rootCmd.PersistentFlags().Changed("access-token")
+	}
 }
 
 func initConfig() {

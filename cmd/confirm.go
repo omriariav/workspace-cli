@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -258,7 +259,9 @@ func confirmGate(cmd *cobra.Command, enabled, yes bool, in io.Reader, errW io.Wr
 	}
 
 	// An approval only counts if the question was actually shown.
-	if _, err := fmt.Fprintf(errW, "gws %s %s. Proceed? [y/N]: ", key, effect); err != nil {
+	// The exact invocation is shown too, so the person approving can see
+	// which file, recipient or role this is about.
+	if _, err := fmt.Fprintf(errW, "About to run: %s\ngws %s %s. Proceed? [y/N]: ", invocationSummary(cmd), key, effect); err != nil {
 		return fmt.Errorf("could not display the confirmation prompt for `gws %s` (%v), so it was not run; re-run with --yes after the user approves", key, err)
 	}
 	// Only a complete line counts: an answer cut off by EOF or a read
@@ -271,4 +274,45 @@ func confirmGate(cmd *cobra.Command, enabled, yes bool, in io.Reader, errW io.Wr
 		}
 	}
 	return fmt.Errorf("cancelled: `gws %s` was not confirmed", key)
+}
+
+// promptValueLimit caps how much of one argument or flag value the
+// confirmation prompt shows.
+const promptValueLimit = 80
+
+// invocationSummary renders the command as it was invoked: its arguments
+// and the flags that were set, for display in the confirmation prompt.
+// Credentials are left out, control characters cannot reach the terminal,
+// and long values (a message body) are shortened.
+func invocationSummary(cmd *cobra.Command) string {
+	parts := []string{"gws", commandKey(cmd)}
+	for _, arg := range cmd.Flags().Args() {
+		parts = append(parts, promptValue(arg))
+	}
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		switch f.Name {
+		case "access-token", "yes":
+			return
+		}
+		if f.Value.Type() == "bool" {
+			if f.Value.String() == "true" {
+				parts = append(parts, "--"+f.Name)
+			} else {
+				parts = append(parts, "--"+f.Name+"=false")
+			}
+			return
+		}
+		parts = append(parts, "--"+f.Name, promptValue(f.Value.String()))
+	})
+	return strings.Join(parts, " ")
+}
+
+// promptValue quotes a value for the prompt, escaping anything that is
+// not printable and shortening it to promptValueLimit characters.
+func promptValue(v string) string {
+	runes := []rune(v)
+	if len(runes) > promptValueLimit {
+		v = string(runes[:promptValueLimit]) + "…"
+	}
+	return strconv.QuoteToGraphic(v)
 }

@@ -134,6 +134,9 @@ gws calendar events --days 1
   for example, has no Workspace scopes.
 - The token is read only from the environment variable or the flag,
   never from `config.yaml`.
+- A token that is supplied but empty (`GWS_ACCESS_TOKEN=""`, or
+  `--access-token ""`) is an error: gws never falls back to the stored
+  login in that case. Unset the variable to use the stored login.
 - Local caches belong to the stored login: with an external token,
   `chat build-cache`, `chat find-group` and `chat find-space` refuse to
   run, and `chat members` does not use the local name cache.

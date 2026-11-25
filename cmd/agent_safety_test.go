@@ -1721,3 +1721,41 @@ func setTestAccessToken(value string) {
 	}
 	_ = os.Setenv("GWS_ACCESS_TOKEN", value)
 }
+
+// The prompt shows what is about to run, so two shares of different files
+// or to different people do not look the same to the person approving.
+// Credentials stay out of it, control characters are escaped and long
+// values are shortened.
+func TestConfirmGate_PromptShowsTheInvocation(t *testing.T) {
+	cmd := &cobra.Command{Use: "share <file-id>", RunE: func(*cobra.Command, []string) error { return nil }}
+	parent := &cobra.Command{Use: "drive"}
+	root := &cobra.Command{Use: "gws"}
+	root.AddCommand(parent)
+	parent.AddCommand(cmd)
+	cmd.Flags().String("email", "", "")
+	cmd.Flags().String("role", "reader", "")
+	cmd.Flags().String("message", "", "")
+	cmd.Flags().Bool("notify", false, "")
+	cmd.Flags().String("access-token", "", "")
+	cmd.Flags().Bool("yes", false, "")
+	long := strings.Repeat("x", 200)
+	if err := cmd.Flags().Parse([]string{"file-123", "--email", "a@example.com", "--notify", "--message", "hi\x1b[2J" + long, "--access-token", "secret-token"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var prompt bytes.Buffer
+	if err := confirmGate(cmd, true, false, strings.NewReader("y\n"), &prompt, true); err != nil {
+		t.Fatalf("confirmGate: %v", err)
+	}
+	out := prompt.String()
+	for _, want := range []string{"About to run: gws drive share", `"file-123"`, `--email "a@example.com"`, "--notify", "…"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("prompt %q is missing %q", out, want)
+		}
+	}
+	for _, unwanted := range []string{"secret-token", "\x1b", "--role", long} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("prompt %q should not contain %q", out, unwanted)
+		}
+	}
+}

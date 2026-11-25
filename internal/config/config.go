@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -38,6 +39,11 @@ const AccessTokenEnv = "GWS_ACCESS_TOKEN"
 // package sets it; it is nil where there is no flag (library use, tests).
 var AccessTokenFlag func() string
 
+// AccessTokenFlagSet reports whether --access-token was given on the
+// command line, whatever its value. Set by the cmd package alongside
+// AccessTokenFlag.
+var AccessTokenFlagSet func() bool
+
 // GetAccessToken returns an externally managed OAuth access token. When
 // set, gws uses it as-is: no login, no refresh.
 //
@@ -52,6 +58,24 @@ func GetAccessToken() string {
 		}
 	}
 	return strings.TrimSpace(os.Getenv(AccessTokenEnv))
+}
+
+// CheckAccessToken rejects an external access token that was supplied but
+// is empty or blank, for example because the command that was meant to
+// produce it printed nothing. Treating that as "no token" would quietly
+// run the command with the stored login or a service account instead: a
+// different identity than the caller selected.
+func CheckAccessToken() error {
+	if AccessTokenFlagSet != nil && AccessTokenFlagSet() {
+		if AccessTokenFlag == nil || strings.TrimSpace(AccessTokenFlag()) == "" {
+			return fmt.Errorf("--access-token was given but is empty; not falling back to another credential. Pass a token, or remove the flag to use the stored login")
+		}
+		return nil
+	}
+	if v, ok := os.LookupEnv(AccessTokenEnv); ok && strings.TrimSpace(v) == "" {
+		return fmt.Errorf("%s is set but empty; not falling back to another credential. Set it to a token, or unset it to use the stored login", AccessTokenEnv)
+	}
+	return nil
 }
 
 // GetConfirmSensitive reports whether sensitive commands (send, share,
