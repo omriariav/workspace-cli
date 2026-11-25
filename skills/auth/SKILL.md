@@ -167,11 +167,12 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   content deletes such as `docs delete-table-row` or `sheets clear`).
 - Covered when a flag is used: `drive update --trashed`, `chat setup-space
   --members`, `calendar create --attendees`, `calendar update
-  --add-attendees`, `calendar rsvp --message`, and `gmail label --add` / `gmail
+  --add-attendees`, `calendar rsvp --message`, `events subscriptions update
+  --event-types`, and `gmail label --add` / `gmail
   batch-modify --add-labels` when the labels include `TRASH` or `SPAM`.
 - Covered explicitly: `docs replace-content` (replaces the whole document
-  body); `events subscriptions create` (starts ongoing delivery of events
-  to a Pub/Sub topic); commands that send (Gmail `send`, `reply`, `forward`,
+  body); `events subscriptions create` and `reactivate` (start or
+  resume delivery of events to a Pub/Sub topic); commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`, `unsubscribe`; Drive `share`, `unshare`,
   `update-permission`, `move`, `start-approval`, `reassign-approval`; Chat

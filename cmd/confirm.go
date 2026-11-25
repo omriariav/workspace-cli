@@ -89,21 +89,23 @@ var sensitiveCommands = map[string]string{
 	"contacts delete-photo": "deletes a contact photo",
 
 	// Workspace Events
-	"events subscriptions delete": "deletes an event subscription",
-	"events subscriptions create": "starts ongoing delivery of Workspace events to a Pub/Sub topic",
+	"events subscriptions delete":     "deletes an event subscription",
+	"events subscriptions create":     "starts ongoing delivery of Workspace events to a Pub/Sub topic",
+	"events subscriptions reactivate": "resumes delivery of Workspace events to a Pub/Sub topic",
 }
 
 // conditionalSensitive lists commands that send, share or delete only when
 // a specific flag carries a value: the same command without that flag is
 // an ordinary create or edit.
 var conditionalSensitive = map[string]conditionalRule{
-	"drive update":       {flag: "trashed", effect: "moves a file to Trash"},
-	"chat setup-space":   {flag: "members", effect: "creates a chat space and adds members to it"},
-	"calendar create":    {flag: "attendees", effect: "invites attendees to an event"},
-	"calendar update":    {flag: "add-attendees", effect: "invites attendees to an event"},
-	"calendar rsvp":      {flag: "message", effect: "sends a message to all attendees of an event"},
-	"gmail label":        {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam},
-	"gmail batch-modify": {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam},
+	"drive update":                {flag: "trashed", effect: "moves a file to Trash"},
+	"chat setup-space":            {flag: "members", effect: "creates a chat space and adds members to it"},
+	"calendar create":             {flag: "attendees", effect: "invites attendees to an event"},
+	"calendar update":             {flag: "add-attendees", effect: "invites attendees to an event"},
+	"calendar rsvp":               {flag: "message", effect: "sends a message to all attendees of an event"},
+	"events subscriptions update": {flag: "event-types", effect: "changes which Workspace events a subscription delivers"},
+	"gmail label":                 {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam},
+	"gmail batch-modify":          {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam},
 }
 
 // conditionalRule makes a command sensitive when flag is set, or, if when

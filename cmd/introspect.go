@@ -195,6 +195,19 @@ func commandScopes(cmd *cobra.Command) map[string]interface{} {
 		"command":  cmd.CommandPath(),
 		"services": services,
 	}
+	// `auth login` is the command that requests scopes, so "none" would be
+	// wrong: what it asks for depends on its own flags.
+	if commandKey(cmd) == "auth login" {
+		all := auth.ValidServiceNames()
+		result["services"] = all
+		result["scopes"] = auth.ScopesForServices(all)
+		result["readonly_scopes"] = auth.ReadOnlyScopesForServices(all)
+		result["note"] = "auth login requests the scopes of the services named by --services (every service when omitted). " +
+			"--readonly requests only their read-only scopes. --add also re-requests the scopes the stored login already holds. " +
+			"`scopes` and `readonly_scopes` here list the most a login can request; " +
+			"run `gws <service> <command> --show-scopes` for one service."
+		return result
+	}
 	if len(services) == 0 {
 		result["services"] = []string{}
 		result["scopes"] = []string{}

@@ -233,6 +233,22 @@ func TestIntrospection_ShowScopes(t *testing.T) {
 		t.Errorf("docs read scopes = %v, want Docs scopes", docsRead["scopes"])
 	}
 
+	// auth login is what requests scopes: it must not claim to use none.
+	login, _ := runIntrospection(t, "auth", "login", "--show-scopes")
+	loginNote, _ := login["note"].(string)
+	if len(toStrings(login["scopes"])) == 0 || len(toStrings(login["readonly_scopes"])) == 0 ||
+		!strings.Contains(loginNote, "--services") || !strings.Contains(loginNote, "--readonly") || !strings.Contains(loginNote, "--add") {
+		t.Errorf("auth login --show-scopes = %v", login)
+	}
+	if strings.Contains(loginNote, "does not use Google OAuth scopes") {
+		t.Errorf("auth login note = %q", loginNote)
+	}
+	// Other auth commands really use none.
+	status, _ := runIntrospection(t, "auth", "status", "--show-scopes")
+	if len(toStrings(status["scopes"])) != 0 {
+		t.Errorf("auth status scopes = %v", status["scopes"])
+	}
+
 	version, _ := runIntrospection(t, "version", "--show-scopes")
 	if len(toStrings(version["scopes"])) != 0 || version["note"] == nil {
 		t.Errorf("version uses no OAuth scopes: %v", version)
@@ -317,6 +333,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"gmail", "send"}, {"chat", "send"}, {"drive", "share"}, {"calendar", "unshare"},
 		{"events", "subscriptions", "delete"},
 		{"events", "subscriptions", "create"},
+		{"events", "subscriptions", "reactivate"},
 		{"drive", "start-approval"}, {"drive", "reassign-approval"},
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},
@@ -477,7 +494,7 @@ func TestConditionalSensitive_GmailLabelsToTrashOrSpam(t *testing.T) {
 }
 
 func TestConditionalSensitive_RulesResolveAndTrigger(t *testing.T) {
-	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash"}
+	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash", "event-types": "google.workspace.chat.message.v1.created"}
 	for key, rule := range conditionalSensitive {
 		cmd, _, err := rootCmd.Find(strings.Fields(key))
 		if err != nil || commandKey(cmd) != key {
