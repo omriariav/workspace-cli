@@ -29,6 +29,12 @@ If not found, install: `go install github.com/omriariav/workspace-cli/cmd/gws@la
 | Check auth status | `gws auth status` |
 | Login (all scopes) | `gws auth login` |
 | Login (specific services) | `gws auth login --services gmail,calendar,chat` |
+| Login read-only | `gws auth login --readonly` |
+| Login read-only for some services | `gws auth login --services gmail,drive --readonly` |
+| Add a service to the existing login | `gws auth login --add --services tasks` |
+| Use an existing access token | `GWS_ACCESS_TOKEN=<token> gws gmail list` |
+| Scopes a command needs | `gws gmail send --show-scopes` |
+| Describe a command's flags as JSON | `gws gmail send --schema` |
 | Login with credentials | `gws auth login --client-id <id> --client-secret <secret>` |
 | Logout (revokes token) | `gws auth logout` |
 
@@ -66,6 +72,82 @@ Notes:
   `impersonate_user`, app mode with `impersonate_user`, or OAuth mode with
   leftover service-account settings all produce clear errors.
 
+## Least-Privilege Login
+
+Start read-only and add write access only for the services that need it.
+
+```bash
+gws auth login --readonly                       # read-only, every service
+gws auth login --services gmail,drive --readonly  # read-only, two services
+gws auth login --add --services gmail           # later: upgrade gmail to full access
+```
+
+- `--readonly` requests only read-only scopes. Commands that create, change,
+  or delete data then fail with an insufficient-scope error (exit code 3) and
+  a hint naming the login that grants write access.
+- `--add` merges the selected services into the existing authorization
+  instead of replacing it. Without `--add`, a login replaces the previous
+  grant.
+- Adding a service read-only never downgrades a service that already has
+  full access; to reduce access, log in again without `--add`.
+- `gws auth status` reports the access level per service (`full` or
+  `readonly`) and `read_only: true` when nothing has write access.
+
+## External Access Token
+
+If another system already manages Google OAuth tokens (CI, a secrets broker,
+`gcloud auth print-access-token`, a domain-wide-delegation token service),
+hand the token to `gws` directly:
+
+```bash
+export GWS_ACCESS_TOKEN="$(my-token-broker)"
+gws calendar events --days 1
+```
+
+- The token takes precedence over the stored login and over the
+  service-account modes. No login is needed.
+- `gws` uses it as-is: it is never refreshed, stored, or printed. An expired
+  or under-scoped token surfaces the API error (exit code 3).
+- Check what a command needs first with `--show-scopes`.
+- `--access-token <token>` also works, but a flag value is visible in process
+  listings and shell history — prefer the environment variable.
+
+## Inspecting Commands Without Running Them
+
+Two global flags print JSON and exit without calling any Google API and
+without needing credentials:
+
+```bash
+gws drive share --schema        # flags (name, type, default, required), usage, subcommands
+gws drive share --show-scopes   # full and read-only scopes of the command's service
+```
+
+`--schema` also marks commands covered by the confirmation gate with
+`"sensitive": true`. Scope output is per service, not per command.
+
+## Confirmation Gate for Sensitive Commands
+
+Off by default. When turned on, commands that send messages, change sharing,
+or delete data ask for approval before they run.
+
+```bash
+export GWS_CONFIRM_SENSITIVE=1     # or confirm_sensitive: true in config.yaml
+gws gmail send --to a@example.com --subject Hi --body Hello
+# stderr: gws gmail send sends an email. Proceed? [y/N]:
+```
+
+- In a terminal, the prompt is written to stderr and reads `y`/`n` from stdin.
+- Without a terminal (agents, scripts), the command fails with
+  `confirmation required` instead of hanging. **Ask the user for explicit
+  approval, then re-run the same command with `--yes`.** Never add `--yes`
+  on your own initiative.
+- Covered: Gmail send/reply/forward/send-draft and trash/delete commands;
+  Calendar delete, clear, share, unshare; Tasks delete/clear; Drive delete,
+  empty-trash, share/unshare/update-permission and comment/revision/drive
+  deletes; Docs trash; Sheets delete-sheet; Slides delete-slide; Chat send,
+  delete, delete-space, add/remove-member; Contacts deletes; Events
+  subscription delete.
+
 ## First-Time Setup
 
 If you haven't set up Google Cloud credentials yet, see the detailed setup guide:
@@ -98,6 +180,8 @@ gws auth login [flags]
 - `--client-id string` — OAuth client ID (overrides env/config)
 - `--client-secret string` — OAuth client secret (overrides env/config)
 - `--services string` — Comma-separated services to authorize (e.g. `gmail,calendar,chat`). Omit for all scopes.
+- `--readonly` — Request only read-only scopes for the selected services
+- `--add` — Add the selected services to the existing authorization instead of replacing it
 
 Opens a browser for Google OAuth consent. The token is stored at `~/.config/gws/token.json`.
 
@@ -139,16 +223,19 @@ services:
 ## Token Management
 
 - Token stored at: `~/.config/gws/token.json` (atomic writes, file-locked)
-- Granted services tracked in: `~/.config/gws/granted_services.json`
+- Granted services tracked in: `~/.config/gws/granted_services.json`; per-service access level (`full` / `readonly`) in `~/.config/gws/granted_access.json`
 - Tokens auto-refresh when expired; refresh tokens preserved across re-auth
 - Scoped login: use `--services` to request only needed scopes (smaller consent screen)
 - Default services can be set in config.yaml: `services: [gmail, calendar, chat]`
-- To add more scopes, re-run `gws auth login --services gmail,calendar,chat,drive`
+- To add more scopes, run `gws auth login --add --services drive` (or re-run the full list without `--add`)
 - Logout revokes the token server-side before deleting locally
 
 ## Tips for AI Agents
 
 - Always check `gws auth status` before running any gws command to verify authentication
+- Prefer `gws auth login --readonly` for tasks that only read data; ask the user before requesting write access
+- If a command fails with `confirmation required`, ask the user to approve the action, then re-run it with `--yes`
+- Use `--schema` and `--show-scopes` to learn a command's flags and scopes instead of guessing
 - If auth fails, guide users to the setup guide at `references/setup-guide.md`
 - Credentials should NEVER be committed to version control or output in logs
 - The OAuth flow opens a browser — this requires a desktop environment or manual URL handling

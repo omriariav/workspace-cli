@@ -694,3 +694,84 @@ func TestLoadGrantedServices_NotExists(t *testing.T) {
 		t.Errorf("expected nil for non-existent file, got: %v", loaded)
 	}
 }
+
+func TestReadOnlyScopesForServices(t *testing.T) {
+	scopes := ReadOnlyScopesForServices([]string{"gmail", "drive"})
+	expected := []string{
+		"https://www.googleapis.com/auth/userinfo.email",
+		"https://www.googleapis.com/auth/gmail.readonly",
+		"https://www.googleapis.com/auth/drive.readonly",
+	}
+	if len(scopes) != len(expected) {
+		t.Fatalf("expected %d scopes, got %d: %v", len(expected), len(scopes), scopes)
+	}
+	for i, want := range expected {
+		if scopes[i] != want {
+			t.Errorf("scope %d = %s, want %s", i, scopes[i], want)
+		}
+	}
+}
+
+func TestReadOnlyServiceScopes_CoverEveryService(t *testing.T) {
+	for svc := range ServiceScopes {
+		ro, ok := ReadOnlyServiceScopes[svc]
+		if !ok || len(ro) == 0 {
+			t.Errorf("service %q has no read-only scopes", svc)
+		}
+	}
+	for svc := range ReadOnlyServiceScopes {
+		if _, ok := ServiceScopes[svc]; !ok {
+			t.Errorf("read-only table has unknown service %q", svc)
+		}
+	}
+}
+
+func TestReadOnlyServiceScopes_GrantNoWriteAccess(t *testing.T) {
+	// Scopes that are read-only without carrying a ".readonly" suffix.
+	allowed := map[string]bool{"userinfo.email": true, "userinfo.profile": true}
+	for svc, scopes := range ReadOnlyServiceScopes {
+		for _, s := range scopes {
+			if !strings.HasSuffix(s, ".readonly") && !allowed[s] {
+				t.Errorf("service %q read-only scope %q is not read-only", svc, s)
+			}
+		}
+	}
+}
+
+func TestServiceForScope_ResolvesReadOnlyOnlyScopes(t *testing.T) {
+	if got := ServiceForScope("https://www.googleapis.com/auth/spreadsheets.readonly"); got != "sheets" {
+		t.Errorf("ServiceForScope(spreadsheets.readonly) = %q, want sheets", got)
+	}
+}
+
+func TestGrantedAccess_RoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if got := LoadGrantedAccess(); got != nil {
+		t.Errorf("expected nil before any login, got %v", got)
+	}
+	want := map[string]string{"gmail": AccessReadOnly, "drive": AccessFull}
+	if err := SaveGrantedAccess(want); err != nil {
+		t.Fatalf("SaveGrantedAccess: %v", err)
+	}
+	got := LoadGrantedAccess()
+	if len(got) != 2 || got["gmail"] != AccessReadOnly || got["drive"] != AccessFull {
+		t.Errorf("round trip = %v", got)
+	}
+}
+
+func TestAuthURLOptions_IncludeGrantedScopes(t *testing.T) {
+	c := NewOAuthClient("id", "secret", []string{"scope-a"})
+	url := c.config.AuthCodeURL("state", c.authURLOptions("challenge")...)
+	if strings.Contains(url, "include_granted_scopes") {
+		t.Errorf("replacing login must not request granted scopes: %s", url)
+	}
+	if !strings.Contains(url, "code_challenge=challenge") || !strings.Contains(url, "prompt=consent") {
+		t.Errorf("auth URL lost PKCE/consent params: %s", url)
+	}
+
+	c.SetIncludeGrantedScopes(true)
+	url = c.config.AuthCodeURL("state", c.authURLOptions("challenge")...)
+	if !strings.Contains(url, "include_granted_scopes=true") {
+		t.Errorf("incremental login should request granted scopes: %s", url)
+	}
+}

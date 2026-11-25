@@ -1,0 +1,346 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/omriariav/workspace-cli/internal/client"
+	"github.com/spf13/cobra"
+	"google.golang.org/api/calendar/v3"
+)
+
+var calendarSuggestTimeCmd = &cobra.Command{
+	Use:   "suggest-time",
+	Short: "Suggest free meeting slots",
+	Long: `Finds times when every given calendar is free.
+
+Queries free/busy for the calendars, merges their busy periods, and returns
+the free windows inside working hours that fit the requested duration. Each
+result gives the earliest slot in a window and how long the window stays free.
+
+A date-only --to includes that whole day. Calendars that cannot be read are
+listed under "unavailable" and are NOT taken into account.
+
+Examples:
+  gws calendar suggest-time --from 2026-12-01 --to 2026-12-05
+  gws calendar suggest-time --from 2026-12-01 --to 2026-12-05 --attendees a@example.com,b@example.com --duration 45m
+  gws calendar suggest-time --from "2026-12-01 13:00" --to "2026-12-01 18:00" --working-hours any --timezone Europe/London`,
+	RunE: runCalendarSuggestTime,
+}
+
+func init() {
+	calendarCmd.AddCommand(calendarSuggestTimeCmd)
+
+	calendarSuggestTimeCmd.Flags().String("from", "", "Start of the search range (required)")
+	calendarSuggestTimeCmd.Flags().String("to", "", "End of the search range; a date-only value includes that day (required)")
+	calendarSuggestTimeCmd.Flags().String("duration", "30m", "Meeting length, e.g. 30m, 1h, 1h30m, or minutes as a number")
+	calendarSuggestTimeCmd.Flags().String("calendars", "primary", "Comma-separated calendar IDs that must be free")
+	calendarSuggestTimeCmd.Flags().String("attendees", "", "Comma-separated attendee emails that must also be free")
+	calendarSuggestTimeCmd.Flags().String("working-hours", "09:00-17:00", "Daily window to search, HH:MM-HH:MM, or 'any' for the whole day")
+	calendarSuggestTimeCmd.Flags().String("timezone", "", "IANA timezone for working hours and output (default: local)")
+	calendarSuggestTimeCmd.Flags().Int("max", 5, "Maximum number of suggestions")
+	calendarSuggestTimeCmd.Flags().Bool("include-weekends", false, "Also search Saturdays and Sundays")
+	calendarSuggestTimeCmd.MarkFlagRequired("from")
+	calendarSuggestTimeCmd.MarkFlagRequired("to")
+}
+
+// timeSpan is a half-open interval [Start, End).
+type timeSpan struct {
+	Start, End time.Time
+}
+
+// suggestion is one free window that fits the requested duration.
+type suggestion struct {
+	Start     time.Time // earliest slot start
+	End       time.Time // Start + duration
+	FreeUntil time.Time // end of the free window
+}
+
+// parseSuggestDuration accepts a Go duration ("45m", "1h30m") or a bare
+// number of minutes ("45").
+func parseSuggestDuration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if n, err := strconv.Atoi(s); err == nil {
+		if n <= 0 {
+			return 0, fmt.Errorf("must be positive")
+		}
+		return time.Duration(n) * time.Minute, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("use a duration like 30m or 1h30m")
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("must be positive")
+	}
+	return d, nil
+}
+
+// parseWorkingHours parses "HH:MM-HH:MM" into offsets from midnight.
+// "any" (or an empty value) means the whole day.
+func parseWorkingHours(s string) (start, end time.Duration, err error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" || s == "any" {
+		return 0, 24 * time.Hour, nil
+	}
+	parts := strings.Split(s, "-")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("use HH:MM-HH:MM or 'any'")
+	}
+	parse := func(v string) (time.Duration, error) {
+		v = strings.TrimSpace(v)
+		if v == "24:00" {
+			return 24 * time.Hour, nil
+		}
+		t, err := time.Parse("15:04", v)
+		if err != nil {
+			return 0, fmt.Errorf("invalid time %q, use HH:MM", v)
+		}
+		return time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute, nil
+	}
+	if start, err = parse(parts[0]); err != nil {
+		return 0, 0, err
+	}
+	if end, err = parse(parts[1]); err != nil {
+		return 0, 0, err
+	}
+	if end <= start {
+		return 0, 0, fmt.Errorf("end must be after start")
+	}
+	return start, end, nil
+}
+
+// parseTimeIn parses RFC3339, "YYYY-MM-DD HH:MM", or "YYYY-MM-DD" with
+// zone-less values interpreted in loc. dateOnly reports the last form.
+func parseTimeIn(s string, loc *time.Location) (t time.Time, dateOnly bool, err error) {
+	s = strings.TrimSpace(s)
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, false, nil
+	}
+	if t, err := time.ParseInLocation("2006-01-02 15:04", s, loc); err == nil {
+		return t, false, nil
+	}
+	if t, err := time.ParseInLocation("2006-01-02", s, loc); err == nil {
+		return t, true, nil
+	}
+	return time.Time{}, false, fmt.Errorf("unrecognized time format: %s (use RFC3339, 'YYYY-MM-DD HH:MM', or 'YYYY-MM-DD')", s)
+}
+
+// mergeSpans sorts spans and merges the ones that overlap or touch.
+func mergeSpans(spans []timeSpan) []timeSpan {
+	if len(spans) == 0 {
+		return nil
+	}
+	sorted := append([]timeSpan(nil), spans...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Start.Before(sorted[j].Start) })
+	merged := []timeSpan{sorted[0]}
+	for _, s := range sorted[1:] {
+		last := &merged[len(merged)-1]
+		if !s.Start.After(last.End) {
+			if s.End.After(last.End) {
+				last.End = s.End
+			}
+			continue
+		}
+		merged = append(merged, s)
+	}
+	return merged
+}
+
+// suggestSlots returns up to max free windows of at least dur between from
+// and to, restricted to the daily [whStart, whEnd) window in loc. Day
+// boundaries are computed with calendar arithmetic so DST changes do not
+// shift working hours.
+func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.Duration, loc *time.Location, includeWeekends bool, max int) []suggestion {
+	busy = mergeSpans(busy)
+	var out []suggestion
+
+	local := from.In(loc)
+	day := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
+	for ; day.Before(to) && len(out) < max; day = day.AddDate(0, 0, 1) {
+		if wd := day.Weekday(); !includeWeekends && (wd == time.Saturday || wd == time.Sunday) {
+			continue
+		}
+		winStart := atDayOffset(day, whStart)
+		winEnd := atDayOffset(day, whEnd)
+		if winStart.Before(from) {
+			winStart = from
+		}
+		if winEnd.After(to) {
+			winEnd = to
+		}
+
+		cursor := winStart
+		emit := func(gapEnd time.Time) {
+			if len(out) < max && gapEnd.Sub(cursor) >= dur {
+				out = append(out, suggestion{Start: cursor, End: cursor.Add(dur), FreeUntil: gapEnd})
+			}
+		}
+		for _, b := range busy {
+			if !b.End.After(cursor) {
+				continue
+			}
+			if !b.Start.Before(winEnd) {
+				break
+			}
+			if b.Start.After(cursor) {
+				emit(b.Start)
+			}
+			cursor = b.End
+		}
+		if cursor.Before(winEnd) {
+			emit(winEnd)
+		}
+	}
+	return out
+}
+
+// atDayOffset returns the wall-clock time `offset` after midnight on day.
+func atDayOffset(day time.Time, offset time.Duration) time.Time {
+	h := int(offset / time.Hour)
+	m := int((offset % time.Hour) / time.Minute)
+	return time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, day.Location())
+}
+
+// splitList splits a comma-separated list, dropping blanks.
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
+	p := GetPrinter()
+
+	fromStr, _ := cmd.Flags().GetString("from")
+	toStr, _ := cmd.Flags().GetString("to")
+	durStr, _ := cmd.Flags().GetString("duration")
+	calendarsStr, _ := cmd.Flags().GetString("calendars")
+	attendeesStr, _ := cmd.Flags().GetString("attendees")
+	whStr, _ := cmd.Flags().GetString("working-hours")
+	tzStr, _ := cmd.Flags().GetString("timezone")
+	max, _ := cmd.Flags().GetInt("max")
+	includeWeekends, _ := cmd.Flags().GetBool("include-weekends")
+
+	loc := time.Local
+	if tzStr != "" {
+		l, err := time.LoadLocation(tzStr)
+		if err != nil {
+			return usageErrorf("invalid --timezone %q: use an IANA name such as Europe/London", tzStr)
+		}
+		loc = l
+	}
+	from, _, err := parseTimeIn(fromStr, loc)
+	if err != nil {
+		return usageErrorf("invalid --from: %s", err.Error())
+	}
+	to, toDateOnly, err := parseTimeIn(toStr, loc)
+	if err != nil {
+		return usageErrorf("invalid --to: %s", err.Error())
+	}
+	if toDateOnly {
+		to = to.AddDate(0, 0, 1)
+	}
+	if !to.After(from) {
+		return usageErrorf("--to must be after --from")
+	}
+	dur, err := parseSuggestDuration(durStr)
+	if err != nil {
+		return usageErrorf("invalid --duration %q: %s", durStr, err.Error())
+	}
+	whStart, whEnd, err := parseWorkingHours(whStr)
+	if err != nil {
+		return usageErrorf("invalid --working-hours %q: %s", whStr, err.Error())
+	}
+	if max < 1 {
+		return usageErrorf("--max must be >= 1")
+	}
+
+	seen := map[string]bool{}
+	var items []*calendar.FreeBusyRequestItem
+	for _, id := range append(splitList(calendarsStr), splitList(attendeesStr)...) {
+		if !seen[id] {
+			seen[id] = true
+			items = append(items, &calendar.FreeBusyRequestItem{Id: id})
+		}
+	}
+	if len(items) == 0 {
+		return usageErrorf("at least one calendar is required: set --calendars or --attendees")
+	}
+
+	ctx := context.Background()
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return p.PrintError(err)
+	}
+	svc, err := factory.Calendar()
+	if err != nil {
+		return p.PrintError(err)
+	}
+
+	resp, err := svc.Freebusy.Query(&calendar.FreeBusyRequest{
+		TimeMin: from.Format(time.RFC3339),
+		TimeMax: to.Format(time.RFC3339),
+		Items:   items,
+	}).Do()
+	if err != nil {
+		return p.PrintError(fmt.Errorf("failed to query free/busy: %w", err))
+	}
+
+	var busy []timeSpan
+	checked := []string{}
+	unavailable := []map[string]interface{}{}
+	for _, item := range items {
+		fb, ok := resp.Calendars[item.Id]
+		if !ok {
+			unavailable = append(unavailable, map[string]interface{}{"calendar": item.Id, "reason": "missing from response"})
+			continue
+		}
+		if len(fb.Errors) > 0 {
+			unavailable = append(unavailable, map[string]interface{}{"calendar": item.Id, "reason": fb.Errors[0].Reason})
+			continue
+		}
+		checked = append(checked, item.Id)
+		for _, period := range fb.Busy {
+			start, err1 := time.Parse(time.RFC3339, period.Start)
+			end, err2 := time.Parse(time.RFC3339, period.End)
+			if err1 != nil || err2 != nil {
+				return p.PrintError(fmt.Errorf("unexpected busy period for %s: %s - %s", item.Id, period.Start, period.End))
+			}
+			busy = append(busy, timeSpan{Start: start, End: end})
+		}
+	}
+	if len(checked) == 0 {
+		return p.PrintError(fmt.Errorf("none of the requested calendars could be read; no suggestions made"))
+	}
+
+	slots := suggestSlots(busy, from, to, dur, whStart, whEnd, loc, includeWeekends, max)
+	suggestions := make([]map[string]interface{}, 0, len(slots))
+	for _, s := range slots {
+		suggestions = append(suggestions, map[string]interface{}{
+			"start":        s.Start.In(loc).Format(time.RFC3339),
+			"end":          s.End.In(loc).Format(time.RFC3339),
+			"free_until":   s.FreeUntil.In(loc).Format(time.RFC3339),
+			"free_minutes": int(s.FreeUntil.Sub(s.Start) / time.Minute),
+		})
+	}
+
+	return p.Print(map[string]interface{}{
+		"time_min":          from.In(loc).Format(time.RFC3339),
+		"time_max":          to.In(loc).Format(time.RFC3339),
+		"timezone":          loc.String(),
+		"duration_minutes":  int(dur / time.Minute),
+		"calendars_checked": checked,
+		"unavailable":       unavailable,
+		"suggestions":       suggestions,
+		"count":             len(suggestions),
+	})
+}

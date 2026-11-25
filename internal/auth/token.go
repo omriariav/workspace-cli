@@ -160,6 +160,41 @@ func LoadGrantedServices() []string {
 	return services
 }
 
+// SaveGrantedAccess persists the access level ("full" or "readonly") granted
+// to each service at login time. It is local metadata only: the token's real
+// scopes are always enforced by Google.
+func SaveGrantedAccess(access map[string]string) error {
+	if err := config.EnsureConfigDir(); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+	data, err := json.Marshal(access)
+	if err != nil {
+		return fmt.Errorf("failed to marshal granted access: %w", err)
+	}
+	return os.WriteFile(config.GetGrantedAccessPath(), data, 0600)
+}
+
+// LoadGrantedAccess loads the per-service access levels. Returns nil when
+// no metadata exists (logins made before access levels were recorded).
+func LoadGrantedAccess() map[string]string {
+	data, err := os.ReadFile(config.GetGrantedAccessPath())
+	if err != nil {
+		return nil
+	}
+	var access map[string]string
+	if err := json.Unmarshal(data, &access); err != nil {
+		return nil
+	}
+	return access
+}
+
+// DeleteGrantedMetadata removes the granted-services and granted-access
+// files. Missing files are not an error.
+func DeleteGrantedMetadata() {
+	os.Remove(config.GetGrantedServicesPath())
+	os.Remove(config.GetGrantedAccessPath())
+}
+
 // TokenExists checks if a token file exists.
 func TokenExists() bool {
 	tokenPath := config.GetTokenPath()

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
+	"github.com/spf13/viper"
 )
 
 // captureStderr swaps os.Stderr for a pipe, runs fn, and returns whatever was
@@ -168,5 +169,37 @@ func TestUserModes_AllowServiceClients(t *testing.T) {
 		if err := f.requireUserAuth("gmail"); err != nil {
 			t.Errorf("mode %+v: unexpected rejection: %v", mode, err)
 		}
+	}
+}
+
+func TestNewFactory_AccessTokenTakesPrecedence(t *testing.T) {
+	// No stored token, no client credentials, and a service-account mode
+	// configured: the external token must still win and be used verbatim.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	viper.Set("access_token", "  external-token  ")
+	viper.Set("auth_mode", "service-account-app")
+	viper.Set("service_account_key_file", "/nonexistent/key.json")
+	t.Cleanup(func() {
+		viper.Set("access_token", "")
+		viper.Set("auth_mode", "")
+		viper.Set("service_account_key_file", "")
+	})
+
+	f, err := NewFactory(context.Background())
+	if err != nil {
+		t.Fatalf("NewFactory with access token: %v", err)
+	}
+	if f.AuthMode().Mode != auth.AuthModeOAuth {
+		t.Errorf("auth mode = %q, want %q", f.AuthMode().Mode, auth.AuthModeOAuth)
+	}
+	tok, err := f.TokenSource().Token()
+	if err != nil {
+		t.Fatalf("Token(): %v", err)
+	}
+	if tok.AccessToken != "external-token" {
+		t.Errorf("access token = %q, want the trimmed external token", tok.AccessToken)
+	}
+	if tok.RefreshToken != "" {
+		t.Error("an external token must not carry a refresh token")
 	}
 }

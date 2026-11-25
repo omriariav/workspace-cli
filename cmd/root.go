@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/omriariav/workspace-cli/internal/auth"
 	"github.com/omriariav/workspace-cli/internal/config"
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/omriariav/workspace-cli/internal/updatecheck"
@@ -21,6 +22,11 @@ var (
 	cfgFile string
 	format  string
 	quiet   bool
+
+	// executedCmd is the command Cobra dispatched to, recorded in
+	// PersistentPreRunE so post-run diagnostics (scope hints) know which
+	// service was involved.
+	executedCmd *cobra.Command
 )
 
 var rootCmd = &cobra.Command{
@@ -39,8 +45,11 @@ Workspace Events, and Custom Search.`,
 	// since arg/flag validation runs before PersistentPreRun.
 	SilenceErrors: true,
 	SilenceUsage:  true,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		executedCmd = cmd
 		emitVersionNotice(cmd, os.Stderr, quiet, os.Getenv("GWS_NO_UPDATE_CHECK") != "")
+		yes, _ := cmd.Flags().GetBool("yes")
+		return confirmGate(cmd, config.GetConfirmSensitive(), yes, os.Stdin, os.Stderr, stdinIsTerminal())
 	},
 }
 
@@ -101,7 +110,19 @@ func Execute() error {
 // Errors from PrintError are mapped via exitCodeForError; Cobra usage
 // errors are printed to errW as plain text and exit ExitUsage.
 func executeAndResolve(errW io.Writer) int {
-	return resolveExitError(rootCmd.Execute(), errW)
+	// --schema / --show-scopes describe a command without running it, so
+	// they are answered before Cobra validates args or required flags.
+	if handled, err := handleIntrospection(rootCmd, os.Args[1:], os.Stdout); handled {
+		return resolveExitError(err, errW)
+	}
+	err := rootCmd.Execute()
+	code := resolveExitError(err, errW)
+	if code == ExitAuth {
+		if hint := readOnlyScopeHint(executedCmd, err, auth.LoadGrantedAccess()); hint != "" {
+			fmt.Fprintln(errW, hint)
+		}
+	}
+	return code
 }
 
 // resolveExitError maps a Cobra execution error to an exit code. Pure
@@ -199,7 +220,13 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&format, "format", "json", "output format: json, text, or yaml")
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress output (useful for scripted actions)")
 
+	rootCmd.PersistentFlags().String("access-token", "", "use an externally managed OAuth access token (prefer the GWS_ACCESS_TOKEN env var; a flag value is visible in process listings)")
+	rootCmd.PersistentFlags().Bool("yes", false, "skip the confirmation prompt for sensitive commands (when confirm_sensitive is on)")
+	rootCmd.PersistentFlags().Bool("schema", false, "print this command's flags and arguments as JSON and exit without running it")
+	rootCmd.PersistentFlags().Bool("show-scopes", false, "print the OAuth scopes this command's service uses as JSON and exit without running it")
+
 	viper.BindPFlag("format", rootCmd.PersistentFlags().Lookup("format"))
+	viper.BindPFlag(config.KeyAccessToken, rootCmd.PersistentFlags().Lookup("access-token"))
 }
 
 func initConfig() {

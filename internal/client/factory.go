@@ -56,6 +56,17 @@ type Factory struct {
 // while the service-account modes mint credentials from the configured JSON
 // key (with the DWD mode impersonating the configured Workspace user).
 func NewFactory(ctx context.Context) (*Factory, error) {
+	// An externally managed access token takes precedence over every other
+	// credential source. It is used as-is: never refreshed, never stored.
+	if tok := config.GetAccessToken(); tok != "" {
+		return &Factory{
+			ctx:         ctx,
+			authMode:    &auth.AuthModeConfig{Mode: auth.AuthModeOAuth},
+			tokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: tok}),
+			scopeWarned: make(map[string]bool),
+		}, nil
+	}
+
 	modeCfg, err := auth.ResolveAuthMode(
 		config.GetAuthMode(),
 		config.GetServiceAccountKeyFile(),

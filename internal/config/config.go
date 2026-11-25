@@ -1,6 +1,8 @@
 package config
 
 import (
+	"strings"
+
 	"github.com/spf13/viper"
 )
 
@@ -24,7 +26,23 @@ const (
 	KeyAuthMode          = "auth_mode"
 	KeyServiceAccountKey = "service_account_key_file"
 	KeyImpersonateUser   = "impersonate_user"
+	KeyAccessToken       = "access_token"
+	KeyConfirmSensitive  = "confirm_sensitive"
 )
+
+// GetAccessToken returns an externally managed OAuth access token
+// (GWS_ACCESS_TOKEN or --access-token). When set, gws uses it as-is: no
+// login, no refresh.
+func GetAccessToken() string {
+	return strings.TrimSpace(viper.GetString(KeyAccessToken))
+}
+
+// GetConfirmSensitive reports whether sensitive commands (send, share,
+// delete) must be confirmed before they run (GWS_CONFIRM_SENSITIVE or
+// confirm_sensitive in the config file).
+func GetConfirmSensitive() bool {
+	return viper.GetBool(KeyConfirmSensitive)
+}
 
 // GetClientID returns the OAuth client ID from config or environment.
 func GetClientID() string {

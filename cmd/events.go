@@ -218,6 +218,11 @@ func buildListFilter(raw, target, eventType string) (string, error) {
 // currentAuthMode resolves the configured auth mode for events scope
 // decisions (validated again by the factory).
 func currentAuthMode() string {
+	if config.GetAccessToken() != "" {
+		// An external access token is a user credential and overrides
+		// any configured service-account mode (see client.NewFactory).
+		return auth.AuthModeOAuth
+	}
 	modeCfg, err := auth.ResolveAuthMode(
 		config.GetAuthMode(),
 		config.GetServiceAccountKeyFile(),

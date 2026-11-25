@@ -55,6 +55,8 @@ func init() {
 	loginCmd.Flags().String("client-id", "", "OAuth client ID")
 	loginCmd.Flags().String("client-secret", "", "OAuth client secret")
 	loginCmd.Flags().String("services", "", "Comma-separated list of services to authorize (e.g. gmail,calendar,chat)")
+	loginCmd.Flags().Bool("readonly", false, "Request only read-only scopes for the selected services")
+	loginCmd.Flags().Bool("add", false, "Add the selected services to the existing authorization instead of replacing it")
 	viper.BindPFlag("client_id", loginCmd.Flags().Lookup("client-id"))
 	viper.BindPFlag("client_secret", loginCmd.Flags().Lookup("client-secret"))
 }
@@ -92,17 +94,32 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return usageErrorf("missing credentials: set GWS_CLIENT_ID and GWS_CLIENT_SECRET environment variables, or use --client-id and --client-secret flags")
 	}
 
-	// Determine scopes and services based on --services flag, config, or all
-	scopes, grantedServices := resolveScopes(cmd)
+	// Determine the services from the --services flag, config, or all
+	services := resolveServices(cmd)
 
 	// Validate service names — fail fast on unknown services
-	if unknown := auth.ValidateServices(grantedServices); len(unknown) > 0 {
+	if unknown := auth.ValidateServices(services); len(unknown) > 0 {
 		return usageErrorf("unknown service(s): %s\nValid services: %s",
 			strings.Join(unknown, ", "),
 			strings.Join(auth.ValidServiceNames(), ", "))
 	}
 
+	readOnly, _ := cmd.Flags().GetBool("readonly")
+	add, _ := cmd.Flags().GetBool("add")
+
+	var existingAccess map[string]string
+	if add {
+		existingAccess = existingGrantedAccess()
+	}
+	scopes := loginScopes(services, readOnly, cmd.Flags().Changed("services") || len(config.GetServices()) > 0)
+	access := mergeGrantedAccess(existingAccess, services, readOnly)
+
+	if config.GetAccessToken() != "" {
+		fmt.Fprintln(os.Stderr, "Warning: GWS_ACCESS_TOKEN / --access-token is set and takes precedence over the token this login stores.")
+	}
+
 	client := auth.NewOAuthClient(clientID, clientSecret, scopes)
+	client.SetIncludeGrantedScopes(add)
 
 	ctx := context.Background()
 	token, err := client.Login(ctx)
@@ -118,18 +135,94 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	// Persist granted services for lazy scope detection
-	if len(grantedServices) > 0 {
-		if err := auth.SaveGrantedServices(grantedServices); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save granted services: %v\n", err)
-		}
+	// Persist granted services and access levels for scope diagnostics
+	if err := auth.SaveGrantedServices(grantedServiceNames(access)); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save granted services: %v\n", err)
+	}
+	if err := auth.SaveGrantedAccess(access); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save granted access levels: %v\n", err)
 	}
 
 	return p.Print(map[string]interface{}{
-		"status":  "success",
-		"message": "Authentication successful",
-		"expires": token.Expiry.Format(time.RFC3339),
+		"status":    "success",
+		"message":   "Authentication successful",
+		"expires":   token.Expiry.Format(time.RFC3339),
+		"services":  access,
+		"read_only": allReadOnly(access),
 	})
+}
+
+// existingGrantedAccess returns the access levels recorded by earlier
+// logins. Logins made before access levels were recorded only have a
+// service list; those services were granted full access.
+func existingGrantedAccess() map[string]string {
+	if access := auth.LoadGrantedAccess(); access != nil {
+		return access
+	}
+	access := map[string]string{}
+	for _, svc := range auth.LoadGrantedServices() {
+		access[svc] = auth.AccessFull
+	}
+	return access
+}
+
+// loginScopes returns the scopes to request. An unscoped full login keeps
+// requesting auth.AllScopes, exactly as before.
+func loginScopes(services []string, readOnly, scoped bool) []string {
+	if readOnly {
+		return auth.ReadOnlyScopesForServices(services)
+	}
+	if !scoped {
+		return auth.AllScopes
+	}
+	return auth.ScopesForServices(services)
+}
+
+// mergeGrantedAccess computes the per-service access levels after a login.
+// existing is nil for a replacing login. A service that already has full
+// access keeps it when re-added read-only, because incremental
+// authorization never removes a previously granted scope.
+func mergeGrantedAccess(existing map[string]string, services []string, readOnly bool) map[string]string {
+	access := map[string]string{}
+	for svc, level := range existing {
+		access[svc] = level
+	}
+	level := auth.AccessFull
+	if readOnly {
+		level = auth.AccessReadOnly
+	}
+	for _, svc := range services {
+		if readOnly && access[svc] == auth.AccessFull {
+			continue
+		}
+		access[svc] = level
+	}
+	return access
+}
+
+// grantedServiceNames returns the service names in access, in the
+// canonical service order.
+func grantedServiceNames(access map[string]string) []string {
+	var names []string
+	for _, svc := range auth.ValidServiceNames() {
+		if _, ok := access[svc]; ok {
+			names = append(names, svc)
+		}
+	}
+	return names
+}
+
+// allReadOnly reports whether every granted service is read-only.
+func allReadOnly(access map[string]string) bool {
+	if len(access) == 0 {
+		return false
+	}
+	for _, level := range access {
+		if level != auth.AccessReadOnly {
+			return false
+		}
+	}
+	return true
 }
 
 func runLogout(cmd *cobra.Command, args []string) error {
@@ -164,6 +257,16 @@ func runLogout(cmd *cobra.Command, args []string) error {
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
+
+	if config.GetAccessToken() != "" {
+		// The token itself is never printed, and it is not verified here:
+		// no network call is made, so it is never claimed valid.
+		return p.Print(map[string]interface{}{
+			"configured": true,
+			"auth_mode":  "access-token",
+			"message":    "Using an externally managed access token (GWS_ACCESS_TOKEN / --access-token); gws does not refresh it and it is not verified until a command runs",
+		})
+	}
 
 	if modeCfg, err := resolveConfiguredAuthMode(); err != nil {
 		return usageErrorf("%s", err.Error())
@@ -237,11 +340,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	return p.Print(map[string]interface{}{
+	result := map[string]interface{}{
 		"authenticated": true,
 		"email":         userInfo.Email,
 		"expires":       token.Expiry.Format(time.RFC3339),
-	})
+	}
+	if access := auth.LoadGrantedAccess(); len(access) > 0 {
+		result["services"] = access
+		result["read_only"] = allReadOnly(access)
+	}
+	return p.Print(result)
 }
 
 func getUserInfo(token *oauth2.Token) (*oauth2api.Userinfo, error) {
@@ -258,23 +366,18 @@ func getUserInfo(token *oauth2.Token) (*oauth2api.Userinfo, error) {
 	return svc.Userinfo.Get().Do()
 }
 
-// resolveScopes determines which scopes to request based on the --services flag,
-// config file, or defaults to all scopes. Returns scopes and the service list used.
-func resolveScopes(cmd *cobra.Command) ([]string, []string) {
-	// 1. Check --services flag
+// resolveServices determines which services to authorize from the
+// --services flag, the config file, or (by default) every service.
+func resolveServices(cmd *cobra.Command) []string {
 	if servicesFlag, _ := cmd.Flags().GetString("services"); servicesFlag != "" {
 		services := strings.Split(servicesFlag, ",")
 		for i := range services {
 			services[i] = strings.TrimSpace(services[i])
 		}
-		return auth.ScopesForServices(services), services
+		return services
 	}
-
-	// 2. Check config file
 	if configServices := config.GetServices(); len(configServices) > 0 {
-		return auth.ScopesForServices(configServices), configServices
+		return configServices
 	}
-
-	// 3. Default: all scopes (all services granted)
-	return auth.AllScopes, auth.ValidServiceNames()
+	return auth.ValidServiceNames()
 }

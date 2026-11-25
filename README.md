@@ -86,9 +86,47 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 
 | Command | Description |
 |---------|-------------|
-| `gws auth login` | Authenticate via OAuth2 + PKCE |
+| `gws auth login` | Authenticate via OAuth2 + PKCE (`--services`, `--readonly`, `--add`) |
 | `gws auth status` | Show current auth status and email (or the configured service-account mode) |
 | `gws auth logout` | Remove stored credentials |
+
+#### Least-privilege login
+
+```bash
+gws auth login --readonly                         # read-only scopes for every service
+gws auth login --services gmail,drive --readonly  # read-only, selected services
+gws auth login --add --services gmail             # add (or upgrade) a service without replacing the rest
+```
+
+`--readonly` requests only read-only scopes; commands that change data then
+fail with an insufficient-scope error and a hint naming the login that grants
+write access. `--add` merges into the existing authorization instead of
+replacing it. `gws auth status` shows the access level per service.
+
+#### External access token
+
+```bash
+export GWS_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+gws calendar events --days 1
+```
+
+When `GWS_ACCESS_TOKEN` is set, `gws` uses that token as-is — no login, no
+refresh, nothing stored — and it takes precedence over the stored login and
+the service-account modes. `--access-token` does the same, but a flag value is
+visible in process listings; prefer the environment variable.
+
+#### Agent safety
+
+| Flag / setting | What it does |
+|----------------|--------------|
+| `--schema` | Print the command's flags, usage and subcommands as JSON and exit — no API call, no credentials needed |
+| `--show-scopes` | Print the full and read-only OAuth scopes of the command's service as JSON and exit |
+| `GWS_CONFIRM_SENSITIVE=1` (or `confirm_sensitive: true`) | Opt-in gate: commands that send, share or delete ask `Proceed? [y/N]` on stderr first |
+| `--yes` | Skip that prompt for one invocation, after the user has approved |
+
+With the gate on and no terminal attached, a sensitive command fails with
+`confirmation required` instead of hanging, so an agent can ask the user and
+re-run with `--yes`.
 
 #### Service-account authentication
 
@@ -215,6 +253,7 @@ variant is Developer Preview).
 | `gws calendar unshare` | Remove access (`--calendar-id`, `--rule-id`) |
 | `gws calendar update-acl` | Update access rule (`--calendar-id`, `--rule-id`, `--role`) |
 | `gws calendar freebusy` | Query free/busy (`--from`, `--to`, `--calendars`) |
+| `gws calendar suggest-time` | Suggest free meeting slots (`--from`, `--to`, `--attendees`, `--duration`, `--working-hours`, `--timezone`, `--max`) |
 | `gws calendar colors` | List available calendar colors |
 | `gws calendar settings` | List user calendar settings |
 

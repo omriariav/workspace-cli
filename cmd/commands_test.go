@@ -246,6 +246,7 @@ func TestCalendarCommands(t *testing.T) {
 		{"unshare"},
 		{"update-acl"},
 		{"freebusy"},
+		{"suggest-time"},
 		{"colors"},
 		{"settings"},
 	}

@@ -83,6 +83,7 @@ For initial setup, see the `gws-auth` skill.
 | Task | Command |
 |------|---------|
 | Query free/busy | `gws calendar freebusy --from "2024-03-01 09:00" --to "2024-03-01 17:00"` |
+| Suggest free meeting slots | `gws calendar suggest-time --from 2024-03-01 --to 2024-03-05 --attendees a@example.com --duration 45m` |
 | List colors | `gws calendar colors` |
 | List settings | `gws calendar settings` |
 
@@ -301,6 +302,26 @@ gws calendar freebusy --from <time> --to <time> [--calendars "primary,user@examp
 
 Returns busy periods for each requested calendar.
 
+### suggest-time -- Suggest free meeting slots
+
+```bash
+gws calendar suggest-time --from <time> --to <time> [--attendees a@example.com,b@example.com] [--duration 30m]
+```
+
+Finds times when every requested calendar is free. Built on the same free/busy query, but does the gap-finding for you.
+
+**Flags:**
+- `--from`, `--to` — Search range (required). A date-only `--to` includes that whole day.
+- `--duration` — Meeting length: `30m`, `1h30m`, or minutes as a number (default `30m`)
+- `--calendars` — Calendar IDs that must be free (default `primary`)
+- `--attendees` — Attendee emails that must also be free
+- `--working-hours` — Daily window `HH:MM-HH:MM`, or `any` (default `09:00-17:00`)
+- `--timezone` — IANA timezone for working hours and output (default: local)
+- `--max` — Maximum suggestions (default 5)
+- `--include-weekends` — Also search Saturdays and Sundays
+
+Each suggestion is the earliest slot in a free window, with `free_until` / `free_minutes` showing how long the window stays open. Calendars that could not be read are listed under `unavailable` and are **not** taken into account — tell the user when that list is non-empty.
+
 ### colors -- List available colors
 
 ```bash
@@ -333,6 +354,6 @@ gws calendar events --format text    # Human-readable text
 - The `update` command uses PATCH (not PUT), so only changed fields are sent
 - For non-primary calendars, get the calendar ID from `gws calendar list` first
 - Use `quick-add` for natural language event creation (e.g. "Meeting with Bob next Tuesday 2pm")
-- Use `freebusy` to check availability before creating events
+- Use `suggest-time` to find a slot that works for several people; use `freebusy` when you need the raw busy periods
 - ACL roles: `freeBusyReader` < `reader` < `writer` < `owner`
 - Default event window is 7 days; increase with `--days` for broader views

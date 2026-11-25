@@ -31,6 +31,35 @@ var ServiceScopes = map[string][]string{
 	"userinfo": {"userinfo.email"},
 }
 
+// ReadOnlyServiceScopes maps each service to the read-only scopes requested
+// by `gws auth login --readonly`. Every service has at least one read-only
+// scope; commands that create, modify, or delete data fail with an
+// insufficient-scope error until write access is granted.
+var ReadOnlyServiceScopes = map[string][]string{
+	"gmail":         {"gmail.readonly"},
+	"calendar":      {"calendar.readonly"},
+	"drive":         {"drive.readonly"},
+	"docs":          {"documents.readonly"},
+	"sheets":        {"spreadsheets.readonly"},
+	"slides":        {"presentations.readonly"},
+	"tasks":         {"tasks.readonly"},
+	"chat":          {"chat.spaces.readonly", "chat.messages.readonly", "chat.memberships.readonly", "chat.messages.reactions.readonly", "chat.users.readstate.readonly"},
+	"forms":         {"forms.responses.readonly", "forms.body.readonly"},
+	"contacts":      {"contacts.readonly", "directory.readonly"},
+	"people":        {"userinfo.profile", "contacts.readonly", "directory.readonly"},
+	"groups":        {"admin.directory.group.readonly", "admin.directory.group.member.readonly"},
+	"keep":          {"keep.readonly"},
+	"driveactivity": {"drive.activity.readonly"},
+	"events":        {"chat.spaces.readonly", "chat.memberships.readonly", "chat.messages.readonly", "chat.messages.reactions.readonly", "chat.users.readstate.readonly", "drive.metadata.readonly", "meetings.space.readonly"},
+	"userinfo":      {"userinfo.email"},
+}
+
+// Access levels recorded per service at login time.
+const (
+	AccessFull     = "full"
+	AccessReadOnly = "readonly"
+)
+
 // AllScopes is the union of all service scopes. Computed at init time for backward compat.
 var AllScopes = computeAllScopes()
 
@@ -54,12 +83,22 @@ func computeAllScopes() []string {
 // ScopesForServices returns the full scope URLs for the given service names.
 // Always includes userinfo scopes.
 func ScopesForServices(services []string) []string {
+	return scopesFromMap(ServiceScopes, services)
+}
+
+// ReadOnlyScopesForServices returns the read-only scope URLs for the given
+// service names. Always includes userinfo scopes.
+func ReadOnlyScopesForServices(services []string) []string {
+	return scopesFromMap(ReadOnlyServiceScopes, services)
+}
+
+func scopesFromMap(table map[string][]string, services []string) []string {
 	seen := make(map[string]bool)
 	var scopes []string
 
 	// Always include userinfo
 	addService := func(svc string) {
-		if ss, ok := ServiceScopes[svc]; ok {
+		if ss, ok := table[svc]; ok {
 			for _, s := range ss {
 				full := scopePrefix + s
 				if !seen[full] {
@@ -87,6 +126,15 @@ func ServiceForScope(scope string) string {
 	order := []string{"gmail", "calendar", "drive", "docs", "sheets", "slides", "tasks", "chat", "forms", "contacts", "people", "groups", "keep", "driveactivity", "events", "userinfo"}
 	for _, svc := range order {
 		for _, s := range ServiceScopes[svc] {
+			if s == short {
+				return svc
+			}
+		}
+	}
+	// Read-only-only scopes (e.g. spreadsheets.readonly) are not listed in
+	// ServiceScopes; resolve them through the read-only table.
+	for _, svc := range order {
+		for _, s := range ReadOnlyServiceScopes[svc] {
 			if s == short {
 				return svc
 			}

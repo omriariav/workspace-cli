@@ -462,6 +462,48 @@ Usage: gws calendar update-acl [flags]
 
 ---
 
+## gws calendar suggest-time
+
+Suggests free meeting slots across one or more calendars.
+
+```
+Usage: gws calendar suggest-time [flags]
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--from` | string | | Yes | Start of the search range |
+| `--to` | string | | Yes | End of the search range; a date-only value includes that day |
+| `--duration` | string | `30m` | No | Meeting length, e.g. `30m`, `1h30m`, or minutes as a number |
+| `--calendars` | string | `primary` | No | Comma-separated calendar IDs that must be free |
+| `--attendees` | string | | No | Comma-separated attendee emails that must also be free |
+| `--working-hours` | string | `09:00-17:00` | No | Daily window `HH:MM-HH:MM`, or `any` for the whole day |
+| `--timezone` | string | local | No | IANA timezone for working hours and output |
+| `--max` | int | `5` | No | Maximum number of suggestions |
+| `--include-weekends` | bool | `false` | No | Also search Saturdays and Sundays |
+
+### Output
+
+```json
+{
+  "time_min": "2026-12-01T00:00:00Z",
+  "time_max": "2026-12-06T00:00:00Z",
+  "timezone": "UTC",
+  "duration_minutes": 30,
+  "calendars_checked": ["primary", "a@example.com"],
+  "unavailable": [{"calendar": "b@example.com", "reason": "notFound"}],
+  "suggestions": [
+    {"start": "2026-12-01T12:00:00Z", "end": "2026-12-01T12:30:00Z", "free_until": "2026-12-01T13:00:00Z", "free_minutes": 60}
+  ],
+  "count": 1
+}
+```
+
+Each suggestion is the earliest slot of one free window. Calendars under
+`unavailable` could not be read and are not taken into account.
+
+---
+
 ## gws calendar freebusy
 
 Queries free/busy information for one or more calendars.
