@@ -162,6 +162,10 @@ login lock is unavailable": refreshing without it could invalidate the
 stored login for other gws processes. Make the directory writable, or
 supply a token with `GWS_ACCESS_TOKEN`. Logging in again does not help.
 
+The no-concurrent-refresh guarantee holds between gws binaries of this
+version or later. An older binary sharing the same config directory
+refreshes without the lock, so upgrade every copy that uses it.
+
 ## Inspecting Commands Without Running Them
 
 Two global flags print JSON and exit without calling any Google API and

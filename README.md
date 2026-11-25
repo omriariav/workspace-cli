@@ -13,7 +13,7 @@
 
 `gws` is an unofficial Google Workspace CLI written in Go. It gives developers and AI agents a structured, token-efficient interface to 14 Google Workspace services — Gmail, Google Calendar, Google Drive, Docs, Sheets, Slides, Tasks, Chat, Contacts, Groups, Keep, Forms, Workspace Events, and Custom Search. Every command returns consistent JSON (or YAML or human-readable text), which suits scripting, automation, and agent toolchains.
 
-- **One static Go binary.** No Node.js, Python, or other runtime to install.
+- **One Go binary.** No Node.js, Python, or other runtime to install.
 - **Built for AI agents.** Ships a Claude Code plugin and a Codex plugin with one skill per service, structured output, and predictable flags — no wrapper code required.
 - **Commands are compiled in.** About 300 task-shaped commands with stable flags; nothing is discovered over the network at startup.
 
