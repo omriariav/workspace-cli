@@ -43,6 +43,13 @@ var commandScopeOverrides = map[string][]string{
 	"docs trash": {"drive"},
 	// Decodes a CloudEvent from stdin; never calls Google.
 	"events decode": {},
+	// These also call the People API to turn member IDs into names and
+	// email addresses. Without the contacts scopes they still run, but
+	// members stay unresolved.
+	"chat members":     {"chat", "contacts"},
+	"chat build-cache": {"chat", "contacts"},
+	"chat find-group":  {"chat", "contacts"},
+	"chat find-space":  {"chat", "contacts"},
 }
 
 // scopeServicesFor returns the scope services a command uses.

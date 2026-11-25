@@ -235,6 +235,21 @@ func TestIntrospection_ShowScopes(t *testing.T) {
 		t.Errorf("docs read scopes = %v, want Docs scopes", docsRead["scopes"])
 	}
 
+	// chat build-cache also resolves members through the People API.
+	cache, _ := runIntrospection(t, "chat", "build-cache", "--show-scopes")
+	cacheScopes := toStrings(cache["scopes"])
+	if !containsStr(cacheScopes, "https://www.googleapis.com/auth/chat.spaces") || !containsStr(cacheScopes, "https://www.googleapis.com/auth/directory.readonly") {
+		t.Errorf("chat build-cache scopes = %v, want Chat and People scopes", cacheScopes)
+	}
+	if cache["login"] != "gws auth login --add --services chat,contacts" {
+		t.Errorf("chat build-cache login = %v", cache["login"])
+	}
+	// A plain chat command needs only Chat scopes.
+	send, _ := runIntrospection(t, "chat", "send", "--show-scopes")
+	if containsStr(toStrings(send["scopes"]), "https://www.googleapis.com/auth/directory.readonly") {
+		t.Errorf("chat send should not list People scopes: %v", send["scopes"])
+	}
+
 	// events decode only parses stdin: no scopes, no login suggestion.
 	decode, _ := runIntrospection(t, "events", "decode", "--show-scopes")
 	if len(toStrings(decode["scopes"])) != 0 || decode["login"] != nil || decode["note"] == nil {

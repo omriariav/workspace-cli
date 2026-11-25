@@ -358,6 +358,18 @@ func atDayOffset(day time.Time, offset time.Duration, loc *time.Location) time.T
 	return civilInstant(day.Year(), day.Month(), day.Day(), h, m, loc)
 }
 
+// formatInstant renders t as RFC3339 in loc. RFC3339 offsets have only
+// hours and minutes, so where loc's offset at t has a seconds component
+// (historical local mean time) the result would name a different instant;
+// those are rendered in UTC instead.
+func formatInstant(t time.Time, loc *time.Location) string {
+	local := t.In(loc)
+	if _, offset := local.Zone(); offset%60 != 0 {
+		return t.UTC().Format(time.RFC3339)
+	}
+	return local.Format(time.RFC3339)
+}
+
 // ceilSecond rounds t up to the next whole second (unchanged if it
 // already is one).
 func ceilSecond(t time.Time) time.Time {
@@ -465,16 +477,16 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 	suggestions := make([]map[string]interface{}, 0, len(slots))
 	for _, s := range slots {
 		suggestions = append(suggestions, map[string]interface{}{
-			"start":        s.Start.In(loc).Format(time.RFC3339),
-			"end":          s.End.In(loc).Format(time.RFC3339),
-			"free_until":   s.FreeUntil.In(loc).Format(time.RFC3339),
+			"start":        formatInstant(s.Start, loc),
+			"end":          formatInstant(s.End, loc),
+			"free_until":   formatInstant(s.FreeUntil, loc),
 			"free_minutes": int(s.FreeUntil.Sub(s.Start) / time.Minute),
 		})
 	}
 
 	return p.Print(map[string]interface{}{
-		"time_min":          from.In(loc).Format(time.RFC3339),
-		"time_max":          to.In(loc).Format(time.RFC3339),
+		"time_min":          formatInstant(from, loc),
+		"time_max":          formatInstant(to, loc),
 		"timezone":          loc.String(),
 		"duration_minutes":  int(dur / time.Minute),
 		"calendars_checked": checked,

@@ -934,6 +934,29 @@ func TestQueryBusySpans_MockServer(t *testing.T) {
 	}
 }
 
+func TestFormatInstant_AlwaysNamesTheSameInstant(t *testing.T) {
+	paris, err := time.LoadLocation("Europe/Paris")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	// Modern offset: local time, as usual.
+	modern := mustTime(t, "2026-12-01T12:00:00Z")
+	if got := formatInstant(modern, paris); got != "2026-12-01T13:00:00+01:00" {
+		t.Errorf("modern = %s", got)
+	}
+	// 1900: +00:09:21, which RFC3339 cannot express. Whatever is printed
+	// must parse back to exactly the same instant.
+	old := time.Date(1900, 6, 1, 9, 0, 0, 0, paris)
+	got := formatInstant(old, paris)
+	parsed, err := time.Parse(time.RFC3339, got)
+	if err != nil || !parsed.Equal(old) {
+		t.Errorf("formatInstant = %s, which parses to %v, not %v", got, parsed.UTC(), old.UTC())
+	}
+	if !strings.HasSuffix(got, "Z") {
+		t.Errorf("an inexpressible offset should fall back to UTC, got %s", got)
+	}
+}
+
 func TestCeilSecond(t *testing.T) {
 	whole := mustTime(t, "2026-12-01T10:30:00Z")
 	if got := ceilSecond(whole); !got.Equal(whole) {
