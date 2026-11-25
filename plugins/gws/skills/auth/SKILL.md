@@ -169,7 +169,8 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   --add-attendees`, `calendar rsvp --message`, and `gmail label --add` / `gmail
   batch-modify --add-labels` when the labels include `TRASH` or `SPAM`.
 - Covered explicitly: `docs replace-content` (replaces the whole document
-  body); commands that send (Gmail `send`, `reply`, `forward`,
+  body); `events subscriptions create` (starts ongoing delivery of events
+  to a Pub/Sub topic); commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`, `unsubscribe`; Drive `share`, `unshare`,
   `update-permission`, `move`, `start-approval`, `reassign-approval`; Chat

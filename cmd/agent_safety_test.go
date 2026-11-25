@@ -208,8 +208,19 @@ func TestIntrospection_ShowScopes(t *testing.T) {
 	}
 
 	activity, _ := runIntrospection(t, "drive", "activity", "--show-scopes")
-	if !containsStr(toStrings(activity["scopes"]), "https://www.googleapis.com/auth/drive.activity.readonly") {
-		t.Errorf("drive activity should include the Drive Activity scope: %v", activity["scopes"])
+	activityScopes := toStrings(activity["scopes"])
+	if !containsStr(activityScopes, "https://www.googleapis.com/auth/drive.activity.readonly") {
+		t.Errorf("drive activity should include the Drive Activity scope: %v", activityScopes)
+	}
+	// It uses only the Drive Activity API, so it must not suggest granting
+	// Drive file access.
+	for _, s := range activityScopes {
+		if strings.HasSuffix(s, "/auth/drive") || strings.HasSuffix(s, "/auth/drive.file") || strings.HasSuffix(s, "/auth/drive.readonly") {
+			t.Errorf("drive activity should not request %s", s)
+		}
+	}
+	if activity["login"] != "gws auth login --add --services driveactivity" {
+		t.Errorf("drive activity login = %v", activity["login"])
 	}
 
 	version, _ := runIntrospection(t, "version", "--show-scopes")
@@ -295,6 +306,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"calendar", "update-acl"}, {"chat", "update-member"}, {"drive", "update-permission"},
 		{"gmail", "send"}, {"chat", "send"}, {"drive", "share"}, {"calendar", "unshare"},
 		{"events", "subscriptions", "delete"},
+		{"events", "subscriptions", "create"},
 		{"drive", "start-approval"}, {"drive", "reassign-approval"},
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},

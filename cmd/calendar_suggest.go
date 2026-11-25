@@ -537,13 +537,12 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		for _, period := range fb.Busy {
 			start, err1 := time.Parse(time.RFC3339, period.Start)
 			end, err2 := time.Parse(time.RFC3339, period.End)
-			if err1 != nil || err2 != nil {
-				return false, "", fmt.Errorf("unexpected busy period for %s: %s - %s", id, period.Start, period.End)
-			}
-			// A period that ends at or before its start says nothing
-			// usable, and would move the slot search backward. Treat the
-			// calendar's availability as unknown rather than guess.
-			if !end.After(start) {
+			// A period that cannot be parsed, or that ends at or before its
+			// start, says nothing usable (and a reversed one would move
+			// the slot search backward). Treat this calendar's
+			// availability as unknown rather than guess; the other
+			// calendars are unaffected.
+			if err1 != nil || err2 != nil || !end.After(start) {
 				return false, fmt.Sprintf("invalid busy period %s - %s", period.Start, period.End), nil
 			}
 			// Widen busy periods to whole seconds so a slot reported

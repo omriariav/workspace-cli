@@ -90,6 +90,7 @@ var sensitiveCommands = map[string]string{
 
 	// Workspace Events
 	"events subscriptions delete": "deletes an event subscription",
+	"events subscriptions create": "starts ongoing delivery of Workspace events to a Pub/Sub topic",
 }
 
 // conditionalSensitive lists commands that send, share or delete only when

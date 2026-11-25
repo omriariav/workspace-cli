@@ -33,19 +33,19 @@ var commandScopeServices = map[string][]string{
 	"events":   {"events"},
 }
 
-// scopeServicesFor returns the scope services a command uses. `drive
-// activity` additionally needs the Drive Activity API scope.
+// scopeServicesFor returns the scope services a command uses.
 func scopeServicesFor(cmd *cobra.Command) []string {
 	key := commandKey(cmd)
 	if key == "" {
 		return nil
 	}
-	group := strings.SplitN(key, " ", 2)[0]
-	services := append([]string(nil), commandScopeServices[group]...)
+	// `drive activity` talks only to the Drive Activity API: it needs that
+	// one read-only scope, not Drive file access.
 	if key == "drive activity" {
-		services = append(services, "driveactivity")
+		return []string{"driveactivity"}
 	}
-	return services
+	group := strings.SplitN(key, " ", 2)[0]
+	return append([]string(nil), commandScopeServices[group]...)
 }
 
 // handleIntrospection answers --schema and --show-scopes. It returns

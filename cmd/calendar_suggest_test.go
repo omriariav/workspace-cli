@@ -916,16 +916,24 @@ func TestQueryBusySpans_Failures(t *testing.T) {
 		}
 	}
 
-	// A malformed busy period is an error, not a silently ignored slot.
+	// A malformed busy timestamp is handled like any unreadable calendar:
+	// alone it leaves nothing to suggest from, and the error names it...
 	svc = newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
 			Calendars: map[string]calendar.FreeBusyCalendar{
 				"a@example.com": {Busy: []*calendar.TimePeriod{{Start: "not-a-time", End: "2026-12-01T10:00:00Z"}}},
+				"primary":       {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T13:00:00Z", End: "2026-12-01T14:00:00Z"}}},
 			},
 		})
 	})
-	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil || !strings.Contains(err.Error(), "unexpected busy period") {
-		t.Errorf("error = %v, want malformed-period error", err)
+	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil || !strings.Contains(err.Error(), "a@example.com (invalid busy period") {
+		t.Errorf("error = %v, want the malformed calendar named", err)
+	}
+	// ...and next to a readable calendar it is reported as unavailable,
+	// so --allow-partial can still return results.
+	busy, checked, unavailable, err = queryBusySpans(svc, []*calendar.FreeBusyRequestItem{{Id: "a@example.com"}, {Id: "primary"}}, from, to)
+	if err != nil || strings.Join(checked, ",") != "primary" || len(unavailable) != 1 || unavailable[0]["calendar"] != "a@example.com" || len(busy) != 1 {
+		t.Errorf("checked = %v, unavailable = %v, busy = %v, err = %v", checked, unavailable, busy, err)
 	}
 }
