@@ -167,6 +167,14 @@ func commandSchema(cmd *cobra.Command) map[string]interface{} {
 		schema["sensitive"] = true
 		schema["effect"] = effect
 	}
+	// Commands that need confirmation only when a flag is used. Reported
+	// statically: --schema never looks at the other flag values.
+	if rule, ok := conditionalSensitive[commandKey(cmd)]; ok {
+		schema["sensitive_when"] = map[string]interface{}{
+			"flag":   rule.flag,
+			"effect": rule.effect,
+		}
+	}
 	return schema
 }
 

@@ -55,7 +55,7 @@ func init() {
 	loginCmd.Flags().String("client-id", "", "OAuth client ID")
 	loginCmd.Flags().String("client-secret", "", "OAuth client secret")
 	loginCmd.Flags().String("services", "", "Comma-separated list of services to authorize (e.g. gmail,calendar,chat)")
-	loginCmd.Flags().Bool("readonly", false, "Request only read-only scopes for the selected services")
+	loginCmd.Flags().Bool("readonly", false, "Request only read-only scopes for the selected services (events subscriptions can still be managed: they are authorized by read scopes)")
 	loginCmd.Flags().Bool("add", false, "Add the selected services to the existing authorization instead of replacing it")
 	viper.BindPFlag("client_id", loginCmd.Flags().Lookup("client-id"))
 	viper.BindPFlag("client_secret", loginCmd.Flags().Lookup("client-secret"))
@@ -146,12 +146,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	// Persist granted services and access levels for scope diagnostics
-	if err := auth.SaveGrantedServices(grantedServiceNames(access)); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to save granted services: %v\n", err)
-	}
-	if err := auth.SaveGrantedAccess(access); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to save granted access levels: %v\n", err)
+	// Persist granted services and access levels for scope diagnostics.
+	// If either write fails, remove both files: no metadata is better than
+	// metadata that still describes the previous token.
+	errServices := auth.SaveGrantedServices(grantedServiceNames(access))
+	errAccess := auth.SaveGrantedAccess(access)
+	if errServices != nil || errAccess != nil {
+		auth.DeleteGrantedMetadata()
+		fmt.Fprintf(os.Stderr, "Warning: failed to record granted access (services: %v, access levels: %v); `gws auth status` will not show per-service access until the next login\n", errServices, errAccess)
 	}
 
 	return p.Print(map[string]interface{}{

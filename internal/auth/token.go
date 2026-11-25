@@ -171,7 +171,31 @@ func SaveGrantedAccess(access map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal granted access: %w", err)
 	}
-	return os.WriteFile(config.GetGrantedAccessPath(), data, 0600)
+	// Atomic replace, so a failed or interrupted write never leaves a
+	// truncated or half-old file behind.
+	path := config.GetGrantedAccessPath()
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".granted-access-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if err := tmp.Chmod(0600); err == nil {
+		_, err = tmp.Write(data)
+		if cerr := tmp.Close(); err == nil {
+			err = cerr
+		}
+		if err == nil {
+			err = os.Rename(tmpPath, path)
+		}
+		if err != nil {
+			os.Remove(tmpPath)
+			return fmt.Errorf("failed to write granted access: %w", err)
+		}
+		return nil
+	}
+	tmp.Close()
+	os.Remove(tmpPath)
+	return fmt.Errorf("failed to set temp file permissions")
 }
 
 // LoadGrantedAccess loads the per-service access levels. Returns nil when

@@ -144,6 +144,27 @@ func TestIntrospection_SchemaMarksSensitiveAndListsSubcommands(t *testing.T) {
 	}
 }
 
+func TestIntrospection_SchemaReportsConditionalSensitivity(t *testing.T) {
+	// With or without the triggering flag on the command line.
+	for _, args := range [][]string{
+		{"calendar", "create", "--schema"},
+		{"calendar", "create", "--attendees", "a@example.com", "--schema"},
+	} {
+		result, handled := runIntrospection(t, args...)
+		if !handled {
+			t.Fatalf("%v: expected introspection", args)
+		}
+		when, _ := result["sensitive_when"].(map[string]interface{})
+		if when == nil || when["flag"] != "attendees" || when["effect"] == "" {
+			t.Errorf("%v: sensitive_when = %v", args, result["sensitive_when"])
+		}
+	}
+	plain, _ := runIntrospection(t, "calendar", "events", "--schema")
+	if _, ok := plain["sensitive_when"]; ok {
+		t.Error("calendar events has no conditional rule")
+	}
+}
+
 func TestIntrospection_ShowScopes(t *testing.T) {
 	result, handled := runIntrospection(t, "gmail", "send", "--show-scopes")
 	if !handled {
