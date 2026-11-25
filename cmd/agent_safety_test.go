@@ -802,7 +802,8 @@ func TestReadOnlyScopeHint(t *testing.T) {
 	// Permanent Gmail deletion needs a scope no login grants: the hint
 	// must say that, not recommend a login that cannot help.
 	del, _, _ := rootCmd.Find([]string{"gmail", "delete"})
-	for _, access := range []map[string]string{{"gmail": auth.AccessReadOnly}, {"gmail": auth.AccessFull}} {
+	// ...including for a login from before access levels were recorded.
+	for _, access := range []map[string]string{{"gmail": auth.AccessReadOnly}, {"gmail": auth.AccessFull}, nil} {
 		hint := readOnlyScopeHint(del, insufficient, access)
 		if !strings.Contains(hint, "https://mail.google.com/") || !strings.Contains(hint, "GWS_ACCESS_TOKEN") || strings.Contains(hint, "auth login --add") {
 			t.Errorf("gmail delete hint with %v = %q", access, hint)

@@ -287,7 +287,7 @@ func commandScopes(cmd *cobra.Command) map[string]interface{} {
 // only partially.
 // Returns "" when the failure has another cause.
 func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) string {
-	if cmd == nil || err == nil || len(access) == 0 {
+	if cmd == nil || err == nil {
 		return ""
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "insufficient") {
@@ -297,6 +297,12 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	// login for those would send the user through consent for nothing.
 	if extra, ok := commandExtraScopes[commandKey(cmd)]; ok {
 		return fmt.Sprintf("Hint: this command needs %s. %s", strings.Join(extra.scopes, ", "), extra.note)
+	}
+
+	// The rest needs to know what the login holds; a login from before
+	// access levels were recorded gives nothing to go on.
+	if len(access) == 0 {
+		return ""
 	}
 
 	var lacking []string
