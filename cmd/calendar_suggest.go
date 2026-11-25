@@ -106,6 +106,9 @@ func parseSuggestDuration(s string) (time.Duration, error) {
 	return d, nil
 }
 
+// maxSuggestRange is the longest span suggest-time will search.
+const maxSuggestRange = 92 * 24 * time.Hour
+
 // maxFreeBusyCalendars is the most calendars a single Calendar free/busy
 // query will report on.
 const maxFreeBusyCalendars = 50
@@ -432,6 +435,11 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 	to = to.Truncate(time.Second)
 	if !to.After(from) {
 		return usageErrorf("--to must be after --from")
+	}
+	// Bounds the work: every day in the range is examined, however small
+	// --max is.
+	if to.Sub(from) > maxSuggestRange {
+		return usageErrorf("the search range is too long: at most %d days between --from and --to", int(maxSuggestRange/(24*time.Hour)))
 	}
 	dur, err := parseSuggestDuration(durStr)
 	if err != nil {

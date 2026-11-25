@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/config"
@@ -462,6 +463,38 @@ func sameAuthorization(loaded, current *oauth2.Token) bool {
 	}
 	record := readGrantedRecordFor(current)
 	return record != nil && record.Token == now && record.PreviousToken == was
+}
+
+// GuardedTokenSource returns a token source for the stored login whose
+// every refresh goes through EnsureFreshToken: under the login lock,
+// checked against what is on disk, and saved. A long-running command
+// whose token expires midway therefore refreshes the same safe way a new
+// command does, instead of refreshing privately and discarding the result.
+func GuardedTokenSource(ctx context.Context, clientID, clientSecret string, token *oauth2.Token, onSaveError func(error)) oauth2.TokenSource {
+	return &guardedTokenSource{ctx: ctx, clientID: clientID, clientSecret: clientSecret, current: token, onSaveError: onSaveError}
+}
+
+type guardedTokenSource struct {
+	mu           sync.Mutex
+	ctx          context.Context
+	clientID     string
+	clientSecret string
+	current      *oauth2.Token
+	onSaveError  func(error)
+}
+
+func (g *guardedTokenSource) Token() (*oauth2.Token, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	token, saveErr, err := EnsureFreshToken(g.ctx, g.clientID, g.clientSecret, g.current)
+	if err != nil {
+		return nil, err
+	}
+	if saveErr != nil && g.onSaveError != nil {
+		g.onSaveError(saveErr)
+	}
+	g.current = token
+	return token, nil
 }
 
 // TokenRefreshed reports whether a token source handed back something

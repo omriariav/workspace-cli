@@ -115,6 +115,13 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 		return nil, fmt.Errorf("missing OAuth credentials")
 	}
 
+	// The command at hand still works if a refresh cannot be saved, but if
+	// the refresh token was rotated the stored login may stop working, so
+	// say so. The error is a file or lock error and carries no credential.
+	warnSaveFailed := func(saveErr error) {
+		fmt.Fprintf(os.Stderr, "Warning: the refreshed login could not be saved (%v); if later commands fail to authenticate, run `gws auth login` again\n", saveErr)
+	}
+
 	// Refresh (if needed) and save under the login lock, so concurrent
 	// commands never race each other's refresh.
 	token, saveErr, err := auth.EnsureFreshToken(ctx, clientID, clientSecret, token)
@@ -125,12 +132,10 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 		return nil, fmt.Errorf("token expired, run: gws auth login")
 	}
 	if saveErr != nil {
-		// The command at hand still works, but if the refresh token was
-		// rotated the stored login may stop working, so say so. The error
-		// is a file or lock error and carries no credential.
-		fmt.Fprintf(os.Stderr, "Warning: the refreshed login could not be saved (%v); if later commands fail to authenticate, run `gws auth login` again\n", saveErr)
+		warnSaveFailed(saveErr)
 	}
-	ts := auth.GetTokenSource(ctx, clientID, clientSecret, token)
+	// Refreshes later in the same command take the same guarded path.
+	ts := auth.GuardedTokenSource(ctx, clientID, clientSecret, token, warnSaveFailed)
 
 	return &Factory{
 		ctx:         ctx,

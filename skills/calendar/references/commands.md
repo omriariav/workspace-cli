@@ -505,7 +505,8 @@ Each suggestion is the earliest slot of one free window. If any requested
 calendar cannot be read the command fails. With `--allow-partial` it
 continues: `partial` is `true` and `unavailable` lists each unread calendar
 as `{"calendar": "...", "reason": "..."}` — their availability is unknown. At most 50
-calendars (`--calendars` and `--attendees` combined) can be checked at once.
+calendars (`--calendars` and `--attendees` combined) can be checked at once,
+over a range of at most 92 days.
 
 ---
 

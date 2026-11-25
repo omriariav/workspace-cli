@@ -1049,6 +1049,60 @@ func TestEnsureFreshToken_DoesNotRefreshWhileAnotherProcessHoldsTheLock(t *testi
 	}
 }
 
+// A command that outlives its access token refreshes through the guarded
+// path: the result is saved, and a logout in the meantime stops it.
+func TestGuardedTokenSource(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: fmt.Sprintf("fresh-%d", exchanges), RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	start := &oauth2.Token{AccessToken: "start", RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}
+	if err := SaveToken(start); err != nil {
+		t.Fatal(err)
+	}
+	var saveErrors []error
+	ts := GuardedTokenSource(context.Background(), "id", "secret", start, func(err error) { saveErrors = append(saveErrors, err) })
+
+	// Still valid: handed back as is.
+	if tok, err := ts.Token(); err != nil || tok.AccessToken != "start" || exchanges != 0 {
+		t.Fatalf("valid token: %+v, %v after %d exchanges", tok, err, exchanges)
+	}
+
+	// The token expires mid-command: refreshed once, and saved to disk.
+	start.Expiry = time.Now().Add(-time.Minute)
+	if err := SaveToken(start); err != nil {
+		t.Fatal(err)
+	}
+	tok, err := ts.Token()
+	if err != nil || tok.AccessToken != "fresh-1" || exchanges != 1 {
+		t.Fatalf("mid-command refresh: %+v, %v after %d exchanges", tok, err, exchanges)
+	}
+	if onDisk, _ := LoadToken(); onDisk.AccessToken != "fresh-1" {
+		t.Errorf("the mid-command refresh was not saved: %+v", onDisk)
+	}
+	// The refreshed token is reused, not refreshed again.
+	if tok, err := ts.Token(); err != nil || tok.AccessToken != "fresh-1" || exchanges != 1 {
+		t.Errorf("reuse: %+v, %v after %d exchanges", tok, err, exchanges)
+	}
+	if len(saveErrors) != 0 {
+		t.Errorf("unexpected save errors: %v", saveErrors)
+	}
+
+	// Logged out while the command runs: its next refresh is refused.
+	expired := &oauth2.Token{AccessToken: "x", RefreshToken: "r0", Expiry: time.Now().Add(-time.Minute)}
+	ts = GuardedTokenSource(context.Background(), "id", "secret", expired, nil)
+	if err := DeleteToken(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ts.Token(); !errors.Is(err, ErrLoginRemoved) {
+		t.Errorf("after logout: err = %v, want ErrLoginRemoved", err)
+	}
+}
+
 func TestSameAuthorization(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := &oauth2.Token{RefreshToken: "r1"}

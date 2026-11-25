@@ -71,6 +71,26 @@ func TestCalendarSuggestTime_RejectsTooManyCalendars(t *testing.T) {
 	}
 }
 
+func TestCalendarSuggestTime_RejectsOverlongRange(t *testing.T) {
+	cmd := calendarSuggestTimeCmd
+	t.Cleanup(func() {
+		for _, name := range []string{"from", "to"} {
+			_ = cmd.Flags().Set(name, "")
+			cmd.Flags().Lookup(name).Changed = false
+		}
+	})
+	_ = cmd.Flags().Set("from", "2026-01-01")
+	_ = cmd.Flags().Set("to", "2027-01-01")
+	// Rejected before any client is created or request sent.
+	err := runCalendarSuggestTime(cmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "search range is too long") {
+		t.Fatalf("error = %v, want a too-long-range usage error", err)
+	}
+	if resolveExitError(err, io.Discard) != ExitUsage {
+		t.Errorf("exit code = %d, want %d", resolveExitError(err, io.Discard), ExitUsage)
+	}
+}
+
 func TestCalendarSuggestTime_RejectsPositionalArgs(t *testing.T) {
 	if err := calendarSuggestTimeCmd.Args(calendarSuggestTimeCmd, []string{"a@example.com"}); err == nil {
 		t.Error("a stray positional argument should be rejected")
