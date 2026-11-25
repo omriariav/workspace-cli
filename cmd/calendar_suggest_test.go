@@ -384,6 +384,59 @@ func TestQueryBusySpans_MockServer(t *testing.T) {
 	}
 }
 
+func TestCeilSecond(t *testing.T) {
+	whole := mustTime(t, "2026-12-01T10:30:00Z")
+	if got := ceilSecond(whole); !got.Equal(whole) {
+		t.Errorf("whole second changed: %v", got)
+	}
+	if got := ceilSecond(whole.Add(900 * time.Millisecond)); !got.Equal(whole.Add(time.Second)) {
+		t.Errorf("fraction not rounded up: %v", got)
+	}
+	if got := ceilSecond(whole.Add(time.Nanosecond)); !got.Equal(whole.Add(time.Second)) {
+		t.Errorf("nanosecond not rounded up: %v", got)
+	}
+}
+
+// Busy periods with fractional seconds are widened to whole seconds, so a
+// suggestion printed without fractions never overlaps one.
+func TestQueryBusySpans_FractionalSecondsAreWidened(t *testing.T) {
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
+			Calendars: map[string]calendar.FreeBusyCalendar{
+				"primary": {Busy: []*calendar.TimePeriod{
+					{Start: "2026-12-01T10:00:00.900Z", End: "2026-12-01T10:30:00.100Z"},
+				}},
+			},
+		})
+	})
+	from := mustTime(t, "2026-12-01T09:00:00Z")
+	to := mustTime(t, "2026-12-01T12:00:00Z")
+	busy, _, _, err := queryBusySpans(svc, []*calendar.FreeBusyRequestItem{{Id: "primary"}}, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(busy) != 1 || !busy[0].Start.Equal(mustTime(t, "2026-12-01T10:00:00Z")) || !busy[0].End.Equal(mustTime(t, "2026-12-01T10:30:01Z")) {
+		t.Fatalf("busy = %v, want widened to 10:00:00 - 10:30:01", busy)
+	}
+
+	slots := suggestSlots(busy, from, to, 30*time.Minute, 0, 24*time.Hour, time.UTC, true, 5)
+	if len(slots) != 2 {
+		t.Fatalf("slots = %v", slots)
+	}
+	for _, s := range slots {
+		for _, moment := range []time.Time{s.Start, s.End, s.FreeUntil} {
+			if moment.Nanosecond() != 0 {
+				t.Errorf("slot boundary %v has a fractional second", moment)
+			}
+		}
+	}
+	// The second slot starts after the real end of the busy period.
+	if !slots[1].Start.After(mustTime(t, "2026-12-01T10:30:00.100Z")) {
+		t.Errorf("slot starts at %v, inside the busy period", slots[1].Start)
+	}
+}
+
 func TestQueryBusySpans_Failures(t *testing.T) {
 	from := mustTime(t, "2026-12-01T00:00:00Z")
 	to := mustTime(t, "2026-12-02T00:00:00Z")

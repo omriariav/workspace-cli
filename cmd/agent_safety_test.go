@@ -270,6 +270,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"calendar", "update-acl"}, {"chat", "update-member"}, {"drive", "update-permission"},
 		{"gmail", "send"}, {"chat", "send"}, {"drive", "share"}, {"calendar", "unshare"},
 		{"events", "subscriptions", "delete"},
+		{"drive", "start-approval"}, {"drive", "reassign-approval"},
 	}
 	for _, path := range covered {
 		cmd, _, err := rootCmd.Find(path)
@@ -658,6 +659,25 @@ func TestDeriveGrantedAccess(t *testing.T) {
 	groups, _ := deriveGrantedAccess(map[string]string{"groups": auth.AccessReadOnly}, auth.ScopesForServices([]string{"groups"}))
 	if groups["groups"] != auth.AccessReadOnly {
 		t.Errorf("groups = %q, want readonly", groups["groups"])
+	}
+}
+
+func TestAuthLogin_AddRequiresServices(t *testing.T) {
+	viper.Set("client_id", "id")
+	viper.Set("client_secret", "secret")
+	viper.Set("services", nil)
+	_ = loginCmd.Flags().Set("add", "true")
+	t.Cleanup(func() {
+		viper.Set("client_id", "")
+		viper.Set("client_secret", "")
+		_ = loginCmd.Flags().Set("add", "false")
+		loginCmd.Flags().Lookup("add").Changed = false
+	})
+
+	// Fails before any browser flow starts.
+	err := runLogin(loginCmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "--add requires --services") {
+		t.Fatalf("error = %v, want --add requires --services", err)
 	}
 }
 

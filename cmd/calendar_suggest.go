@@ -288,6 +288,15 @@ func atDayOffset(day time.Time, offset time.Duration, loc *time.Location) time.T
 	return civilInstant(day.Year(), day.Month(), day.Day(), h, m, loc)
 }
 
+// ceilSecond rounds t up to the next whole second (unchanged if it
+// already is one).
+func ceilSecond(t time.Time) time.Time {
+	if truncated := t.Truncate(time.Second); !truncated.Equal(t) {
+		return truncated.Add(time.Second)
+	}
+	return t
+}
+
 // splitList splits a comma-separated list, dropping blanks.
 func splitList(s string) []string {
 	var out []string
@@ -331,6 +340,11 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 	if toDateOnly {
 		to = endOfCivilDate(to, loc)
 	}
+	// Work in whole seconds throughout: the free/busy query and the output
+	// are RFC3339 without fractions. Shrinking the range inward keeps every
+	// suggestion inside what was asked for and inside what was queried.
+	from = ceilSecond(from)
+	to = to.Truncate(time.Second)
 	if !to.After(from) {
 		return usageErrorf("--to must be after --from")
 	}
@@ -428,7 +442,9 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 			if err1 != nil || err2 != nil {
 				return nil, nil, nil, fmt.Errorf("unexpected busy period for %s: %s - %s", item.Id, period.Start, period.End)
 			}
-			busy = append(busy, timeSpan{Start: start, End: end})
+			// Widen busy periods to whole seconds so a slot reported
+			// without fractions can never sit inside one.
+			busy = append(busy, timeSpan{Start: start.Truncate(time.Second), End: ceilSecond(end)})
 		}
 	}
 	if len(checked) == 0 {

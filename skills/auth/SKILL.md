@@ -91,7 +91,8 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
   includes the `events` service. Leave `events` out of `--services` if a
   read-only login must not manage subscriptions.
 - `--add` merges the selected services into the existing authorization
-  instead of replacing it. Without `--add`, a login replaces the previous
+  instead of replacing it. It requires `--services` (or a `services` list
+  in config), so it can never widen the request to every service. Without `--add`, a login replaces the previous
   grant.
 - Every login must return its own refresh token; if Google returns none,
   the login is rejected and the previous authorization is left unchanged.
@@ -162,9 +163,10 @@ gws gmail send --to a@example.com --subject Hi --body Hello
 - Covered explicitly: commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`; Drive `share`, `unshare`,
-  `update-permission`; Chat `add-member`, `update-member`).
-- Not covered: creating or editing content, `untrash`, and Drive approval
-  actions. `gws <command> --schema` shows `"sensitive": true` for a covered
+  `update-permission`, `start-approval`, `reassign-approval`; Chat
+  `add-member`, `update-member`).
+- Not covered: creating or editing content, `untrash`, and responding to
+  a Drive approval (`approve`, `decline`, `cancel-approval`). `gws <command> --schema` shows `"sensitive": true` for a covered
   command.
 
 ## First-Time Setup
