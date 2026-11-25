@@ -445,7 +445,25 @@ func runHooksRun(cmd *cobra.Command, args []string) error {
 	return writeHookEnvelope(cmd, eventValue, rendered.AdditionalContext)
 }
 
+// externalTokenHookDiagnostic explains why Workspace context is left out
+// of a hook that runs with an external access token.
+const externalTokenHookDiagnostic = "Workspace context was skipped: an external access token (GWS_ACCESS_TOKEN / --access-token) is in use, and hook context is gathered and cached with the stored login, which may be a different account."
+
 func renderHook(ctx context.Context, event pluginhooks.Event, cfg pluginhooks.Config, cwd string) pluginhooks.RenderedContext {
+	// Hook context is read with the stored login and cached per
+	// workspace. A session that runs on an external token may belong to
+	// another account, so it gets no Workspace context at all: neither a
+	// fresh read with the stored login nor its cached snapshot.
+	if config.GetAccessToken() != "" && cfg.Providers.Workspace.Enabled {
+		cfg.Providers.Workspace.Enabled = false
+		rendered := renderHookWith(ctx, event, cfg, cwd)
+		rendered.Diagnostics = append(rendered.Diagnostics, externalTokenHookDiagnostic)
+		return rendered
+	}
+	return renderHookWith(ctx, event, cfg, cwd)
+}
+
+func renderHookWith(ctx context.Context, event pluginhooks.Event, cfg pluginhooks.Config, cwd string) pluginhooks.RenderedContext {
 	return pluginhooks.Runtime{
 		Run:          runSelfGWS,
 		Store:        pluginhooks.FileStore{Path: hookSnapshotPath()},

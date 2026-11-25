@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/omriariav/workspace-cli/internal/auth"
 	"github.com/omriariav/workspace-cli/internal/config"
+	pluginhooks "github.com/omriariav/workspace-cli/internal/hooks"
 	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -1944,5 +1946,33 @@ func TestReadOnlyScopeHint_EventsNamesTheDriveException(t *testing.T) {
 	}
 	if strings.Contains(hint, "If this command changes data") {
 		t.Errorf("hint = %q, must not tie full access to changing data", hint)
+	}
+}
+
+// A hook that runs while an external access token is in use must not put
+// the stored login's mail or calendar into that session: Workspace
+// context is skipped entirely, with no subprocess and no cached snapshot.
+func TestRenderHook_NoWorkspaceContextWithExternalToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	setTestAccessToken("external-account-token")
+	t.Cleanup(func() { setTestAccessToken("") })
+
+	cfg := pluginhooks.Config{Enabled: true}
+	cfg.Providers.Workspace.Enabled = true
+	cfg.Sources.Calendar.Enabled = true
+	cfg.Sources.Gmail.Enabled = true
+
+	rendered := renderHook(context.Background(), pluginhooks.Event("SessionStart"), cfg, t.TempDir())
+	if len(rendered.Sources) != 0 || rendered.Refreshed {
+		t.Errorf("Workspace sources were read with an external token: %+v", rendered)
+	}
+	found := false
+	for _, d := range rendered.Diagnostics {
+		if strings.Contains(d, "Workspace context was skipped") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("diagnostics = %v, want the external-token explanation", rendered.Diagnostics)
 	}
 }
