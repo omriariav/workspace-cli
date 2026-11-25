@@ -635,7 +635,7 @@ func TestQueryBusySpans_GroupMemberOrderDoesNotMatter(t *testing.T) {
 			json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
 				Groups: map[string]calendar.FreeBusyGroup{"team@example.com": {Calendars: members}},
 				Calendars: map[string]calendar.FreeBusyCalendar{
-					"primary":            {},
+					"primary":            {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T00:00:00Z", End: "2026-12-01T01:00:00Z"}}},
 					"busy@example.com":   {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T09:00:00Z", End: "2026-12-01T13:00:00Z"}}},
 					"hidden@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
 				},
@@ -748,6 +748,16 @@ func TestQueryBusySpans_NullEntriesDoNotPanic(t *testing.T) {
 	if len(busy) != 1 {
 		t.Errorf("busy = %v, want the one real period", busy)
 	}
+	// A null calendar entry reports nothing, so it is unknown, not free.
+	nullCalendarReported := false
+	for _, u := range unavailable {
+		if u["calendar"] == "primary" && u["reason"] == "no availability data returned" {
+			nullCalendarReported = true
+		}
+	}
+	if !nullCalendarReported {
+		t.Errorf("a null calendar entry should be unavailable, not free: %v", unavailable)
+	}
 	// The null group has no members to read, so it is unavailable.
 	found := false
 	for _, u := range unavailable {
@@ -757,6 +767,32 @@ func TestQueryBusySpans_NullEntriesDoNotPanic(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("a null group should be reported as unavailable: %v", unavailable)
+	}
+}
+
+// An explicitly empty busy list means free; a missing one means unknown.
+func TestQueryBusySpans_EmptyBusyListIsFreeMissingIsUnknown(t *testing.T) {
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"calendars":{"free@example.com":{"busy":[]},"blank@example.com":{},"null@example.com":null}}`))
+	})
+	from := mustTime(t, "2026-12-01T00:00:00Z")
+	to := mustTime(t, "2026-12-02T00:00:00Z")
+	items := []*calendar.FreeBusyRequestItem{{Id: "free@example.com"}, {Id: "blank@example.com"}, {Id: "null@example.com"}}
+
+	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(checked, ",") != "free@example.com" || len(busy) != 0 {
+		t.Errorf("checked = %v, busy = %v; want only the calendar with an explicit empty list", checked, busy)
+	}
+	if len(unavailable) != 2 || unavailable[0]["calendar"] != "blank@example.com" || unavailable[1]["calendar"] != "null@example.com" {
+		t.Errorf("unavailable = %v", unavailable)
+	}
+	// Strict mode refuses rather than treat the unknown calendars as free.
+	if unreadableCalendarsError(unavailable, false) == nil {
+		t.Error("strict mode must reject a calendar with no availability data")
 	}
 }
 

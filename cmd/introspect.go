@@ -247,7 +247,9 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 		return ""
 	}
 	joined := strings.Join(readOnly, ",")
-	return fmt.Sprintf("Hint: %s is not authorized for full write access. Grant it with: gws auth login --add --services %s", joined, joined)
+	// Worded without "write access": some services (groups) have only
+	// read scopes, and a partial grant can be missing one of those.
+	return fmt.Sprintf("Hint: the stored login does not hold every scope %s needs. Grant them with: gws auth login --add --services %s", joined, joined)
 }
 
 // discardValue is a flag value that accepts anything and stores nothing.

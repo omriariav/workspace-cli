@@ -531,6 +531,13 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		if len(fb.Errors) > 0 {
 			return false, fb.Errors[0].Reason, nil
 		}
+		// A readable calendar always carries a busy list, empty when it
+		// is free ("busy": []). No list at all — a null or empty entry —
+		// is not the same as free: nothing was reported, so availability
+		// is unknown.
+		if fb.Busy == nil {
+			return false, "no availability data returned", nil
+		}
 		// Collected separately and added only once the whole calendar has
 		// been validated, so a bad entry never leaves half of it behind.
 		spans := make([]timeSpan, 0, len(fb.Busy))
