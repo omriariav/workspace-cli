@@ -793,33 +793,37 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	// Check if token is expired
-	if token.Expiry.Before(time.Now()) && !token.Expiry.IsZero() {
-		// Try to get user info to trigger refresh
-		clientID := config.GetClientID()
-		clientSecret := config.GetClientSecret()
-
-		if clientID == "" || clientSecret == "" {
+	// Resolve the token once through the token source, which refreshes
+	// it when it is expired or about to expire, and save any refresh
+	// (including a rotated refresh token). Everything below — the account
+	// lookup and the access record — then uses that same token, so no
+	// later call refreshes again and drops the result.
+	expired := token.Expiry.Before(time.Now()) && !token.Expiry.IsZero()
+	clientID := config.GetClientID()
+	clientSecret := config.GetClientSecret()
+	if clientID == "" || clientSecret == "" {
+		if expired {
 			return p.Print(map[string]interface{}{
 				"authenticated": false,
 				"message":       "Token expired, run: gws auth login",
 			})
 		}
-
-		// Try refreshing
-		ctx := context.Background()
-		ts := auth.GetTokenSource(ctx, clientID, clientSecret, token)
-		newToken, err := ts.Token()
-		if err != nil {
+	} else {
+		ts := auth.GetTokenSource(context.Background(), clientID, clientSecret, token)
+		current, err := ts.Token()
+		switch {
+		case err != nil && expired:
 			return p.Print(map[string]interface{}{
 				"authenticated": false,
 				"message":       "Token expired and refresh failed, run: gws auth login",
 			})
+		case err == nil && auth.TokenRefreshed(token, current):
+			warnIfRefreshNotSaved(os.Stderr, auth.SaveRefreshedToken(token, current))
+			if current.RefreshToken == "" {
+				current.RefreshToken = token.RefreshToken
+			}
+			token = current
 		}
-
-		// Save refreshed token
-		warnIfRefreshNotSaved(os.Stderr, auth.SaveRefreshedToken(token, newToken))
-		token = newToken
 	}
 
 	// Get user info

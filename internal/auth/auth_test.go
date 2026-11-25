@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -861,6 +862,38 @@ func TestStoredTokenFingerprint_ChangesOnlyWhenTheLoginIsReplaced(t *testing.T) 
 	}
 	if StoredTokenFingerprint() == base {
 		t.Error("a replaced login must change the fingerprint")
+	}
+}
+
+// If the access record cannot be rewritten during a rotation, the rotated
+// token is still saved: the old refresh token may no longer work.
+func TestSaveRefreshedToken_RotationSurvivesMetadataFailure(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	current := &oauth2.Token{AccessToken: "c1", RefreshToken: "rotating-1"}
+	if err := SaveToken(current); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessFull}, nil, "", current); err != nil {
+		t.Fatal(err)
+	}
+
+	original := saveGrantedRecord
+	saveGrantedRecord = func(grantedAccessRecord) error { return errors.New("disk full") }
+	t.Cleanup(func() { saveGrantedRecord = original })
+
+	err := SaveRefreshedToken(current, &oauth2.Token{AccessToken: "c2", RefreshToken: "rotating-2"})
+	// The metadata failure is reported...
+	if err == nil || !strings.Contains(err.Error(), "access record could not be updated") || !strings.Contains(err.Error(), "disk full") {
+		t.Errorf("error = %v, want the metadata failure reported", err)
+	}
+	// ...but the rotated credential is on disk.
+	got, loadErr := LoadToken()
+	if loadErr != nil || got.AccessToken != "c2" || got.RefreshToken != "rotating-2" {
+		t.Errorf("rotated token not saved: %+v, %v", got, loadErr)
+	}
+	// The stale record no longer matches and is simply ignored.
+	if LoadGrantedAccess() != nil {
+		t.Error("the old record must not be read as describing the rotated token")
 	}
 }
 

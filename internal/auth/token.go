@@ -180,8 +180,9 @@ func SaveGrantedAccess(access map[string]string, scopes []string, account string
 	return saveGrantedRecord(grantedAccessRecord{Token: tokenFingerprint(token), Services: access, Scopes: scopes, Account: account})
 }
 
-// saveGrantedRecord writes the access record atomically.
-func saveGrantedRecord(record grantedAccessRecord) error {
+// saveGrantedRecord writes the access record atomically. A variable so
+// tests can make the write fail.
+var saveGrantedRecord = func(record grantedAccessRecord) error {
 	if err := config.EnsureConfigDir(); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
@@ -379,8 +380,14 @@ func SaveRefreshedToken(stored, refreshed *oauth2.Token) error {
 	restore := SnapshotGrantedAccess()
 	record.PreviousToken = base
 	record.Token = tokenFingerprint(&toSave)
-	if err := saveGrantedRecord(*record); err != nil {
-		return err // nothing changed: the old token and record stand
+	if recordErr := saveGrantedRecord(*record); recordErr != nil {
+		// The rotated token still has to be saved: the old refresh token
+		// may already be dead, and losing the credential is far worse than
+		// losing its metadata. Report the metadata failure afterwards.
+		if err := SaveToken(&toSave); err != nil {
+			return err
+		}
+		return fmt.Errorf("the rotated token was saved, but its access record could not be updated (auth status will not show per-service access until the next login): %w", recordErr)
 	}
 	if err := SaveToken(&toSave); err != nil {
 		restore()
