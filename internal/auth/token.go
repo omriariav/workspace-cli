@@ -498,8 +498,9 @@ func (g *guardedTokenSource) Token() (*oauth2.Token, error) {
 }
 
 // TokenRefreshed reports whether a token source handed back something
-// other than the stored token: a new access token, or a rotated refresh
-// token (which can arrive even when the access token is unchanged).
+// other than the stored token: a new access token, a rotated refresh
+// token (which can arrive even when the access token is unchanged), or
+// the same strings with a later expiry.
 func TokenRefreshed(stored, current *oauth2.Token) bool {
 	if stored == nil || current == nil {
 		return false
@@ -507,7 +508,13 @@ func TokenRefreshed(stored, current *oauth2.Token) bool {
 	if current.AccessToken != stored.AccessToken {
 		return true
 	}
-	return current.RefreshToken != "" && current.RefreshToken != stored.RefreshToken
+	if current.RefreshToken != "" && current.RefreshToken != stored.RefreshToken {
+		return true
+	}
+	// The same token strings with a later expiry: still worth saving, or
+	// every new command would find an expired token on disk and refresh
+	// again.
+	return current.Expiry.After(stored.Expiry)
 }
 
 // SaveRefreshedToken stores an access-token refresh of the given stored

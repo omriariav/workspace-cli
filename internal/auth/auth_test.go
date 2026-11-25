@@ -1103,6 +1103,36 @@ func TestGuardedTokenSource(t *testing.T) {
 	}
 }
 
+// A refresh that returns the same token strings with a later expiry is
+// saved, so the next command does not find an expired token and refresh
+// all over again.
+func TestEnsureFreshToken_SavesAnExpiryOnlyRefresh(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	later := time.Now().Add(time.Hour)
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: "same", RefreshToken: "r0", Expiry: later}, nil
+	}
+	expired := &oauth2.Token{AccessToken: "same", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(expired); err != nil {
+		t.Fatal(err)
+	}
+	if _, saveErr, err := EnsureFreshToken(context.Background(), "id", "secret", expired); err != nil || saveErr != nil {
+		t.Fatalf("refresh: %v, %v", saveErr, err)
+	}
+	onDisk, _ := LoadToken()
+	if !onDisk.Expiry.After(time.Now()) {
+		t.Errorf("the extended expiry was not saved: %v", onDisk.Expiry)
+	}
+	// The next command loads a valid token and does not refresh again.
+	if _, _, err := EnsureFreshToken(context.Background(), "id", "secret", onDisk); err != nil || exchanges != 1 {
+		t.Errorf("second command: err = %v after %d exchanges, want no new exchange", err, exchanges)
+	}
+}
+
 func TestSameAuthorization(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := &oauth2.Token{RefreshToken: "r1"}
@@ -1212,6 +1242,7 @@ func TestTokenRefreshed(t *testing.T) {
 		{"refresh token omitted from response", &oauth2.Token{AccessToken: "a1"}, false},
 		{"new access token", &oauth2.Token{AccessToken: "a2", RefreshToken: "r1"}, true},
 		{"rotated refresh token, same access token", &oauth2.Token{AccessToken: "a1", RefreshToken: "r2"}, true},
+		{"same strings, later expiry", &oauth2.Token{AccessToken: "a1", RefreshToken: "r1", Expiry: time.Now().Add(time.Hour)}, true},
 		{"nil", nil, false},
 	}
 	for _, c := range cases {
