@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -320,11 +322,34 @@ var lookupTokenScopes = func(token *oauth2.Token) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The tokeninfo endpoint takes the access token as a URL parameter,
+	// and a transport error quotes the request URL. Never let that reach
+	// the terminal or a log.
 	info, err := svc.Tokeninfo().AccessToken(fresh.AccessToken).Do()
 	if err != nil {
-		return nil, err
+		return nil, redactSecrets(err, fresh.AccessToken, fresh.RefreshToken, token.AccessToken, token.RefreshToken)
 	}
 	return strings.Fields(info.Scope), nil
+}
+
+// redactSecrets returns an error with the same message as err but with
+// every occurrence of the given secrets removed, in plain and URL-escaped
+// form. The original error is deliberately not wrapped, so the secret
+// cannot be recovered through errors.Unwrap either.
+func redactSecrets(err error, secrets ...string) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	for _, secret := range secrets {
+		if secret == "" {
+			continue
+		}
+		for _, form := range []string{secret, url.QueryEscape(secret), url.PathEscape(secret)} {
+			msg = strings.ReplaceAll(msg, form, "[redacted]")
+		}
+	}
+	return errors.New(msg)
 }
 
 // storedScopes returns the exact scopes the stored authorization holds:

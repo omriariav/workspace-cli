@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -807,6 +808,65 @@ func TestUnionScopes(t *testing.T) {
 	}
 	if got := unionScopes(nil, []string{"x"}); len(got) != 1 || got[0] != "x" {
 		t.Errorf("union with nil = %v", got)
+	}
+}
+
+func TestRedactSecrets_KeepsTokensOutOfErrors(t *testing.T) {
+	token := "ya29.a0Af/secret+token=="
+	requestURL := "https://oauth2.googleapis.com/tokeninfo?access_token=" + url.QueryEscape(token) + "&alt=json"
+	// What net/http returns for a transport failure: it quotes the URL.
+	transportErr := &url.Error{Op: "Get", URL: requestURL, Err: errors.New("dial tcp: connection refused")}
+	if !strings.Contains(transportErr.Error(), url.QueryEscape(token)) {
+		t.Fatal("test premise: the raw error should contain the token")
+	}
+
+	got := redactSecrets(transportErr, token, "")
+	for _, leaked := range []string{token, url.QueryEscape(token), url.PathEscape(token), "secret"} {
+		if strings.Contains(got.Error(), leaked) {
+			t.Errorf("redacted error still contains %q: %s", leaked, got)
+		}
+	}
+	if !strings.Contains(got.Error(), "connection refused") || !strings.Contains(got.Error(), "[redacted]") {
+		t.Errorf("redacted error lost its cause: %s", got)
+	}
+	// The original error must not be reachable by unwrapping.
+	if errors.Unwrap(got) != nil {
+		t.Error("the redacted error must not wrap the original")
+	}
+	var urlErr *url.Error
+	if errors.As(got, &urlErr) {
+		t.Error("the original url.Error must not be recoverable")
+	}
+
+	// The plain form is redacted too, and nil stays nil.
+	if got := redactSecrets(errors.New("bad token "+token), token); strings.Contains(got.Error(), token) {
+		t.Errorf("plain token not redacted: %s", got)
+	}
+	if redactSecrets(nil, token) != nil {
+		t.Error("nil error should stay nil")
+	}
+}
+
+// A failed scope lookup surfaces through `auth login --add`; whatever the
+// lookup returns, the token must not appear in what the command prints.
+func TestStoredScopes_ErrorDoesNotLeakToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	secret := "ya29.super-secret-access-token"
+	if err := auth.SaveToken(&oauth2.Token{AccessToken: secret, RefreshToken: "1//refresh-secret"}); err != nil {
+		t.Fatal(err)
+	}
+	original := lookupTokenScopes
+	t.Cleanup(func() { lookupTokenScopes = original })
+	lookupTokenScopes = func(tok *oauth2.Token) ([]string, error) {
+		raw := &url.Error{Op: "Get", URL: "https://oauth2.googleapis.com/tokeninfo?access_token=" + url.QueryEscape(tok.AccessToken), Err: errors.New("timeout")}
+		return nil, redactSecrets(raw, tok.AccessToken, tok.RefreshToken)
+	}
+	_, err := storedScopes()
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "refresh-secret") {
+		t.Errorf("error leaks a token: %s", err)
 	}
 }
 
