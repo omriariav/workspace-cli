@@ -127,6 +127,10 @@ var conditionalSensitive = map[string]conditionalRule{
 	"drive create-folder": {flag: "parent", effect: "creates a folder inside another, where it takes on that folder's sharing"},
 	// Resolving or reopening a comment is not gated, but attaching a note
 	// posts a reply that everyone with access to the file can read.
+	// A message on an approval decision is shown to the other reviewers.
+	"drive approve":           {flag: "message", effect: "records an approval with a message visible to the other reviewers"},
+	"drive decline":           {flag: "message", effect: "declines an approval with a message visible to the other reviewers"},
+	"drive cancel-approval":   {flag: "message", effect: "cancels an approval with a message visible to the reviewers"},
 	"drive resolve-comment":   {flag: "content", effect: "posts a reply on a file comment, visible to everyone with access"},
 	"drive unresolve-comment": {flag: "content", effect: "posts a reply on a file comment, visible to everyone with access"},
 	"forms update":            {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},

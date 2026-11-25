@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"os"
 	"strings"
 
@@ -109,10 +110,14 @@ func ConfirmSensitivePolicy() (bool, error) {
 		}
 		return on, nil
 	}
-	if !viper.InConfig(KeyConfirmSensitive) {
+	// Looked up in the file itself: viper reports a key written with no
+	// value (`confirm_sensitive:` or `confirm_sensitive: null`) as if it
+	// were absent, and a key that is there but empty must not mean "off".
+	raw, present := configFileValue(KeyConfirmSensitive)
+	if !present {
 		return false, nil
 	}
-	switch value := viper.Get(KeyConfirmSensitive).(type) {
+	switch value := raw.(type) {
 	case bool:
 		return value, nil
 	case nil:
@@ -124,6 +129,32 @@ func ConfirmSensitivePolicy() (bool, error) {
 		}
 		return on, nil
 	}
+}
+
+// configFileValue returns the value a top-level key has in the config
+// file viper loaded, and whether the key is written there at all (with
+// any value, including none). Keys are matched without regard to case, as
+// viper does. A file that cannot be read or parsed has no keys here; the
+// caller learns about that failure from the config load itself.
+func configFileValue(key string) (value interface{}, present bool) {
+	path := viper.ConfigFileUsed()
+	if path == "" {
+		return nil, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var settings map[string]interface{}
+	if err := yaml.Unmarshal(data, &settings); err != nil {
+		return nil, false
+	}
+	for k, v := range settings {
+		if strings.EqualFold(k, key) {
+			return v, true
+		}
+	}
+	return nil, false
 }
 
 // GetConfirmSensitive reports whether the confirmation gate is on. A

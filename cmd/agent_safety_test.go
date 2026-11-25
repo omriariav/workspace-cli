@@ -2271,3 +2271,81 @@ func TestConfirmGate_InvalidSettingBlocksSensitiveCommands(t *testing.T) {
 		}
 	}
 }
+
+// `confirm_sensitive:` with no value (or null) in the config file is a
+// setting someone wrote, not an absent one: it must not read as "off".
+// Checked through the real config load and the pre-run hook.
+func TestConfirmGate_EmptyConfigValueBlocksSensitiveCommands(t *testing.T) {
+	if v, set := os.LookupEnv("GWS_CONFIRM_SENSITIVE"); set {
+		os.Unsetenv("GWS_CONFIRM_SENSITIVE")
+		t.Cleanup(func() { os.Setenv("GWS_CONFIRM_SENSITIVE", v) })
+	}
+	originalCfg, originalErr := cfgFile, configLoadErr
+	// viper is not reset (that would drop the flag bindings other tests
+	// rely on): each load replaces the previous file's settings, and the
+	// test ends by loading an empty file.
+	t.Cleanup(func() { cfgFile, configLoadErr = originalCfg, originalErr })
+	send, _, _ := rootCmd.Find([]string{"gmail", "send"})
+	list, _, _ := rootCmd.Find([]string{"gmail", "list"})
+
+	load := func(content string) {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cfgFile = path
+		initConfig()
+		if configLoadErr != nil {
+			t.Fatalf("config %q did not load: %v", content, configLoadErr)
+		}
+	}
+
+	for _, content := range []string{"confirm_sensitive:\n", "confirm_sensitive: null\n", "Confirm_Sensitive: ~\n", "confirm_sensitive: maybe\n"} {
+		load(content)
+		if err := confirmPolicyUnknown(send, false); err == nil || !strings.Contains(err.Error(), "could not be understood") {
+			t.Errorf("config %q: err = %v, want the sensitive command refused", content, err)
+		}
+		if err := rootCmd.PersistentPreRunE(list, nil); err != nil {
+			t.Errorf("config %q: a read command should still run: %v", content, err)
+		}
+		if !config.GetConfirmSensitive() {
+			t.Errorf("config %q: the gate reads as off", content)
+		}
+	}
+
+	for content, want := range map[string]bool{"confirm_sensitive: true\n": true, "confirm_sensitive: false\n": false, "confirm_sensitive: \"on\"\n": true, "format: json\n": false} {
+		load(content)
+		if err := confirmPolicyUnknown(send, false); err != nil {
+			t.Errorf("config %q: %v", content, err)
+		}
+		if got := config.GetConfirmSensitive(); got != want {
+			t.Errorf("config %q: gate on = %v, want %v", content, got, want)
+		}
+	}
+	load("{}\n")
+}
+
+// A message on an approval decision reaches the other reviewers, so the
+// message-bearing forms are confirmed.
+func TestConfirmGate_ApprovalMessagesNeedConfirmation(t *testing.T) {
+	for _, name := range []string{"approve", "decline", "cancel-approval"} {
+		cmd, _, err := rootCmd.Find([]string{"drive", name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		flag := cmd.Flags().Lookup("message")
+		reset := func() {
+			_ = flag.Value.Set("")
+			flag.Changed = false
+		}
+		t.Cleanup(reset)
+
+		_ = cmd.Flags().Set("message", "looks good")
+		err = confirmGate(cmd, true, false, strings.NewReader(""), io.Discard, false)
+		reset()
+		if err == nil || !strings.Contains(err.Error(), "confirmation required") {
+			t.Errorf("drive %s --message: confirmation not required (err = %v)", name, err)
+		}
+	}
+}
