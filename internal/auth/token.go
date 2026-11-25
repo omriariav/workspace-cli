@@ -286,6 +286,20 @@ func LoadGrantedAccount() string {
 	return ""
 }
 
+// LockLoginState serialises the writes a login makes (token, access
+// record, service list) across processes. The returned function releases
+// the lock.
+func LockLoginState() (unlock func(), err error) {
+	if err := config.EnsureConfigDir(); err != nil {
+		return nil, fmt.Errorf("failed to create config directory: %w", err)
+	}
+	unlock, err = acquireLock(filepath.Join(config.GetConfigDir(), "login"))
+	if err != nil {
+		return nil, fmt.Errorf("another gws login appears to be in progress: %w", err)
+	}
+	return unlock, nil
+}
+
 // SnapshotGrantedAccess captures the access record as it is on disk and
 // returns a function that puts it back (or removes the file if there was
 // none). Used to undo a metadata write when the token it describes could

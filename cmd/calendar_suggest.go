@@ -520,7 +520,13 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		}
 	}
 	if len(checked) == 0 {
-		return nil, nil, nil, fmt.Errorf("none of the requested calendars could be read; no suggestions made")
+		// Never suggest from zero calendars, whatever --allow-partial says;
+		// name each one so a mistyped ID or missing sharing is visible.
+		names := make([]string, 0, len(unavailable))
+		for _, u := range unavailable {
+			names = append(names, fmt.Sprintf("%v (%v)", u["calendar"], u["reason"]))
+		}
+		return nil, nil, nil, fmt.Errorf("none of the requested calendars could be read: %s; no suggestions made", strings.Join(names, ", "))
 	}
 
 	return busy, checked, unavailable, nil

@@ -779,20 +779,20 @@ func TestUnionScopes(t *testing.T) {
 	}
 }
 
-// A login from an older version recorded every service as granted in full.
-// Re-deriving labels from the scopes Google returns relabels groups and
-// driveactivity as read-only; that must not be mistaken for lost access.
-func TestAddOnLegacyLogin_IsNotRejected(t *testing.T) {
+// A login from an older version recorded every service as granted in full
+// and has no exact scope list. --add stands those levels in for it: it
+// re-requests their scopes and checks the result against the same set.
+func TestAddOnLegacyLogin(t *testing.T) {
+	const pfx = "https://www.googleapis.com/auth/"
 	legacy := map[string]string{}
 	for _, svc := range auth.ValidServiceNames() {
 		legacy[svc] = auth.AccessFull
 	}
-	// No recorded scope list for a legacy login.
-	var previousScopes []string
-	carried := scopesForAccess(legacy)
-	requested := unionScopes(carried, auth.ScopesForServices([]string{"tasks"}))
+	previousScopes := scopesForAccess(legacy)
+	requested := unionScopes(previousScopes, auth.ScopesForServices([]string{"tasks"}))
 
-	// Google returns exactly what was requested.
+	// Google returns exactly what was requested: accepted. Re-deriving
+	// labels relabels groups as read-only, which is not a loss.
 	if lost := missingScopes(previousScopes, requested); len(lost) != 0 {
 		t.Fatalf("legacy --add rejected for %v", lost)
 	}
@@ -800,6 +800,33 @@ func TestAddOnLegacyLogin_IsNotRejected(t *testing.T) {
 	if access["groups"] != auth.AccessReadOnly || access["gmail"] != auth.AccessFull || len(notGranted) != 0 {
 		t.Errorf("access = %v, notGranted = %v", access, notGranted)
 	}
+
+	// The user unticks gmail.send while adding: the login must be refused
+	// rather than overwrite the stored authorization.
+	var withoutSend []string
+	for _, s := range requested {
+		if s != pfx+"gmail.send" {
+			withoutSend = append(withoutSend, s)
+		}
+	}
+	if lost := strings.Join(shortScopeNames(missingScopes(previousScopes, withoutSend)), ","); lost != "gmail.send" {
+		t.Errorf("lost = %q, want gmail.send", lost)
+	}
+}
+
+func TestLockLoginState_CanBeReacquiredAfterRelease(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	unlock, err := auth.LockLoginState()
+	if err != nil {
+		t.Fatalf("first lock: %v", err)
+	}
+	// Released locks can be taken again.
+	unlock()
+	unlock2, err := auth.LockLoginState()
+	if err != nil {
+		t.Fatalf("lock after release: %v", err)
+	}
+	unlock2()
 }
 
 func TestMergeGrantedAccess_ReadOnlyAddKeepsPartialWriteAccess(t *testing.T) {

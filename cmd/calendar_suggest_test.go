@@ -549,8 +549,9 @@ func TestQueryBusySpans_Failures(t *testing.T) {
 			},
 		})
 	})
-	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil || !strings.Contains(err.Error(), "none of the requested calendars") {
-		t.Errorf("error = %v, want unreadable-calendars error", err)
+	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil ||
+		!strings.Contains(err.Error(), "none of the requested calendars") || !strings.Contains(err.Error(), "a@example.com (notFound)") {
+		t.Errorf("error = %v, want unreadable-calendars error naming the calendar and reason", err)
 	}
 
 	// API errors keep their HTTP status for exit-code mapping.

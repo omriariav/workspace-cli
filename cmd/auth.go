@@ -128,9 +128,8 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	access := mergeGrantedAccess(existingAccess, services, readOnly)
 	scopes := loginScopes(services, readOnly, hasServiceSelection(cmd))
 
-	// previousScopes is the exact scope list of the stored token, when it
-	// is known. It is nil for a replacing login and for a stored login
-	// that predates scope recording.
+	// previousScopes is what the stored authorization holds and --add must
+	// preserve. It is nil for a replacing login.
 	var previousScopes []string
 	previousAccount := ""
 	if add {
@@ -141,11 +140,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		// Desktop OAuth clients, so the previous scopes are re-requested
 		// rather than assumed to carry over. Without a recorded scope
 		// list, the recorded access levels stand in for it.
-		carried := previousScopes
-		if carried == nil {
-			carried = scopesForAccess(existingAccess)
+		// A login that predates scope recording has no exact list; the
+		// scopes its recorded access levels stand for take its place, both
+		// in the request and in the check on what comes back.
+		if previousScopes == nil {
+			previousScopes = scopesForAccess(existingAccess)
 		}
-		scopes = unionScopes(carried, scopes)
+		scopes = unionScopes(previousScopes, scopes)
 	}
 
 	if config.GetAccessToken() != "" {
@@ -205,6 +206,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// presence stops the unbound service list from being trusted. The
 	// service list goes last, so it never describes a newer login than the
 	// access record does.
+	// One login at a time may write the token and its metadata, so two
+	// overlapping logins cannot pair one's token with the other's record.
+	unlock, err := auth.LockLoginState()
+	if err != nil {
+		return p.PrintError(err)
+	}
+	defer unlock()
+
 	restoreAccessRecord := auth.SnapshotGrantedAccess()
 	errAccess := auth.SaveGrantedAccess(access, grantedScopes, account, token)
 
