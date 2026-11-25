@@ -278,6 +278,41 @@ func TestCivilDateBoundaries_MidnightDSTTransition(t *testing.T) {
 	}
 }
 
+func TestSuggestSlots_WorkingHoursBoundaryInSpringForwardGap(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	// On Sunday 2026-03-08 clocks jump from 02:00 to 03:00, so 02:30 does
+	// not exist. A window that starts at 02:30 must begin at 03:00 EDT
+	// (07:00 UTC), never at 01:30 EST.
+	gapStart := mustTime(t, "2026-03-08T07:00:00Z")
+	if got := civilInstant(2026, 3, 8, 2, 30, loc); !got.Equal(gapStart) {
+		t.Errorf("civilInstant(02:30) = %v, want %v", got.UTC(), gapStart)
+	}
+	// Existing times are untouched, on both sides of the change.
+	if got := civilInstant(2026, 3, 8, 1, 30, loc); !got.Equal(mustTime(t, "2026-03-08T06:30:00Z")) {
+		t.Errorf("civilInstant(01:30) = %v", got.UTC())
+	}
+	if got := civilInstant(2026, 3, 8, 9, 0, loc); !got.Equal(mustTime(t, "2026-03-08T13:00:00Z")) {
+		t.Errorf("civilInstant(09:00) = %v", got.UTC())
+	}
+	// An ambiguous autumn time resolves to its first occurrence (EDT).
+	if got := civilInstant(2026, 11, 1, 1, 30, loc); !got.Equal(mustTime(t, "2026-11-01T05:30:00Z")) {
+		t.Errorf("civilInstant(ambiguous 01:30) = %v", got.UTC())
+	}
+
+	from := time.Date(2026, 3, 8, 0, 0, 0, 0, loc)
+	to := time.Date(2026, 3, 9, 0, 0, 0, 0, loc)
+	got := suggestSlots(nil, from, to, 30*time.Minute, 2*time.Hour+30*time.Minute, 17*time.Hour, loc, true, 5)
+	if len(got) != 1 || !got[0].Start.Equal(gapStart) {
+		t.Fatalf("suggestions = %v, want one window starting at 03:00 EDT", got)
+	}
+	if h := got[0].Start.In(loc).Hour(); h < 2 {
+		t.Errorf("suggestion starts at %v, before the working-hours lower bound", got[0].Start.In(loc))
+	}
+}
+
 func newSuggestTestService(t *testing.T, handler http.HandlerFunc) *calendar.Service {
 	t.Helper()
 	server := httptest.NewServer(handler)

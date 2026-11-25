@@ -271,16 +271,20 @@ func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (a
 		for _, s := range readOnly {
 			isReadOnlyScope[s] = true
 		}
-		hasWriteScope := false
+		// definesWriteScope: the service has scopes beyond its read-only
+		// set (compared by membership — sheets has one scope in each).
+		definesWriteScope, hasWriteScope := false, false
 		for _, s := range full {
-			if !isReadOnlyScope[s] && granted[s] {
-				hasWriteScope = true
-				break
+			if !isReadOnlyScope[s] {
+				definesWriteScope = true
+				if granted[s] {
+					hasWriteScope = true
+				}
 			}
 		}
 
 		switch {
-		case hasAll(full) && (len(full) > len(readOnly) || level == auth.AccessFull):
+		case hasAll(full) && (definesWriteScope || level == auth.AccessFull):
 			access[svc] = auth.AccessFull
 		case hasWriteScope:
 			access[svc] = auth.AccessPartial

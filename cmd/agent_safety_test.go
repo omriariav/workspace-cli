@@ -641,6 +641,18 @@ func TestDeriveGrantedAccess(t *testing.T) {
 		t.Errorf("contacts grant = %v", contacts)
 	}
 
+	// Sheets has exactly one scope in each set. A previously granted
+	// `spreadsheets` scope with no local metadata is full, not partial.
+	sheets, _ := deriveGrantedAccess(map[string]string{"tasks": auth.AccessReadOnly},
+		[]string{pfx + "userinfo.email", pfx + "spreadsheets", pfx + "tasks.readonly"})
+	if sheets["sheets"] != auth.AccessFull {
+		t.Errorf("sheets with the spreadsheets scope = %q, want full", sheets["sheets"])
+	}
+	sheetsRO, _ := deriveGrantedAccess(nil, []string{pfx + "userinfo.email", pfx + "spreadsheets.readonly"})
+	if sheetsRO["sheets"] != auth.AccessReadOnly {
+		t.Errorf("sheets with spreadsheets.readonly = %q, want readonly", sheetsRO["sheets"])
+	}
+
 	// When a service's full and read-only scope sets coincide, the
 	// requested label is kept.
 	groups, _ := deriveGrantedAccess(map[string]string{"groups": auth.AccessReadOnly}, auth.ScopesForServices([]string{"groups"}))

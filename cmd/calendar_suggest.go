@@ -145,22 +145,39 @@ func parseTimeIn(s string, loc *time.Location) (t time.Time, dateOnly bool, err 
 	return time.Time{}, false, fmt.Errorf("unrecognized time format: %s (use RFC3339, 'YYYY-MM-DD HH:MM', or 'YYYY-MM-DD')", s)
 }
 
-// startOfCivilDate returns the first instant of the given civil date in
-// loc. Day overflow is normalised (day 32 of January is February 1st).
-// Where a DST change skips midnight, time.Date resolves the missing
-// 00:00 to an instant on the previous date; this walks forward to the
-// first instant that really falls on the requested date.
-func startOfCivilDate(year int, month time.Month, day int, loc *time.Location) time.Time {
-	want := time.Date(year, month, day, 12, 0, 0, 0, time.UTC)
-	t := time.Date(year, month, day, 0, 0, 0, 0, loc)
-	for i := 0; i < 12; i++ { // up to 3 hours, in 15-minute steps
-		local := t.In(loc)
-		if local.Year() == want.Year() && local.Month() == want.Month() && local.Day() == want.Day() {
-			break
+// civilInstant returns the instant at which the wall clock in loc reads
+// the given civil date and time. Overflow is normalised (day 32, hour 24).
+//
+// A DST change can skip wall-clock times; for those time.Date picks an
+// instant on one side of the gap, which can read earlier than requested.
+// This returns the first instant whose wall clock is at or after the
+// requested time instead, so a boundary never moves before the time asked
+// for. Times that occur twice resolve to the first occurrence.
+func civilInstant(year int, month time.Month, day, hour, min int, loc *time.Location) time.Time {
+	// The requested wall time, normalised, with UTC as a neutral label.
+	want := time.Date(year, month, day, hour, min, 0, 0, time.UTC)
+	wall := func(t time.Time) time.Time {
+		l := t.In(loc)
+		return time.Date(l.Year(), l.Month(), l.Day(), l.Hour(), l.Minute(), 0, 0, time.UTC)
+	}
+
+	t := time.Date(year, month, day, hour, min, 0, 0, loc)
+	if wall(t).Equal(want) {
+		return t
+	}
+	// The requested time does not exist: scan the surrounding hours.
+	for c := t.Add(-3 * time.Hour); !c.After(t.Add(3 * time.Hour)); c = c.Add(time.Minute) {
+		if !wall(c).Before(want) {
+			return c
 		}
-		t = t.Add(15 * time.Minute)
 	}
 	return t
+}
+
+// startOfCivilDate returns the first instant of the given civil date in
+// loc, including when a DST change skips midnight.
+func startOfCivilDate(year int, month time.Month, day int, loc *time.Location) time.Time {
+	return civilInstant(year, month, day, 0, 0, loc)
 }
 
 // endOfCivilDate returns the first instant after the civil date that t
@@ -261,19 +278,14 @@ func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.
 	return out
 }
 
-// atDayOffset returns the wall-clock time `offset` after midnight on the
-// civil date of day, in loc. An offset of 24h is midnight of the next day.
+// atDayOffset returns the instant `offset` of wall-clock time after
+// midnight on the civil date of day, in loc. An offset of 24h is the start
+// of the next day. Boundaries that fall in a DST gap move forward to the
+// first real instant (see civilInstant).
 func atDayOffset(day time.Time, offset time.Duration, loc *time.Location) time.Time {
-	// Day boundaries must be exact even when DST skips midnight.
-	if offset == 0 {
-		return startOfCivilDate(day.Year(), day.Month(), day.Day(), loc)
-	}
-	if offset == 24*time.Hour {
-		return startOfCivilDate(day.Year(), day.Month(), day.Day()+1, loc)
-	}
 	h := int(offset / time.Hour)
 	m := int((offset % time.Hour) / time.Minute)
-	return time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, loc)
+	return civilInstant(day.Year(), day.Month(), day.Day(), h, m, loc)
 }
 
 // splitList splits a comma-separated list, dropping blanks.
