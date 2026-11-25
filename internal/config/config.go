@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"gopkg.in/yaml.v3"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -110,11 +111,18 @@ func ConfirmSensitivePolicy() (bool, error) {
 		}
 		return on, nil
 	}
-	// Looked up in the file itself: viper reports a key written with no
-	// value (`confirm_sensitive:` or `confirm_sensitive: null`) as if it
-	// were absent, and a key that is there but empty must not mean "off".
-	raw, present := configFileValue(KeyConfirmSensitive)
-	if !present {
+	// viper's own view of the file comes first: it is the snapshot every
+	// other setting is read from, in whatever format the file is (YAML,
+	// TOML, JSON). One case it gets wrong for this purpose: a YAML key
+	// written with no value (`confirm_sensitive:` or `: null`) looks
+	// absent to it, and a key that is there but empty must not mean
+	// "off". Only for that case is the YAML file looked at directly.
+	var raw interface{}
+	if viper.InConfig(KeyConfirmSensitive) {
+		raw = viper.Get(KeyConfirmSensitive)
+	} else if value, present := yamlConfigFileValue(KeyConfirmSensitive); present && value == nil {
+		raw = nil
+	} else {
 		return false, nil
 	}
 	switch value := raw.(type) {
@@ -131,14 +139,17 @@ func ConfirmSensitivePolicy() (bool, error) {
 	}
 }
 
-// configFileValue returns the value a top-level key has in the config
-// file viper loaded, and whether the key is written there at all (with
-// any value, including none). Keys are matched without regard to case, as
-// viper does. A file that cannot be read or parsed has no keys here; the
-// caller learns about that failure from the config load itself.
-func configFileValue(key string) (value interface{}, present bool) {
+// yamlConfigFileValue returns the value a top-level key has in the YAML
+// config file viper loaded, and whether the key is written there at all
+// (with any value, including none). Keys are matched without regard to
+// case, as viper does. A file in another format, or one that cannot be
+// read or parsed, has no keys here.
+func yamlConfigFileValue(key string) (value interface{}, present bool) {
 	path := viper.ConfigFileUsed()
 	if path == "" {
+		return nil, false
+	}
+	if ext := strings.ToLower(filepath.Ext(path)); ext != ".yaml" && ext != ".yml" {
 		return nil, false
 	}
 	data, err := os.ReadFile(path)

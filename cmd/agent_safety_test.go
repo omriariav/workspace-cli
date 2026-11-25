@@ -2323,6 +2323,39 @@ func TestConfirmGate_EmptyConfigValueBlocksSensitiveCommands(t *testing.T) {
 			t.Errorf("config %q: gate on = %v, want %v", content, got, want)
 		}
 	}
+	// The config file may be in any format viper reads. The gate must be
+	// on for a TOML or JSON file that enables it, exactly as for YAML.
+	loadAs := func(name, content string) {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), name)
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cfgFile = path
+		initConfig()
+		if configLoadErr != nil {
+			t.Fatalf("%s did not load: %v", name, configLoadErr)
+		}
+	}
+	for name, content := range map[string]string{
+		"settings.toml": "confirm_sensitive = true\n",
+		"settings.json": `{"confirm_sensitive": true}`,
+		"settings.yml":  "confirm_sensitive: true\n",
+	} {
+		loadAs(name, content)
+		if !config.GetConfirmSensitive() {
+			t.Errorf("%s: the gate reads as off", name)
+		}
+		err := confirmGate(send, config.GetConfirmSensitive(), false, strings.NewReader(""), io.Discard, false)
+		if err == nil || !strings.Contains(err.Error(), "confirmation required") {
+			t.Errorf("%s: a sensitive command was not stopped: %v", name, err)
+		}
+	}
+	loadAs("settings.toml", "confirm_sensitive = false\n")
+	if config.GetConfirmSensitive() {
+		t.Error("settings.toml with false: the gate reads as on")
+	}
+
 	load("{}\n")
 }
 
