@@ -114,7 +114,8 @@ func ConfirmSensitivePolicy() (bool, error) {
 	// viper's own view of the file comes first: it is the snapshot every
 	// other setting is read from, in whatever format the file is (YAML,
 	// TOML, JSON). One case it gets wrong for this purpose: a YAML key
-	// written with no value (`confirm_sensitive:` or `: null`) looks
+	// written with no value (`confirm_sensitive:` or `: null`, or a JSON
+	// null) looks
 	// absent to it, and a key that is there but empty must not mean
 	// "off". Only for that case is the YAML file looked at directly.
 	var raw interface{}
@@ -149,7 +150,11 @@ func yamlConfigFileValue(key string) (value interface{}, present bool) {
 	if path == "" {
 		return nil, false
 	}
-	if ext := strings.ToLower(filepath.Ext(path)); ext != ".yaml" && ext != ".yml" {
+	// JSON is read with the same parser (it is a subset of YAML) and has
+	// the same explicit null. TOML has no null to detect.
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".yaml", ".yml", ".json":
+	default:
 		return nil, false
 	}
 	data, err := os.ReadFile(path)

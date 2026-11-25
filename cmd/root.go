@@ -65,10 +65,13 @@ Workspace Events, and Custom Search.`,
 			}
 		}
 		yes, _ := cmd.Flags().GetBool("yes")
-		if err := confirmPolicyUnknown(cmd, yes); err != nil {
+		// Resolved once: the same reading of the setting decides whether
+		// it is usable and whether to prompt.
+		gateOn, policyErr := config.ConfirmSensitivePolicy()
+		if err := confirmPolicyCheck(cmd, yes, policyErr); err != nil {
 			return err
 		}
-		return confirmGate(cmd, config.GetConfirmSensitive(), yes, os.Stdin, os.Stderr, stdinIsTerminal())
+		return confirmGate(cmd, gateOn, yes, os.Stdin, os.Stderr, stdinIsTerminal())
 	},
 }
 
@@ -298,6 +301,14 @@ var configLoadErr error
 // not settle it. Treating either as "gate off" would silently remove the
 // protection the user asked for. --yes is an explicit approval.
 func confirmPolicyUnknown(cmd *cobra.Command, yes bool) error {
+	_, policyErr := config.ConfirmSensitivePolicy()
+	return confirmPolicyCheck(cmd, yes, policyErr)
+}
+
+// confirmPolicyCheck is confirmPolicyUnknown for a caller that has
+// already resolved the policy, so that one reading of the setting decides
+// both whether it is usable and whether to prompt.
+func confirmPolicyCheck(cmd *cobra.Command, yes bool, policyErr error) error {
 	if yes {
 		return nil
 	}
@@ -305,7 +316,7 @@ func confirmPolicyUnknown(cmd *cobra.Command, yes bool) error {
 	if !sensitive {
 		return nil
 	}
-	if _, policyErr := config.ConfirmSensitivePolicy(); policyErr != nil {
+	if policyErr != nil {
 		return fmt.Errorf("the confirmation setting could not be understood (%v), so it is unknown whether confirm_sensitive is on; `gws %s` %s and was not run. Correct the setting, or re-run with --yes after the user approves", policyErr, commandKey(cmd), effect)
 	}
 	// The setting parsed. If it came from the environment the policy is

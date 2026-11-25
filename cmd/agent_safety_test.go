@@ -2351,6 +2351,11 @@ func TestConfirmGate_EmptyConfigValueBlocksSensitiveCommands(t *testing.T) {
 			t.Errorf("%s: a sensitive command was not stopped: %v", name, err)
 		}
 	}
+	// An explicit null in a JSON config is an unusable setting, as in YAML.
+	loadAs("settings.json", `{"confirm_sensitive": null}`)
+	if err := confirmPolicyUnknown(send, false); err == nil || !strings.Contains(err.Error(), "could not be understood") {
+		t.Errorf("JSON null: err = %v, want the sensitive command refused", err)
+	}
 	loadAs("settings.toml", "confirm_sensitive = false\n")
 	if config.GetConfirmSensitive() {
 		t.Error("settings.toml with false: the gate reads as on")
