@@ -236,22 +236,22 @@ func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.
 		// Noon UTC on the civil date: a stable handle for the weekday and
 		// for normalising day overflow, independent of loc's offsets.
 		civil := time.Date(y, m, d+i, 12, 0, 0, 0, time.UTC)
-		winStart := atDayOffset(civil, whStart, loc)
-		if !winStart.Before(to) {
+		if !atDayOffset(civil, 0, loc).Before(to) {
 			break
 		}
 		if wd := civil.Weekday(); !includeWeekends && (wd == time.Saturday || wd == time.Sunday) {
 			continue
 		}
-		winEnd := atDayOffset(civil, whEnd, loc)
-		if winStart.Before(from) {
-			winStart = from
-		}
-		if winEnd.After(to) {
-			winEnd = to
-		}
-		if winEnd.After(winStart) {
-			windows = append(windows, timeSpan{Start: winStart, End: winEnd})
+		for _, w := range dayWindows(civil, whStart, whEnd, loc) {
+			if w.Start.Before(from) {
+				w.Start = from
+			}
+			if w.End.After(to) {
+				w.End = to
+			}
+			if w.End.After(w.Start) {
+				windows = append(windows, w)
+			}
 		}
 	}
 
@@ -283,6 +283,41 @@ func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.
 		}
 	}
 	return out
+}
+
+// dayWindows returns the instants of one civil date whose wall-clock time
+// falls inside [whStart, whEnd). On an ordinary day that is one interval.
+// On a day with a DST change it is computed minute by minute, because the
+// set is not a single interval: when clocks fall back, an hour of wall
+// time occurs twice, and the stretch between the two occurrences of the
+// working hours lies outside them.
+func dayWindows(civil time.Time, whStart, whEnd time.Duration, loc *time.Location) []timeSpan {
+	dayStart := atDayOffset(civil, 0, loc)
+	dayEnd := atDayOffset(civil, 24*time.Hour, loc)
+
+	_, startOffset := dayStart.In(loc).Zone()
+	_, endOffset := dayEnd.Add(-time.Second).In(loc).Zone()
+	if startOffset == endOffset && dayEnd.Sub(dayStart) == 24*time.Hour {
+		return []timeSpan{{Start: atDayOffset(civil, whStart, loc), End: atDayOffset(civil, whEnd, loc)}}
+	}
+
+	var spans []timeSpan
+	open := false
+	for c := dayStart; c.Before(dayEnd); c = c.Add(time.Minute) {
+		l := c.In(loc)
+		wall := time.Duration(l.Hour())*time.Hour + time.Duration(l.Minute())*time.Minute
+		inside := wall >= whStart && wall < whEnd
+		switch {
+		case inside && !open:
+			spans = append(spans, timeSpan{Start: c, End: c.Add(time.Minute)})
+			open = true
+		case inside:
+			spans[len(spans)-1].End = c.Add(time.Minute)
+		default:
+			open = false
+		}
+	}
+	return spans
 }
 
 // atDayOffset returns the instant `offset` of wall-clock time after

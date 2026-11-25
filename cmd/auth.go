@@ -249,8 +249,9 @@ func mergeGrantedAccess(existing map[string]string, services []string, readOnly 
 //     read-only scopes;
 //   - absent otherwise.
 //
-// Where the full and read-only sets coincide (e.g. groups, whose scopes
-// are all read-only) the requested label is kept, defaulting to read-only.
+// A service whose scopes are all read-only (e.g. groups) is always
+// read-only, whatever was requested: the label reflects what the token can
+// do, so read_only: true means exactly "no write scope was granted".
 // notGranted lists requested services that came back with less than was
 // asked for.
 func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (access map[string]string, notGranted []string) {
@@ -302,7 +303,7 @@ func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (a
 		}
 
 		switch {
-		case hasAll(full) && (definesWriteScope || level == auth.AccessFull):
+		case hasAll(full) && definesWriteScope:
 			access[svc] = auth.AccessFull
 		case hasWriteScope:
 			access[svc] = auth.AccessPartial
@@ -311,7 +312,7 @@ func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (a
 			}
 		case hasAll(readOnly):
 			access[svc] = auth.AccessReadOnly
-			if level == auth.AccessFull {
+			if level == auth.AccessFull && definesWriteScope {
 				notGranted = append(notGranted, svc+" (write access)")
 			}
 		case wasRequested && hasAny(readOnly):

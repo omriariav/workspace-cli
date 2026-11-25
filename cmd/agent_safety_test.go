@@ -277,6 +277,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"gmail", "send"}, {"chat", "send"}, {"drive", "share"}, {"calendar", "unshare"},
 		{"events", "subscriptions", "delete"},
 		{"drive", "start-approval"}, {"drive", "reassign-approval"},
+		{"calendar", "unsubscribe"},
 	}
 	for _, path := range covered {
 		cmd, _, err := rootCmd.Find(path)
@@ -686,11 +687,13 @@ func TestDeriveGrantedAccess(t *testing.T) {
 		t.Errorf("sheets with spreadsheets.readonly = %q, want readonly", sheetsRO["sheets"])
 	}
 
-	// When a service's full and read-only scope sets coincide, the
-	// requested label is kept.
-	groups, _ := deriveGrantedAccess(map[string]string{"groups": auth.AccessReadOnly}, auth.ScopesForServices([]string{"groups"}))
-	if groups["groups"] != auth.AccessReadOnly {
-		t.Errorf("groups = %q, want readonly", groups["groups"])
+	// Groups has only read-only scopes: it is read-only whatever was
+	// requested, so a groups-only login reports read_only: true.
+	for _, requestedLevel := range []string{auth.AccessFull, auth.AccessReadOnly} {
+		groups, missing := deriveGrantedAccess(map[string]string{"groups": requestedLevel}, auth.ScopesForServices([]string{"groups"}))
+		if groups["groups"] != auth.AccessReadOnly || len(missing) != 0 || !allReadOnly(groups) {
+			t.Errorf("groups requested %s = %v (missing %v), want readonly with nothing missing", requestedLevel, groups, missing)
+		}
 	}
 }
 

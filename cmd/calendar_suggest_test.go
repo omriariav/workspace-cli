@@ -307,10 +307,36 @@ func TestSuggestSlots_WorkingHoursBoundaryInSpringForwardGap(t *testing.T) {
 	// run on for another hour to the second one.
 	fallFrom := time.Date(2026, 11, 1, 0, 0, 0, 0, loc)
 	fallTo := time.Date(2026, 11, 2, 0, 0, 0, 0, loc)
+	// Working hours 00:00-01:30 are met twice: 00:00-01:30 EDT, and
+	// again when 01:00-01:30 repeats in EST. The half hour between them
+	// (01:30-02:00 EDT) is outside working hours, so these are two windows.
 	fall := suggestSlots(nil, fallFrom, fallTo, 30*time.Minute, 0, time.Hour+30*time.Minute, loc, true, 5)
-	if len(fall) != 1 || !fall[0].Start.Equal(mustTime(t, "2026-11-01T04:00:00Z")) || !fall[0].FreeUntil.Equal(mustTime(t, "2026-11-01T05:30:00Z")) {
-		t.Errorf("fall-back window = %v, want 00:00-01:30 EDT (04:00-05:30 UTC)", fall)
+	if len(fall) != 2 ||
+		!fall[0].Start.Equal(mustTime(t, "2026-11-01T04:00:00Z")) || !fall[0].FreeUntil.Equal(mustTime(t, "2026-11-01T05:30:00Z")) ||
+		!fall[1].Start.Equal(mustTime(t, "2026-11-01T06:00:00Z")) || !fall[1].FreeUntil.Equal(mustTime(t, "2026-11-01T06:30:00Z")) {
+		t.Errorf("fall-back windows = %v, want 04:00-05:30 and 06:00-06:30 UTC", fall)
 	}
+
+	// Working hours 01:30-02:00 also occur twice, an hour apart. A
+	// 60-minute meeting would have to run through 01:00-01:30 EST, which
+	// is outside the requested hours, so nothing fits...
+	if none := suggestSlots(nil, fallFrom, fallTo, 60*time.Minute, time.Hour+30*time.Minute, 2*time.Hour, loc, true, 5); len(none) != 0 {
+		t.Errorf("a 60m meeting must not span excluded local times, got %v", none)
+	}
+	// ...while a 30-minute one fits each occurrence separately.
+	twice := suggestSlots(nil, fallFrom, fallTo, 30*time.Minute, time.Hour+30*time.Minute, 2*time.Hour, loc, true, 5)
+	if len(twice) != 2 || !twice[0].Start.Equal(mustTime(t, "2026-11-01T05:30:00Z")) || !twice[1].Start.Equal(mustTime(t, "2026-11-01T06:30:00Z")) {
+		t.Errorf("repeated working hours = %v, want 05:30 and 06:30 UTC", twice)
+	}
+	for _, s := range twice {
+		for c := s.Start; c.Before(s.End); c = c.Add(time.Minute) {
+			l := c.In(loc)
+			if l.Hour() != 1 || l.Minute() < 30 {
+				t.Errorf("slot %v includes %v, outside 01:30-02:00", s, l)
+			}
+		}
+	}
+
 	for _, m := range []int{0, 15, 30, 59} {
 		got := civilInstant(2026, 11, 1, 1, m, loc)
 		if name, _ := got.In(loc).Zone(); name != "EDT" {

@@ -161,7 +161,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   --add-attendees`, `calendar rsvp --message`.
 - Covered explicitly: commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
-  `share`, `unshare`, `update-acl`; Drive `share`, `unshare`,
+  `share`, `unshare`, `update-acl`, `unsubscribe`; Drive `share`, `unshare`,
   `update-permission`, `start-approval`, `reassign-approval`; Chat
   `add-member`, `update-member`).
 - Not covered: creating or editing content, `untrash`, and responding to

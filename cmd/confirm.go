@@ -47,6 +47,7 @@ var sensitiveCommands = map[string]string{
 	"calendar clear":           "deletes every event on a calendar",
 	"calendar share":           "shares a calendar",
 	"calendar unshare":         "removes access to a calendar",
+	"calendar unsubscribe":     "removes a calendar from your calendar list",
 	"calendar update-acl":      "changes who can access a calendar",
 
 	// Tasks
