@@ -1830,3 +1830,35 @@ func TestAuthLogin_AddStopsIfTheStoredLoginIsReplacedWhileStarting(t *testing.T)
 		t.Fatalf("error = %v, output = %q", err, out)
 	}
 }
+
+// Replacing text with nothing deletes every match, so an explicitly
+// empty --replace needs confirmation; an ordinary replacement does not.
+func TestConfirmGate_EmptyReplacementNeedsConfirmation(t *testing.T) {
+	for _, path := range [][]string{{"docs", "replace"}, {"slides", "replace-text"}, {"sheets", "find-replace"}} {
+		cmd, _, err := rootCmd.Find(path)
+		if err != nil {
+			t.Fatalf("%v not found", path)
+		}
+		flag := cmd.Flags().Lookup("replace")
+		reset := func() {
+			_ = flag.Value.Set("")
+			flag.Changed = false
+		}
+		t.Cleanup(reset)
+
+		_ = cmd.Flags().Set("replace", "new text")
+		if err := confirmGate(cmd, true, false, strings.NewReader(""), io.Discard, false); err != nil {
+			t.Errorf("gws %s with a replacement should not need confirmation: %v", strings.Join(path, " "), err)
+		}
+
+		_ = cmd.Flags().Set("replace", "")
+		err = confirmGate(cmd, true, false, strings.NewReader(""), io.Discard, false)
+		if err == nil || !strings.Contains(err.Error(), "confirmation required") {
+			t.Errorf("gws %s --replace \"\" without a terminal: err = %v, want confirmation required", strings.Join(path, " "), err)
+		}
+		if err := confirmGate(cmd, true, true, strings.NewReader(""), io.Discard, false); err != nil {
+			t.Errorf("gws %s --replace \"\" --yes: %v", strings.Join(path, " "), err)
+		}
+		reset()
+	}
+}

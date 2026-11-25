@@ -172,7 +172,8 @@ or delete data ask for approval before they run.
 ```bash
 export GWS_CONFIRM_SENSITIVE=1     # or confirm_sensitive: true in config.yaml
 gws gmail send --to a@example.com --subject Hi --body Hello
-# stderr: gws gmail send sends an email. Proceed? [y/N]:
+# stderr: About to run: gws gmail send --body "Hello" --subject "Hi" --to "a@example.com"
+#         gws gmail send sends an email. Proceed? [y/N]:
 ```
 
 - In a terminal, the prompt is written to stderr and reads `y`/`n` from stdin.
@@ -188,7 +189,9 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   --add-attendees`, `calendar rsvp --message`, `forms update --file`, `drive resolve-comment --content` and
   `drive unresolve-comment --content`, Drive commands given a
   destination folder (`drive upload --folder`, `drive create-folder --parent`), and `gmail label --add` / `gmail
-  batch-modify --add-labels` when the labels include `TRASH` or `SPAM`.
+  batch-modify --add-labels` when the labels include `TRASH` or `SPAM`, and
+  `docs replace`, `slides replace-text` and `sheets find-replace` when
+  `--replace` is empty (that deletes every match).
 - Covered explicitly: `docs replace-content` (replaces the whole document
   body); `sheets copy-to` (copies a sheet into another spreadsheet); `events subscriptions create`, `reactivate`, `renew` and
   `update` (start, resume, extend or change delivery of events to a

@@ -753,12 +753,12 @@ func acquireLock(path string) (unlock func(), err error) {
 						os.Remove(lockPath)
 					}
 				}
-				// Releasing must not hang either: if the guard stays busy,
-				// release without it. The owner check still keeps this from
-				// removing a lock that replaced ours.
-				if !withLockGuard(lockPath, time.Now().Add(lockTimeout), release) {
-					release()
-				}
+				// Releasing must not hang, and must not happen unguarded:
+				// between the owner check and the removal another process
+				// could take over the lock, and its replacement would be
+				// the file removed. If the guard stays busy the lock is
+				// left where it is and goes away as a stale lock.
+				withLockGuard(lockPath, time.Now().Add(lockTimeout), release)
 			}, nil
 		}
 

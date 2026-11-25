@@ -128,8 +128,12 @@ var conditionalSensitive = map[string]conditionalRule{
 	"drive resolve-comment":   {flag: "content", effect: "posts a reply on a file comment, visible to everyone with access"},
 	"drive unresolve-comment": {flag: "content", effect: "posts a reply on a file comment, visible to everyone with access"},
 	"forms update":            {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},
-	"gmail label":             {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
-	"gmail batch-modify":      {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
+	// An empty replacement deletes every match.
+	"docs replace":        {flag: "replace", effect: "deletes every occurrence of the matched text", when: isEmptyValue, values: emptyValue},
+	"slides replace-text": {flag: "replace", effect: "deletes every occurrence of the matched text", when: isEmptyValue, values: emptyValue},
+	"sheets find-replace": {flag: "replace", effect: "deletes every occurrence of the matched text", when: isEmptyValue, values: emptyValue},
+	"gmail label":         {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
+	"gmail batch-modify":  {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
 }
 
 // conditionalRule makes a command sensitive when flag is set, or, if when
@@ -144,13 +148,21 @@ type conditionalRule struct {
 	values       []string
 }
 
+// emptyValue is the --schema value list of a rule triggered by an
+// explicitly empty flag (--replace "").
+var emptyValue = []string{""}
+
+// isEmptyValue reports whether a flag was given the empty string.
+func isEmptyValue(v string) bool { return v == "" }
+
 // trashOrSpamLabels are the label values addsTrashOrSpam looks for.
 var trashOrSpamLabels = []string{"TRASH", "SPAM"}
 
 // triggered reports whether the rule applies to the flag as currently set.
 func (r conditionalRule) triggered(f *pflag.Flag) bool {
 	if r.when != nil {
-		return r.when(f.Value.String())
+		// A value only counts if it was given: a default is not a choice.
+		return f.Changed && r.when(f.Value.String())
 	}
 	return flagIsSet(f)
 }
