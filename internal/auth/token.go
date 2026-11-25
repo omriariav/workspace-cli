@@ -319,6 +319,19 @@ func StoredTokenFingerprint() string {
 	return tokenFingerprint(token)
 }
 
+// TokenRefreshed reports whether a token source handed back something
+// other than the stored token: a new access token, or a rotated refresh
+// token (which can arrive even when the access token is unchanged).
+func TokenRefreshed(stored, current *oauth2.Token) bool {
+	if stored == nil || current == nil {
+		return false
+	}
+	if current.AccessToken != stored.AccessToken {
+		return true
+	}
+	return current.RefreshToken != "" && current.RefreshToken != stored.RefreshToken
+}
+
 // SaveRefreshedToken stores an access-token refresh of the given stored
 // token. It takes the login lock and saves only if `stored` is still the
 // authorization on disk: if a login or logout replaced it in the meantime

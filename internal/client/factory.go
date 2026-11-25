@@ -123,7 +123,7 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 	}
 
 	// Save refreshed token if it changed
-	if newToken.AccessToken != token.AccessToken {
+	if auth.TokenRefreshed(token, newToken) {
 		// The command at hand still works, but if the refresh token was
 		// rotated the stored login may stop working, so say so. The error
 		// is a file or lock error and carries no credential.

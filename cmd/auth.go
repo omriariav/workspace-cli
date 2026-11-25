@@ -398,7 +398,7 @@ var refreshStoredToken = func() error {
 	if err != nil {
 		return redactSecrets(err, stored.AccessToken, stored.RefreshToken)
 	}
-	if fresh.AccessToken == stored.AccessToken {
+	if !auth.TokenRefreshed(stored, fresh) {
 		return nil
 	}
 	return auth.SaveRefreshedToken(stored, fresh)

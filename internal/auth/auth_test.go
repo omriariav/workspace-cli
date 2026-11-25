@@ -864,6 +864,29 @@ func TestStoredTokenFingerprint_ChangesOnlyWhenTheLoginIsReplaced(t *testing.T) 
 	}
 }
 
+func TestTokenRefreshed(t *testing.T) {
+	stored := &oauth2.Token{AccessToken: "a1", RefreshToken: "r1"}
+	cases := []struct {
+		name    string
+		current *oauth2.Token
+		want    bool
+	}{
+		{"unchanged", &oauth2.Token{AccessToken: "a1", RefreshToken: "r1"}, false},
+		{"refresh token omitted from response", &oauth2.Token{AccessToken: "a1"}, false},
+		{"new access token", &oauth2.Token{AccessToken: "a2", RefreshToken: "r1"}, true},
+		{"rotated refresh token, same access token", &oauth2.Token{AccessToken: "a1", RefreshToken: "r2"}, true},
+		{"nil", nil, false},
+	}
+	for _, c := range cases {
+		if got := TokenRefreshed(stored, c.current); got != c.want {
+			t.Errorf("%s: TokenRefreshed = %v, want %v", c.name, got, c.want)
+		}
+	}
+	if TokenRefreshed(nil, stored) {
+		t.Error("nil stored token cannot have been refreshed")
+	}
+}
+
 func TestSaveRefreshedToken(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	stored := &oauth2.Token{AccessToken: "a1", RefreshToken: "login-1"}

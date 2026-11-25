@@ -535,6 +535,11 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		// been validated, so a bad entry never leaves half of it behind.
 		spans := make([]timeSpan, 0, len(fb.Busy))
 		for _, period := range fb.Busy {
+			// The list holds pointers, so a null entry in the response
+			// arrives as nil.
+			if period == nil {
+				return false, "invalid busy period (null)", nil
+			}
 			start, err1 := time.Parse(time.RFC3339, period.Start)
 			end, err2 := time.Parse(time.RFC3339, period.End)
 			// A period that cannot be parsed, or that ends at or before its
