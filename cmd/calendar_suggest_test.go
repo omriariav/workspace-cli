@@ -885,6 +885,37 @@ func TestQueryBusySpans_Failures(t *testing.T) {
 		t.Errorf("exit code = %d, want %d", exitCodeForError(err), ExitAuth)
 	}
 
+	// A busy period that ends at or before its start makes that calendar's
+	// availability unknown; none of its other periods are used either.
+	svc = newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
+			Calendars: map[string]calendar.FreeBusyCalendar{
+				"a@example.com": {Busy: []*calendar.TimePeriod{
+					{Start: "2026-12-01T09:00:00Z", End: "2026-12-01T10:00:00Z"},
+					{Start: "2026-12-01T15:00:00Z", End: "2026-12-01T11:00:00Z"}, // reversed
+				}},
+				"b@example.com": {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T12:00:00Z", End: "2026-12-01T12:00:00Z"}}}, // empty
+				"primary":       {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T13:00:00Z", End: "2026-12-01T14:00:00Z"}}},
+			},
+		})
+	})
+	busy, checked, unavailable, err := queryBusySpans(svc, []*calendar.FreeBusyRequestItem{{Id: "a@example.com"}, {Id: "b@example.com"}, {Id: "primary"}}, from, to)
+	if err != nil {
+		t.Fatalf("an invalid interval should mark the calendar unavailable, not fail: %v", err)
+	}
+	if strings.Join(checked, ",") != "primary" || len(unavailable) != 2 || !strings.Contains(unavailable[0]["reason"].(string), "invalid busy period") {
+		t.Errorf("checked = %v, unavailable = %v", checked, unavailable)
+	}
+	if len(busy) != 1 || !busy[0].Start.Equal(mustTime(t, "2026-12-01T13:00:00Z")) {
+		t.Errorf("busy = %v, want only the valid calendar's period", busy)
+	}
+	for _, span := range busy {
+		if !span.End.After(span.Start) {
+			t.Errorf("a non-positive busy span reached the scheduler: %v", span)
+		}
+	}
+
 	// A malformed busy period is an error, not a silently ignored slot.
 	svc = newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

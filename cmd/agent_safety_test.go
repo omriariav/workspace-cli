@@ -1214,6 +1214,40 @@ func TestDeriveGrantedAccess(t *testing.T) {
 	}
 }
 
+// --add refreshes the stored login once, before it looks anything up, and
+// stops there if that fails — the stored login is never left half-used.
+func TestAuthLogin_AddStopsIfTheStoredLoginCannotBeRefreshed(t *testing.T) {
+	viper.Set("client_id", "id")
+	viper.Set("client_secret", "secret")
+	_ = loginCmd.Flags().Set("add", "true")
+	_ = loginCmd.Flags().Set("services", "tasks")
+	originalRefresh, originalAccount, originalScopes := refreshStoredToken, lookupAccountID, lookupTokenScopes
+	t.Cleanup(func() {
+		viper.Set("client_id", "")
+		viper.Set("client_secret", "")
+		_ = loginCmd.Flags().Set("add", "false")
+		loginCmd.Flags().Lookup("add").Changed = false
+		_ = loginCmd.Flags().Set("services", "")
+		loginCmd.Flags().Lookup("services").Changed = false
+		refreshStoredToken, lookupAccountID, lookupTokenScopes = originalRefresh, originalAccount, originalScopes
+	})
+
+	var order []string
+	refreshStoredToken = func() error { order = append(order, "refresh"); return errors.New("invalid_grant") }
+	lookupAccountID = func(*oauth2.Token) (string, error) { order = append(order, "account"); return "acct", nil }
+	lookupTokenScopes = func(*oauth2.Token) ([]string, error) { order = append(order, "scopes"); return nil, nil }
+
+	var err error
+	out := captureStderrStr(t, func() { err = runLogin(loginCmd, nil) })
+	if err == nil || !strings.Contains(out, "could not refresh the stored authorization") {
+		t.Fatalf("error = %v, output = %q", err, out)
+	}
+	// The refresh came first and nothing was looked up after it failed.
+	if strings.Join(order, ",") != "refresh" {
+		t.Errorf("call order = %v, want only the refresh", order)
+	}
+}
+
 func TestAuthLogin_AddRequiresServices(t *testing.T) {
 	viper.Set("client_id", "id")
 	viper.Set("client_secret", "secret")

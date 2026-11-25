@@ -118,6 +118,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	add, _ := cmd.Flags().GetBool("add")
 
 	var existingAccess map[string]string
+	// The authorization this login starts from. --add extends it, so it
+	// must still be the stored one when the result is saved.
+	baseAuthorization := ""
 	if add {
 		// --add is for adding specific services. Without a selection it
 		// would fall back to every service and ask for full access to all
@@ -125,6 +128,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		if !hasServiceSelection(cmd) {
 			return usageErrorf("--add requires --services: name the service(s) to add, e.g. gws auth login --add --services drive")
 		}
+		// --add inspects the stored login (account, scopes). Refresh it
+		// once, up front, and save the result, so those lookups reuse one
+		// valid token instead of each refreshing on its own — which, if
+		// the refresh token is rotated, could leave the stored login dead.
+		if err := refreshStoredToken(); err != nil {
+			return p.PrintError(fmt.Errorf("could not refresh the stored authorization (%v), so --add was not started; run `gws auth login` without --add to replace it", err))
+		}
+		baseAuthorization = auth.StoredTokenFingerprint()
 		existingAccess = existingGrantedAccess()
 	}
 	access := mergeGrantedAccess(existingAccess, services, readOnly)
@@ -134,9 +145,6 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// holds, which --add must preserve. It is nil for a replacing login.
 	var previousScopes []string
 	previousAccount := ""
-	// The authorization this login starts from. --add extends it, so it
-	// must still be the stored one when the result is saved.
-	baseAuthorization := auth.StoredTokenFingerprint()
 	if add {
 		var err error
 		previousAccount, err = storedAccountID()
@@ -360,6 +368,30 @@ func redactSecrets(err error, secrets ...string) error {
 		}
 	}
 	return errors.New(msg)
+}
+
+// refreshStoredToken makes sure the stored token is currently valid,
+// refreshing it if needed and saving the result (including a rotated
+// refresh token) through the same guarded path every refresh uses. It is
+// a no-op when nothing is stored. A variable so tests can replace the
+// network call.
+var refreshStoredToken = func() error {
+	if !auth.TokenExists() {
+		return nil
+	}
+	stored, err := auth.LoadToken()
+	if err != nil {
+		return err
+	}
+	ts := auth.GetTokenSource(context.Background(), config.GetClientID(), config.GetClientSecret(), stored)
+	fresh, err := ts.Token()
+	if err != nil {
+		return redactSecrets(err, stored.AccessToken, stored.RefreshToken)
+	}
+	if fresh.AccessToken == stored.AccessToken {
+		return nil
+	}
+	return auth.SaveRefreshedToken(stored, fresh)
 }
 
 // storedScopes returns the exact scopes the stored authorization holds:

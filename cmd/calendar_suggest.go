@@ -531,16 +531,26 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		if len(fb.Errors) > 0 {
 			return false, fb.Errors[0].Reason, nil
 		}
+		// Collected separately and added only once the whole calendar has
+		// been validated, so a bad entry never leaves half of it behind.
+		spans := make([]timeSpan, 0, len(fb.Busy))
 		for _, period := range fb.Busy {
 			start, err1 := time.Parse(time.RFC3339, period.Start)
 			end, err2 := time.Parse(time.RFC3339, period.End)
 			if err1 != nil || err2 != nil {
 				return false, "", fmt.Errorf("unexpected busy period for %s: %s - %s", id, period.Start, period.End)
 			}
+			// A period that ends at or before its start says nothing
+			// usable, and would move the slot search backward. Treat the
+			// calendar's availability as unknown rather than guess.
+			if !end.After(start) {
+				return false, fmt.Sprintf("invalid busy period %s - %s", period.Start, period.End), nil
+			}
 			// Widen busy periods to whole seconds so a slot reported
 			// without fractions can never sit inside one.
-			busy = append(busy, timeSpan{Start: start.Truncate(time.Second), End: ceilSecond(end)})
+			spans = append(spans, timeSpan{Start: start.Truncate(time.Second), End: ceilSecond(end)})
 		}
+		busy = append(busy, spans...)
 		readCalendars++
 		return true, "", nil
 	}
