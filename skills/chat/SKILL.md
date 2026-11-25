@@ -1,6 +1,6 @@
 ---
 name: gws-chat
-version: 1.43.1
+version: 1.44.0
 description: "Google Chat CLI operations via gws. Use when users need to list/create/manage chat spaces, read/send messages, manage members, track read state, handle attachments, or monitor space events. Triggers: google chat, gchat, chat spaces, chat messages."
 metadata:
   short-description: Google Chat CLI operations
