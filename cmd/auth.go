@@ -132,7 +132,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// is known. It is nil for a replacing login and for a stored login
 	// that predates scope recording.
 	var previousScopes []string
+	previousAccount := ""
 	if add {
+		previousAccount = storedAccountID()
 		previousScopes = auth.LoadGrantedScopes()
 		// Ask for the whole merged grant explicitly. Google's incremental
 		// authorization (include_granted_scopes) is not dependable for
@@ -157,6 +159,17 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	token, err := client.Login(ctx)
 	if err != nil {
 		return p.PrintError(err)
+	}
+
+	// Identify the account that just consented. For --add it must be the
+	// account the stored token belongs to: the browser may be signed in to
+	// a different one, and extending "the existing authorization" must
+	// never silently move every later command onto another account.
+	account, accountErr := lookupAccountID(token)
+	if add {
+		if err := checkSameAccount(previousAccount, account, accountErr); err != nil {
+			return p.PrintError(err)
+		}
 	}
 
 	// Work from what Google actually granted, not what was requested: the
@@ -192,9 +205,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// presence stops the unbound service list from being trusted. The
 	// service list goes last, so it never describes a newer login than the
 	// access record does.
-	errAccess := auth.SaveGrantedAccess(access, grantedScopes, token)
+	restoreAccessRecord := auth.SnapshotGrantedAccess()
+	errAccess := auth.SaveGrantedAccess(access, grantedScopes, account, token)
 
 	if err := auth.SaveToken(token); err != nil {
+		// The previous token is still the stored one: put its access
+		// record back rather than leave one describing a token that was
+		// never saved.
+		restoreAccessRecord()
 		return p.PrintError(err)
 	}
 
@@ -284,6 +302,52 @@ func scopesForAccess(access map[string]string) []string {
 		}
 	}
 	return scopes
+}
+
+// lookupAccountID returns the stable Google account ID a token belongs to.
+// A variable so tests can replace the network call.
+var lookupAccountID = func(token *oauth2.Token) (string, error) {
+	info, err := getUserInfo(token)
+	if err != nil {
+		return "", err
+	}
+	return info.Id, nil
+}
+
+// storedAccountID returns the account ID of the stored authorization: the
+// one recorded at login, or, for a login that predates that record, the
+// result of asking Google with the stored token. "" if it cannot be
+// determined.
+func storedAccountID() string {
+	if id := auth.LoadGrantedAccount(); id != "" {
+		return id
+	}
+	token, err := auth.LoadToken()
+	if err != nil {
+		return ""
+	}
+	id, err := lookupAccountID(token)
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
+// checkSameAccount rejects an incremental login made with a different
+// Google account than the stored one. When the stored account is known,
+// the new one must be confirmed to match; an account that cannot be
+// identified is not accepted on trust.
+func checkSameAccount(previous, current string, lookupErr error) error {
+	if previous == "" {
+		return nil // nothing stored to compare against
+	}
+	if lookupErr != nil || current == "" {
+		return fmt.Errorf("could not confirm which Google account authorized this login (%v), so the stored authorization was left unchanged; try again, or run `gws auth login` without --add to replace it", lookupErr)
+	}
+	if previous != current {
+		return fmt.Errorf("this login was authorized by a different Google account than the stored one, so the stored authorization was left unchanged; choose the same account in the browser, or run `gws auth logout` and then `gws auth login` to switch accounts")
+	}
+	return nil
 }
 
 // unionScopes returns a followed by the scopes of b not already in a.

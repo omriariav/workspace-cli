@@ -96,8 +96,9 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
 - `--add` merges the selected services into the existing authorization
   instead of replacing it. The consent screen asks for the previously
   granted scopes again together with the new ones; if any previously
-  granted scope is missing from the result, the login is rejected and
-  nothing changes. It requires `--services` (or a `services` list
+  granted scope is missing from the result, or a different Google account
+  was chosen in the browser, the login is rejected and nothing changes. To
+  switch accounts, run `gws auth logout` first. It requires `--services` (or a `services` list
   in config), so it can never widen the request to every service. Without `--add`, a login replaces the previous
   grant.
 - Every login must return its own refresh token; if Google returns none,

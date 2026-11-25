@@ -762,7 +762,7 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	tok := &oauth2.Token{AccessToken: "a1", RefreshToken: "refresh-1"}
 	want := map[string]string{"gmail": AccessReadOnly, "drive": AccessFull}
 	wantScopes := []string{"scope-a", "scope-b"}
-	if err := SaveGrantedAccess(want, wantScopes, tok); err != nil {
+	if err := SaveGrantedAccess(want, wantScopes, "acct-1", tok); err != nil {
 		t.Fatalf("SaveGrantedAccess: %v", err)
 	}
 
@@ -776,6 +776,9 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	got := LoadGrantedAccess()
 	if len(got) != 2 || got["gmail"] != AccessReadOnly || got["drive"] != AccessFull {
 		t.Errorf("round trip = %v", got)
+	}
+	if account := LoadGrantedAccount(); account != "acct-1" {
+		t.Errorf("LoadGrantedAccount = %q", account)
 	}
 	if scopes := LoadGrantedScopes(); strings.Join(scopes, ",") != "scope-a,scope-b" {
 		t.Errorf("LoadGrantedScopes = %v", scopes)

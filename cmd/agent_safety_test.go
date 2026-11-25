@@ -455,7 +455,7 @@ func TestStoredOAuthLoginActive(t *testing.T) {
 func TestExistingGrantedAccess_IgnoresMetadataWithoutToken(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	tok := &oauth2.Token{AccessToken: "a", RefreshToken: "r"}
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, nil, tok); err != nil {
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, nil, "", tok); err != nil {
 		t.Fatal(err)
 	}
 	if got := existingGrantedAccess(); len(got) != 0 {
@@ -487,7 +487,7 @@ func TestExistingGrantedAccess_LegacyVersusInterruptedLogin(t *testing.T) {
 
 	// Interrupted login: an access record exists but belongs to another
 	// token. The service list must not be read as full access.
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, &oauth2.Token{RefreshToken: "other"}); err != nil {
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, "", &oauth2.Token{RefreshToken: "other"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := existingGrantedAccess(); len(got) != 0 {
@@ -495,7 +495,7 @@ func TestExistingGrantedAccess_LegacyVersusInterruptedLogin(t *testing.T) {
 	}
 
 	// Once the record matches the stored token it is used as written.
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, current); err != nil {
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, "", current); err != nil {
 		t.Fatal(err)
 	}
 	if got := existingGrantedAccess(); len(got) != 1 || got["gmail"] != auth.AccessReadOnly {
@@ -505,7 +505,7 @@ func TestExistingGrantedAccess_LegacyVersusInterruptedLogin(t *testing.T) {
 
 func TestLogout_ClearsGrantedMetadata(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, &oauth2.Token{RefreshToken: "r"}); err != nil {
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, "", &oauth2.Token{RefreshToken: "r"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := auth.SaveGrantedServices([]string{"gmail"}); err != nil {
@@ -674,6 +674,98 @@ func TestMissingScopes_ComparesScopeByScope(t *testing.T) {
 	// A scope gws no longer requests is not worth blocking a login over.
 	if got := missingScopes([]string{pfx + "some.retired.scope"}, swapped); len(got) != 0 {
 		t.Errorf("unknown scopes should be ignored, got %v", got)
+	}
+}
+
+func TestCheckSameAccount(t *testing.T) {
+	if err := checkSameAccount("acct-A", "acct-A", nil); err != nil {
+		t.Errorf("same account rejected: %v", err)
+	}
+	// A different account must never replace the stored authorization.
+	if err := checkSameAccount("acct-A", "acct-B", nil); err == nil || !strings.Contains(err.Error(), "different Google account") {
+		t.Errorf("different account: error = %v", err)
+	}
+	// Known stored account, unidentified new one: not accepted on trust.
+	if err := checkSameAccount("acct-A", "", nil); err == nil {
+		t.Error("an unidentified account should be rejected when the stored one is known")
+	}
+	if err := checkSameAccount("acct-A", "", errors.New("network down")); err == nil || !strings.Contains(err.Error(), "network down") {
+		t.Errorf("lookup failure: error = %v", err)
+	}
+	// Nothing stored to compare against (first login, or unknown).
+	if err := checkSameAccount("", "acct-B", nil); err != nil {
+		t.Errorf("no stored account: %v", err)
+	}
+	if err := checkSameAccount("", "", errors.New("x")); err != nil {
+		t.Errorf("no stored account and no lookup: %v", err)
+	}
+}
+
+func TestStoredAccountID(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := lookupAccountID
+	t.Cleanup(func() { lookupAccountID = original })
+	lookups := 0
+	lookupAccountID = func(*oauth2.Token) (string, error) { lookups++; return "acct-from-google", nil }
+
+	if got := storedAccountID(); got != "" || lookups != 0 {
+		t.Errorf("no stored token: got %q after %d lookups", got, lookups)
+	}
+
+	tok := &oauth2.Token{AccessToken: "a", RefreshToken: "r"}
+	if err := auth.SaveToken(tok); err != nil {
+		t.Fatal(err)
+	}
+	// Login from an older version: no recorded account, so Google is asked.
+	if got := storedAccountID(); got != "acct-from-google" || lookups != 1 {
+		t.Errorf("legacy login: got %q after %d lookups", got, lookups)
+	}
+	// Recorded account: used directly, no network call.
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, nil, "acct-recorded", tok); err != nil {
+		t.Fatal(err)
+	}
+	if got := storedAccountID(); got != "acct-recorded" || lookups != 1 {
+		t.Errorf("recorded account: got %q after %d lookups", got, lookups)
+	}
+}
+
+func TestSnapshotGrantedAccess_RestoresPreviousRecord(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	oldTok := &oauth2.Token{AccessToken: "a", RefreshToken: "old"}
+	if err := auth.SaveToken(oldTok); err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, []string{"s1"}, "acct-A", oldTok); err != nil {
+		t.Fatal(err)
+	}
+
+	// A login writes the new record, then fails to save its token.
+	restore := auth.SnapshotGrantedAccess()
+	if err := auth.SaveGrantedAccess(map[string]string{"drive": auth.AccessReadOnly}, []string{"s2"}, "acct-A", &oauth2.Token{RefreshToken: "new"}); err != nil {
+		t.Fatal(err)
+	}
+	if auth.LoadGrantedAccess() != nil {
+		t.Fatal("test premise: the new record should not match the old token")
+	}
+	restore()
+
+	// The still-stored old token has its record back.
+	if got := auth.LoadGrantedAccess(); got["gmail"] != auth.AccessFull || len(got) != 1 {
+		t.Errorf("restored access = %v", got)
+	}
+	if got := auth.LoadGrantedScopes(); len(got) != 1 || got[0] != "s1" {
+		t.Errorf("restored scopes = %v", got)
+	}
+
+	// With no record beforehand, restoring removes the one written.
+	if err := os.Remove(config.GetGrantedAccessPath()); err != nil {
+		t.Fatal(err)
+	}
+	restore = auth.SnapshotGrantedAccess()
+	_ = auth.SaveGrantedAccess(map[string]string{"drive": auth.AccessFull}, nil, "", &oauth2.Token{RefreshToken: "new"})
+	restore()
+	if _, err := os.Stat(config.GetGrantedAccessPath()); !os.IsNotExist(err) {
+		t.Error("restore should remove a record that did not exist before")
 	}
 }
 

@@ -173,11 +173,14 @@ func LoadGrantedServices() []string {
 // scopes is the exact scope list the token was granted. It is what later
 // logins compare against: access levels are a summary for people, and two
 // different scope sets can share a level.
-func SaveGrantedAccess(access map[string]string, scopes []string, token *oauth2.Token) error {
+//
+// account is the stable Google account ID the token belongs to ("" if it
+// could not be determined).
+func SaveGrantedAccess(access map[string]string, scopes []string, account string, token *oauth2.Token) error {
 	if err := config.EnsureConfigDir(); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	data, err := json.Marshal(grantedAccessRecord{Token: tokenFingerprint(token), Services: access, Scopes: scopes})
+	data, err := json.Marshal(grantedAccessRecord{Token: tokenFingerprint(token), Services: access, Scopes: scopes, Account: account})
 	if err != nil {
 		return fmt.Errorf("failed to marshal granted access: %w", err)
 	}
@@ -239,6 +242,8 @@ type grantedAccessRecord struct {
 	Services map[string]string `json:"services"`
 	// Scopes is the exact scope list granted to that token.
 	Scopes []string `json:"scopes,omitempty"`
+	// Account is the stable Google account ID the token belongs to.
+	Account string `json:"account,omitempty"`
 }
 
 // tokenFingerprint identifies a stored authorization without revealing
@@ -270,6 +275,42 @@ func LoadGrantedScopes() []string {
 		return record.Scopes
 	}
 	return nil
+}
+
+// LoadGrantedAccount returns the Google account ID recorded for the
+// stored token, or "" when it is not known.
+func LoadGrantedAccount() string {
+	if record := loadGrantedRecord(); record != nil {
+		return record.Account
+	}
+	return ""
+}
+
+// SnapshotGrantedAccess captures the access record as it is on disk and
+// returns a function that puts it back (or removes the file if there was
+// none). Used to undo a metadata write when the token it describes could
+// not be saved.
+func SnapshotGrantedAccess() (restore func()) {
+	path := config.GetGrantedAccessPath()
+	previous, err := os.ReadFile(path)
+	existed := err == nil
+	return func() {
+		if !existed {
+			os.Remove(path)
+			return
+		}
+		tmp, err := os.CreateTemp(filepath.Dir(path), ".granted-access-*.tmp")
+		if err != nil {
+			return
+		}
+		tmpPath := tmp.Name()
+		_ = tmp.Chmod(0600)
+		_, werr := tmp.Write(previous)
+		cerr := tmp.Close()
+		if werr != nil || cerr != nil || os.Rename(tmpPath, path) != nil {
+			os.Remove(tmpPath)
+		}
+	}
 }
 
 // loadGrantedRecord reads the access record and returns it only if it
