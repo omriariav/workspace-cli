@@ -527,7 +527,10 @@ func unrequestedScopes(requested, granted []string) []string {
 }
 
 // missingScopes returns the scopes in previous that are absent from
-// granted. Scopes gws no longer uses are ignored: losing one costs nothing.
+// granted. Every previously held scope counts, including one gws does not
+// itself use: --add promises to preserve what the login had. Only Google's
+// identity scopes are skipped, since they are reported under several
+// equivalent names (email / userinfo.email) and give no data access.
 func missingScopes(previous, granted []string) []string {
 	have := make(map[string]bool, len(granted))
 	for _, s := range granted {
@@ -535,16 +538,11 @@ func missingScopes(previous, granted []string) []string {
 	}
 	var missing []string
 	for _, s := range previous {
-		if !have[s] && isKnownScope(s) {
+		if !have[s] && !identityScopes[s] {
 			missing = append(missing, s)
 		}
 	}
 	return missing
-}
-
-// isKnownScope reports whether gws requests the scope for some service.
-func isKnownScope(scope string) bool {
-	return auth.ServiceForScope(scope) != ""
 }
 
 // shortScopeNames strips the common Google scope URL prefix for display.

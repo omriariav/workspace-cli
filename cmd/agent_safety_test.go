@@ -662,6 +662,17 @@ func TestReadOnlyScopeHint(t *testing.T) {
 	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessPartial}); !strings.Contains(hint, "--add --services gmail") {
 		t.Errorf("partial-access hint = %q", hint)
 	}
+	// A read-only (or partly read-only) login is offered the read-only
+	// retry first; one that already holds write scopes is not.
+	for _, level := range []string{auth.AccessReadOnly, auth.AccessPartialReadOnly} {
+		hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": level})
+		if !strings.Contains(hint, "--add --services gmail --readonly") || !strings.Contains(hint, "without --readonly") {
+			t.Errorf("%s hint = %q", level, hint)
+		}
+	}
+	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessPartial}); strings.Contains(hint, "--readonly") {
+		t.Errorf("a login with write scopes should not be steered to --readonly: %q", hint)
+	}
 	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessFull}); hint != "" {
 		t.Errorf("no hint expected for full access, got %q", hint)
 	}
@@ -813,9 +824,14 @@ func TestMissingScopes_ComparesScopeByScope(t *testing.T) {
 	if got := missingScopes(nil, swapped); len(got) != 0 {
 		t.Errorf("missing with unknown previous scopes = %v", got)
 	}
-	// A scope gws no longer requests is not worth blocking a login over.
-	if got := missingScopes([]string{pfx + "some.retired.scope"}, swapped); len(got) != 0 {
-		t.Errorf("unknown scopes should be ignored, got %v", got)
+	// A previously held scope gws does not itself use still counts: --add
+	// promises to preserve what the login had.
+	if got := strings.Join(shortScopeNames(missingScopes([]string{pfx + "some.other.scope"}, swapped)), ","); got != "some.other.scope" {
+		t.Errorf("missing = %q, want the unknown scope reported", got)
+	}
+	// Identity scopes come back under several names and are not compared.
+	if got := missingScopes([]string{"openid", "email", pfx + "userinfo.profile"}, swapped); len(got) != 0 {
+		t.Errorf("identity scopes should not be reported missing, got %v", got)
 	}
 }
 

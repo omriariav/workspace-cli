@@ -535,20 +535,20 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 	readCalendars := 0
 	// addCalendar records one calendar's busy periods. It reports false,
 	// with the reason, when that calendar's availability is unknown.
-	addCalendar := func(id string) (bool, string, error) {
+	addCalendar := func(id string) (bool, string) {
 		fb, ok := resp.Calendars[id]
 		if !ok {
-			return false, "missing from response", nil
+			return false, "missing from response"
 		}
 		if len(fb.Errors) > 0 {
-			return false, firstErrorReason(fb.Errors), nil
+			return false, firstErrorReason(fb.Errors)
 		}
 		// A readable calendar always carries a busy list, empty when it
 		// is free ("busy": []). No list at all — a null or empty entry —
 		// is not the same as free: nothing was reported, so availability
 		// is unknown.
 		if fb.Busy == nil {
-			return false, "no availability data returned", nil
+			return false, "no availability data returned"
 		}
 		// Collected separately and added only once the whole calendar has
 		// been validated, so a bad entry never leaves half of it behind.
@@ -557,7 +557,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 			// The list holds pointers, so a null entry in the response
 			// arrives as nil.
 			if period == nil {
-				return false, "invalid busy period (null)", nil
+				return false, "invalid busy period (null)"
 			}
 			start, err1 := time.Parse(time.RFC3339, period.Start)
 			end, err2 := time.Parse(time.RFC3339, period.End)
@@ -567,7 +567,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 			// availability as unknown rather than guess; the other
 			// calendars are unaffected.
 			if err1 != nil || err2 != nil || !end.After(start) {
-				return false, fmt.Sprintf("invalid busy period %s - %s", period.Start, period.End), nil
+				return false, fmt.Sprintf("invalid busy period %s - %s", period.Start, period.End)
 			}
 			// Widen busy periods to whole seconds so a slot reported
 			// without fractions can never sit inside one.
@@ -575,7 +575,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		}
 		busy = append(busy, spans...)
 		readCalendars++
-		return true, "", nil
+		return true, ""
 	}
 
 	for _, item := range items {
@@ -597,11 +597,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 			// must still block slots when --allow-partial continues.
 			var unreadable []string
 			for _, member := range group.Calendars {
-				ok, reason, err := addCalendar(member)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				if !ok {
+				if ok, reason := addCalendar(member); !ok {
 					unreadable = append(unreadable, fmt.Sprintf("%s: %s", member, reason))
 				}
 			}
@@ -613,11 +609,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 			continue
 		}
 
-		ok, reason, err := addCalendar(item.Id)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if !ok {
+		if ok, reason := addCalendar(item.Id); !ok {
 			markUnavailable(item.Id, reason)
 			continue
 		}
