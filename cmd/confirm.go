@@ -222,7 +222,10 @@ func confirmGate(cmd *cobra.Command, enabled, yes bool, in io.Reader, errW io.Wr
 		return fmt.Errorf("confirmation required: `gws %s` %s and confirm_sensitive is on; ask the user to approve, then re-run with --yes", key, effect)
 	}
 
-	fmt.Fprintf(errW, "gws %s %s. Proceed? [y/N]: ", key, effect)
+	// An approval only counts if the question was actually shown.
+	if _, err := fmt.Fprintf(errW, "gws %s %s. Proceed? [y/N]: ", key, effect); err != nil {
+		return fmt.Errorf("could not display the confirmation prompt for `gws %s` (%v), so it was not run; re-run with --yes after the user approves", key, err)
+	}
 	line, _ := bufio.NewReader(in).ReadString('\n')
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes":

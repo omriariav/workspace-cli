@@ -68,6 +68,20 @@ func TestConfirmGate(t *testing.T) {
 	}
 }
 
+// failingWriter rejects every write, like a closed stderr.
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("stderr closed") }
+
+func TestConfirmGate_NoApprovalWithoutAVisiblePrompt(t *testing.T) {
+	send, _, _ := rootCmd.Find([]string{"gmail", "send"})
+	// A "y" is already waiting on stdin, but the prompt cannot be shown.
+	err := confirmGate(send, true, false, strings.NewReader("y\n"), failingWriter{}, true)
+	if err == nil || !strings.Contains(err.Error(), "could not display the confirmation prompt") {
+		t.Fatalf("error = %v, want a prompt-display failure", err)
+	}
+}
+
 func TestConfirmSensitive_ReadsEnv(t *testing.T) {
 	t.Setenv("GWS_CONFIRM_SENSITIVE", "1")
 	viper.SetEnvPrefix("GWS")
