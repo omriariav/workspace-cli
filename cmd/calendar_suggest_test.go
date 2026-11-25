@@ -31,7 +31,7 @@ func TestCalendarSuggestTimeCommand_Flags(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("calendar suggest-time command not found")
 	}
-	for _, flag := range []string{"from", "to", "duration", "calendars", "attendees", "working-hours", "timezone", "max", "include-weekends"} {
+	for _, flag := range []string{"from", "to", "duration", "calendars", "attendees", "working-hours", "timezone", "max", "include-weekends", "allow-partial"} {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected --%s flag", flag)
 		}
@@ -451,6 +451,18 @@ func TestQueryBusySpans_MockServer(t *testing.T) {
 	}
 	if len(busy) != 2 {
 		t.Fatalf("busy spans = %v", busy)
+	}
+
+	// Unknown availability is an error unless partial results are asked for.
+	if err := unreadableCalendarsError(unavailable, false); err == nil ||
+		!strings.Contains(err.Error(), "b@example.com (notFound)") || !strings.Contains(err.Error(), "c@example.com") || !strings.Contains(err.Error(), "--allow-partial") {
+		t.Errorf("error = %v, want both unreadable calendars named", err)
+	}
+	if err := unreadableCalendarsError(unavailable, true); err != nil {
+		t.Errorf("--allow-partial should proceed, got %v", err)
+	}
+	if err := unreadableCalendarsError(nil, false); err != nil {
+		t.Errorf("no unreadable calendars should proceed, got %v", err)
 	}
 
 	// The two calendars are jointly busy 09:00-15:00, so the only free

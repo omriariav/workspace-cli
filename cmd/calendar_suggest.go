@@ -22,8 +22,10 @@ Queries free/busy for the calendars, merges their busy periods, and returns
 the free windows inside working hours that fit the requested duration. Each
 result gives the earliest slot in a window and how long the window stays free.
 
-A date-only --to includes that whole day. Calendars that cannot be read are
-listed under "unavailable" and are NOT taken into account.
+A date-only --to includes that whole day. If any requested calendar cannot
+be read the command fails, because a slot is only useful when everyone's
+availability is known. With --allow-partial it suggests times from the
+calendars it could read and lists the others under "unavailable".
 
 Examples:
   gws calendar suggest-time --from 2026-12-01 --to 2026-12-05
@@ -44,6 +46,7 @@ func init() {
 	calendarSuggestTimeCmd.Flags().String("timezone", "", "IANA timezone for working hours and output (default: local)")
 	calendarSuggestTimeCmd.Flags().Int("max", 5, "Maximum number of suggestions")
 	calendarSuggestTimeCmd.Flags().Bool("include-weekends", false, "Also search Saturdays and Sundays")
+	calendarSuggestTimeCmd.Flags().Bool("allow-partial", false, "Suggest times even if some calendars could not be read (they are listed under \"unavailable\")")
 	calendarSuggestTimeCmd.MarkFlagRequired("from")
 	calendarSuggestTimeCmd.MarkFlagRequired("to")
 }
@@ -366,6 +369,7 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 	tzStr, _ := cmd.Flags().GetString("timezone")
 	max, _ := cmd.Flags().GetInt("max")
 	includeWeekends, _ := cmd.Flags().GetBool("include-weekends")
+	allowPartial, _ := cmd.Flags().GetBool("allow-partial")
 
 	loc := time.Local
 	if tzStr != "" {
@@ -435,6 +439,9 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return p.PrintError(err)
 	}
+	if err := unreadableCalendarsError(unavailable, allowPartial); err != nil {
+		return p.PrintError(err)
+	}
 
 	slots := suggestSlots(busy, from, to, dur, whStart, whEnd, loc, includeWeekends, max)
 	suggestions := make([]map[string]interface{}, 0, len(slots))
@@ -454,9 +461,24 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 		"duration_minutes":  int(dur / time.Minute),
 		"calendars_checked": checked,
 		"unavailable":       unavailable,
+		"partial":           len(unavailable) > 0,
 		"suggestions":       suggestions,
 		"count":             len(suggestions),
 	})
+}
+
+// unreadableCalendarsError returns an error when some requested calendars
+// could not be read and partial results were not asked for: a suggestion
+// is only meaningful if everyone's availability is known.
+func unreadableCalendarsError(unavailable []map[string]interface{}, allowPartial bool) error {
+	if len(unavailable) == 0 || allowPartial {
+		return nil
+	}
+	names := make([]string, 0, len(unavailable))
+	for _, u := range unavailable {
+		names = append(names, fmt.Sprintf("%v (%v)", u["calendar"], u["reason"]))
+	}
+	return fmt.Errorf("could not read free/busy for %s; no suggestions made. Fix the calendar IDs or sharing, or pass --allow-partial to suggest times from the calendars that could be read", strings.Join(names, ", "))
 }
 
 // queryBusySpans runs the free/busy query and returns the busy periods of

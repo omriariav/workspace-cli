@@ -481,6 +481,7 @@ Usage: gws calendar suggest-time [flags]
 | `--timezone` | string | local | No | IANA timezone for working hours and output |
 | `--max` | int | `5` | No | Maximum number of suggestions |
 | `--include-weekends` | bool | `false` | No | Also search Saturdays and Sundays |
+| `--allow-partial` | bool | `false` | No | Suggest times even if some calendars could not be read |
 
 ### Output
 
@@ -491,7 +492,8 @@ Usage: gws calendar suggest-time [flags]
   "timezone": "UTC",
   "duration_minutes": 30,
   "calendars_checked": ["primary", "a@example.com"],
-  "unavailable": [{"calendar": "b@example.com", "reason": "notFound"}],
+  "unavailable": [],
+  "partial": false,
   "suggestions": [
     {"start": "2026-12-01T12:00:00Z", "end": "2026-12-01T12:30:00Z", "free_until": "2026-12-01T13:00:00Z", "free_minutes": 60}
   ],
@@ -499,8 +501,10 @@ Usage: gws calendar suggest-time [flags]
 }
 ```
 
-Each suggestion is the earliest slot of one free window. Calendars under
-`unavailable` could not be read and are not taken into account. At most 50
+Each suggestion is the earliest slot of one free window. If any requested
+calendar cannot be read the command fails. With `--allow-partial` it
+continues: `partial` is `true` and `unavailable` lists each unread calendar
+as `{"calendar": "...", "reason": "..."}` — their availability is unknown. At most 50
 calendars (`--calendars` and `--attendees` combined) can be checked at once.
 
 ---

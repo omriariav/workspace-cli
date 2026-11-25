@@ -278,6 +278,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"events", "subscriptions", "delete"},
 		{"drive", "start-approval"}, {"drive", "reassign-approval"},
 		{"calendar", "unsubscribe"},
+		{"docs", "replace-content"},
 	}
 	for _, path := range covered {
 		cmd, _, err := rootCmd.Find(path)
@@ -608,6 +609,57 @@ func TestMergeGrantedAccess(t *testing.T) {
 	names := grantedServiceNames(map[string]string{"tasks": "full", "gmail": "full"})
 	if strings.Join(names, ",") != "gmail,tasks" {
 		t.Errorf("grantedServiceNames order = %v", names)
+	}
+}
+
+func TestScopesForAccess_RequestsTheWholeMergedGrant(t *testing.T) {
+	const pfx = "https://www.googleapis.com/auth/"
+	// Existing: gmail full, drive read-only. Adding tasks read-only must
+	// re-request all three, because an incremental grant cannot be relied
+	// on to carry earlier scopes over.
+	access := mergeGrantedAccess(map[string]string{"gmail": auth.AccessFull, "drive": auth.AccessReadOnly}, []string{"tasks"}, true)
+	scopes := scopesForAccess(access)
+
+	for _, want := range []string{"userinfo.email", "gmail.send", "gmail.readonly", "drive.readonly", "tasks.readonly"} {
+		if !containsStr(scopes, pfx+want) {
+			t.Errorf("merged request is missing %s: %v", want, scopes)
+		}
+	}
+	for _, unwanted := range []string{"drive", "drive.file", "tasks"} {
+		if containsStr(scopes, pfx+unwanted) {
+			t.Errorf("merged request must not widen to %s: %v", unwanted, scopes)
+		}
+	}
+	seen := map[string]bool{}
+	for _, s := range scopes {
+		if seen[s] {
+			t.Errorf("duplicate scope %s", s)
+		}
+		seen[s] = true
+	}
+	// A partial grant is re-requested in full; a partial read grant read-only.
+	partial := scopesForAccess(map[string]string{"gmail": auth.AccessPartial, "chat": auth.AccessPartialReadOnly})
+	if !containsStr(partial, pfx+"gmail.modify") || containsStr(partial, pfx+"chat.messages") || !containsStr(partial, pfx+"chat.messages.readonly") {
+		t.Errorf("partial levels = %v", partial)
+	}
+}
+
+func TestLostServices(t *testing.T) {
+	before := map[string]string{"gmail": auth.AccessFull, "drive": auth.AccessReadOnly, "tasks": auth.AccessFull}
+
+	// Nothing lost: same or better everywhere, plus a new service.
+	same := map[string]string{"gmail": auth.AccessFull, "drive": auth.AccessFull, "tasks": auth.AccessFull, "docs": auth.AccessReadOnly}
+	if lost := lostServices(before, same); len(lost) != 0 {
+		t.Errorf("lost = %v, want none", lost)
+	}
+	// gmail downgraded, tasks gone: both are losses; drive is unchanged.
+	worse := map[string]string{"gmail": auth.AccessReadOnly, "drive": auth.AccessReadOnly}
+	if lost := strings.Join(lostServices(before, worse), ","); lost != "gmail,tasks" {
+		t.Errorf("lost = %q, want gmail,tasks", lost)
+	}
+	// A replacing login has no previous access to lose.
+	if lost := lostServices(nil, worse); len(lost) != 0 {
+		t.Errorf("lost with no previous access = %v", lost)
 	}
 }
 

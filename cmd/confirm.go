@@ -69,9 +69,10 @@ var sensitiveCommands = map[string]string{
 	"drive delete-drive":      "deletes a shared drive",
 
 	// Docs / Sheets / Slides
-	"docs trash":          "moves a document to Trash",
-	"sheets delete-sheet": "deletes a sheet",
-	"slides delete-slide": "deletes a slide",
+	"docs trash":           "moves a document to Trash",
+	"docs replace-content": "replaces the entire body of a document",
+	"sheets delete-sheet":  "deletes a sheet",
+	"slides delete-slide":  "deletes a slide",
 
 	// Chat
 	"chat send":          "sends a chat message",

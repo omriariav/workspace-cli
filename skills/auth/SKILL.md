@@ -94,7 +94,9 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
   Leave `events` out of `--services` if a read-only login must not manage
   subscriptions.
 - `--add` merges the selected services into the existing authorization
-  instead of replacing it. It requires `--services` (or a `services` list
+  instead of replacing it. The consent screen asks for the previous
+  services again together with the new ones; if the result would drop
+  access you already had, the login is rejected and nothing changes. It requires `--services` (or a `services` list
   in config), so it can never widen the request to every service. Without `--add`, a login replaces the previous
   grant.
 - Every login must return its own refresh token; if Google returns none,
@@ -163,7 +165,8 @@ gws gmail send --to a@example.com --subject Hi --body Hello
 - Covered when a flag is used: `drive update --trashed`, `chat setup-space
   --members`, `calendar create --attendees`, `calendar update
   --add-attendees`, `calendar rsvp --message`.
-- Covered explicitly: commands that send (Gmail `send`, `reply`, `forward`,
+- Covered explicitly: `docs replace-content` (replaces the whole document
+  body); commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`, `unsubscribe`; Drive `share`, `unshare`,
   `update-permission`, `start-approval`, `reassign-approval`; Chat
