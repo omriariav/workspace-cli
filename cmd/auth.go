@@ -842,7 +842,17 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					"message":       "Not authenticated, run: gws auth login",
 				})
 			}
-			token = replaced
+			// The replacement has not been checked yet: make it fresh too,
+			// rather than report whatever is on disk as authenticated.
+			checked, checkedSaveErr, checkErr := auth.EnsureFreshToken(context.Background(), clientID, clientSecret, replaced)
+			if checkErr != nil {
+				return p.Print(map[string]interface{}{
+					"authenticated": false,
+					"message":       "The stored login changed while checking it; run gws auth status again",
+				})
+			}
+			warnIfRefreshNotSaved(os.Stderr, checkedSaveErr)
+			token = checked
 		case err != nil && expired:
 			return p.Print(map[string]interface{}{
 				"authenticated": false,
