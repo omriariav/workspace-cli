@@ -177,7 +177,7 @@ func loginTokenToStore(existing, incoming *oauth2.Token, add bool) (*oauth2.Toke
 		return auth.MergeToken(existing, incoming), nil
 	}
 	if incoming.RefreshToken == "" {
-		return nil, fmt.Errorf("Google returned no refresh token for this login, so the previous authorization was left unchanged; run `gws auth logout` and then `gws auth login` again")
+		return nil, fmt.Errorf("no refresh token was returned for this login, so the previous authorization was left unchanged; run `gws auth logout` and then `gws auth login` again")
 	}
 	return incoming, nil
 }
