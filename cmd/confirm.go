@@ -87,6 +87,7 @@ var sensitiveCommands = map[string]string{
 	// Chat
 	"chat send":          "sends a chat message",
 	"chat upload":        "uploads a local file to a chat space",
+	"chat unreact":       "removes a reaction from a chat message",
 	"chat delete":        "deletes a chat message",
 	"chat delete-space":  "deletes a chat space",
 	"chat add-member":    "adds a member to a chat space",

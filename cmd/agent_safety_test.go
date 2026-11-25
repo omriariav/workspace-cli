@@ -336,6 +336,8 @@ func TestIntrospection_FlagValueIsNotTheFlag(t *testing.T) {
 		{"calendar", "suggest-time", "--max=abc", "--schema"},
 		{"calendar", "suggest-time", "--max", "abc", "--show-scopes"},
 		{"calendar", "suggest-time", "--include-weekends=maybe", "--schema"},
+		// So is a slice value with broken CSV quoting.
+		{"calendar", "create", "--attendees", `"unterminated`, "--schema"},
 	}
 	for _, args := range cases {
 		var out bytes.Buffer
@@ -351,6 +353,7 @@ func TestIntrospection_FlagValueIsNotTheFlag(t *testing.T) {
 		{"gmail", "send", "--schema=true", "--body", "x"},
 		{"--format", "yaml", "gmail", "send", "--schema"},
 		{"calendar", "suggest-time", "--max=3", "--include-weekends", "--schema"},
+		{"calendar", "create", "--attendees", "a@example.com,b@example.com", "--schema"},
 	} {
 		if _, handled := runIntrospection(t, args...); !handled {
 			t.Errorf("%v: expected introspection", args)
@@ -399,7 +402,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},
 		{"drive", "move"}, {"drive", "copy"}, {"drive", "convert"},
-		{"sheets", "copy-to"}, {"chat", "upload"},
+		{"sheets", "copy-to"}, {"chat", "upload"}, {"chat", "unreact"},
 		{"calendar", "move"},
 	}
 	for _, path := range covered {

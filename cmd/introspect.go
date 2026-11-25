@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -345,6 +346,12 @@ func (d *discardValue) Set(v string) error {
 		_, err = strconv.ParseFloat(v, 64)
 	case "duration":
 		_, err = time.ParseDuration(v)
+	case "stringSlice", "intSlice", "boolSlice", "durationSlice":
+		// pflag reads slice values as one CSV record and rejects bad
+		// quoting; an empty value is an empty slice.
+		if v != "" {
+			_, err = csv.NewReader(strings.NewReader(v)).Read()
+		}
 	}
 	return err
 }
