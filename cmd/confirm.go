@@ -127,16 +127,24 @@ var conditionalSensitive = map[string]conditionalRule{
 	"drive resolve-comment":   {flag: "content", effect: "posts a reply on a file comment, visible to everyone with access"},
 	"drive unresolve-comment": {flag: "content", effect: "posts a reply on a file comment, visible to everyone with access"},
 	"forms update":            {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},
-	"gmail label":             {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam},
-	"gmail batch-modify":      {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam},
+	"gmail label":             {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
+	"gmail batch-modify":      {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
 }
 
 // conditionalRule makes a command sensitive when flag is set, or, if when
 // is given, when the flag's value satisfies it.
+//
+// values lists, for --schema, the flag values that when accepts, so a
+// caller can tell beforehand which invocations will ask for confirmation.
+// A rule with when must also set values.
 type conditionalRule struct {
 	flag, effect string
 	when         func(value string) bool
+	values       []string
 }
+
+// trashOrSpamLabels are the label values addsTrashOrSpam looks for.
+var trashOrSpamLabels = []string{"TRASH", "SPAM"}
 
 // triggered reports whether the rule applies to the flag as currently set.
 func (r conditionalRule) triggered(f *pflag.Flag) bool {

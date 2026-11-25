@@ -203,8 +203,20 @@ func civilInstant(year int, month time.Month, day, hour, min int, loc *time.Loca
 	// The requested time does not exist: scan around it. The window is
 	// wide enough for a zone that skipped a whole calendar day (Samoa
 	// crossed the date line by dropping 2011-12-30).
+	// The scan steps by minutes, but a gap can end part-way through one
+	// (Monrovia resumed at 00:44:30 in 1972), so the minute found is then
+	// narrowed to the exact second the clock reaches the requested time.
+	wallSec := func(t time.Time) time.Time {
+		l := t.In(loc)
+		return time.Date(l.Year(), l.Month(), l.Day(), l.Hour(), l.Minute(), l.Second(), 0, time.UTC)
+	}
 	for c := t.Add(-26 * time.Hour); !c.After(t.Add(26 * time.Hour)); c = c.Add(time.Minute) {
-		if !wall(c).Before(want) {
+		if !wallSec(c).Before(want) {
+			for back := 59 * time.Second; back > 0; back -= time.Second {
+				if exact := c.Add(-back); !wallSec(exact).Before(want) {
+					return exact
+				}
+			}
 			return c
 		}
 	}

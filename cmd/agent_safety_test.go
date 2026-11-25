@@ -208,6 +208,22 @@ func TestIntrospection_SchemaReportsConditionalSensitivity(t *testing.T) {
 	if _, ok := plain["sensitive_when"]; ok {
 		t.Error("calendar events has no conditional rule")
 	}
+	// A rule that depends on the flag's value names the values that
+	// trigger it; a rule that depends only on the flag being used does not.
+	label, _ := runIntrospection(t, "gmail", "label", "--schema")
+	labelWhen, _ := label["sensitive_when"].(map[string]interface{})
+	if got := fmt.Sprint(labelWhen["values"]); got != "[TRASH SPAM]" {
+		t.Errorf("gmail label sensitive_when values = %s, want [TRASH SPAM]", got)
+	}
+	create, _ := runIntrospection(t, "calendar", "create", "--schema")
+	if createWhen, _ := create["sensitive_when"].(map[string]interface{}); createWhen["values"] != nil {
+		t.Errorf("calendar create should list no values: %v", createWhen)
+	}
+	for key, rule := range conditionalSensitive {
+		if rule.when != nil && len(rule.values) == 0 {
+			t.Errorf("%s: a value-dependent rule must list its values for --schema", key)
+		}
+	}
 }
 
 func TestIntrospection_ShowScopes(t *testing.T) {

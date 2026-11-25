@@ -1220,3 +1220,29 @@ func TestQueryBusySpans_Failures(t *testing.T) {
 		t.Errorf("checked = %v, unavailable = %v, busy = %v, err = %v", checked, unavailable, busy, err)
 	}
 }
+
+// Monrovia skipped from 23:59:59 on 1972-01-06 straight to 00:44:30 on
+// the 7th. A date-only --to 1972-01-06 must end at that exact instant: a
+// boundary rounded up to the minute would include 30 seconds of the 7th.
+func TestEndOfDateOnly_SubMinuteGap(t *testing.T) {
+	loc, err := time.LoadLocation("Africa/Monrovia")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	_, offBefore := time.Date(1972, 1, 6, 12, 0, 0, 0, loc).Zone()
+	_, offAfter := time.Date(1972, 1, 8, 12, 0, 0, 0, loc).Zone()
+	if offBefore == offAfter || (offAfter-offBefore)%60 == 0 {
+		t.Skipf("tzdata does not model the sub-minute change (offsets %d -> %d)", offBefore, offAfter)
+	}
+
+	end, err := endOfDateOnly("1972-01-06", loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last := end.Add(-time.Second).In(loc); last.Day() != 6 {
+		t.Errorf("one second before the boundary reads %v, want still January 6", last)
+	}
+	if first := end.In(loc); first.Day() != 7 {
+		t.Errorf("the boundary reads %v, want the first instant of January 7", first)
+	}
+}

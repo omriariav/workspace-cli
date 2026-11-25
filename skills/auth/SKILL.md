@@ -156,7 +156,10 @@ gws drive share --show-scopes   # full and read-only scopes of the command's ser
 `--schema` also shows whether the confirmation gate covers a command:
 `"sensitive": true` (with an `effect`) when it always does, and
 `"sensitive_when": {"flag": "...", "effect": "..."}` when it does only if
-that flag is used. Scope output is per service, not per command.
+that flag is used. If only certain values of the flag trigger it, they are
+listed as `"values"` (for example `["TRASH", "SPAM"]` for
+`gmail label --add`); any other value runs without confirmation. Scope
+output is per service, not per command.
 
 ## Confirmation Gate for Sensitive Commands
 
