@@ -211,11 +211,11 @@ func TestNewFactory_AccessTokenTakesPrecedence(t *testing.T) {
 	// No stored token, no client credentials, and a service-account mode
 	// configured: the external token must still win and be used verbatim.
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	viper.Set("access_token", "  external-token  ")
+	setTestAccessToken("  external-token  ")
 	viper.Set("auth_mode", "service-account-app")
 	viper.Set("service_account_key_file", "/nonexistent/key.json")
 	t.Cleanup(func() {
-		viper.Set("access_token", "")
+		setTestAccessToken("")
 		viper.Set("auth_mode", "")
 		viper.Set("service_account_key_file", "")
 	})
@@ -237,4 +237,14 @@ func TestNewFactory_AccessTokenTakesPrecedence(t *testing.T) {
 	if tok.RefreshToken != "" {
 		t.Error("an external token must not carry a refresh token")
 	}
+}
+
+// setTestAccessToken sets (or, with "", clears) the external access token
+// the way a user would: through the environment variable.
+func setTestAccessToken(value string) {
+	if value == "" {
+		_ = os.Unsetenv("GWS_ACCESS_TOKEN")
+		return
+	}
+	_ = os.Setenv("GWS_ACCESS_TOKEN", value)
 }

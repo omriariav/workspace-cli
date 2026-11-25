@@ -50,6 +50,8 @@ func TestConfirmGate(t *testing.T) {
 		{name: "--yes skips prompt", cmd: send, enabled: true, yes: true},
 		{name: "no terminal fails closed", cmd: send, enabled: true, wantErr: "confirmation required"},
 		{name: "approved", cmd: send, enabled: true, interactive: true, input: "y\n", wantPrompt: true},
+		{name: "answer cut off by EOF is not approval", cmd: send, enabled: true, interactive: true, input: "y", wantErr: "cancelled", wantPrompt: true},
+		{name: "yes cut off by EOF is not approval", cmd: send, enabled: true, interactive: true, input: "yes", wantErr: "cancelled", wantPrompt: true},
 		{name: "approved yes", cmd: send, enabled: true, interactive: true, input: "YES\n", wantPrompt: true},
 		{name: "declined", cmd: send, enabled: true, interactive: true, input: "n\n", wantErr: "cancelled", wantPrompt: true},
 		{name: "empty answer declines", cmd: send, enabled: true, interactive: true, input: "\n", wantErr: "cancelled", wantPrompt: true},
@@ -355,6 +357,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"events", "subscriptions", "create"},
 		{"events", "subscriptions", "reactivate"},
 		{"drive", "start-approval"}, {"drive", "reassign-approval"},
+		{"drive", "add-comment"}, {"drive", "reply"},
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},
 		{"drive", "move"},
@@ -554,11 +557,11 @@ func TestStoredOAuthLoginActive(t *testing.T) {
 	if !storedOAuthLoginActive() {
 		t.Error("default configuration uses the stored OAuth login")
 	}
-	viper.Set("access_token", "tok")
+	setTestAccessToken("tok")
 	if storedOAuthLoginActive() {
 		t.Error("an external access token is not the stored OAuth login")
 	}
-	viper.Set("access_token", "")
+	setTestAccessToken("")
 	setAuthModeConfig(t, "service-account-dwd", "/tmp/key.json", "user@example.com")
 	if storedOAuthLoginActive() {
 		t.Error("a service-account mode is not the stored OAuth login")
@@ -737,11 +740,11 @@ func TestWithScopeHint_IsPartOfTheStructuredError(t *testing.T) {
 	if got := withScopeHint(errors.New("boom")); got.Error() != "boom" {
 		t.Errorf("non-auth error changed: %v", got)
 	}
-	viper.Set("access_token", "external")
+	setTestAccessToken("external")
 	if got := withScopeHint(apiErr); got != apiErr {
 		t.Errorf("hint added although an external token is in use: %v", got)
 	}
-	viper.Set("access_token", "")
+	setTestAccessToken("")
 	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, nil, "", tok); err != nil {
 		t.Fatal(err)
 	}
@@ -1426,9 +1429,41 @@ func TestAuthLoginCommand_HasReadonlyAndAddFlags(t *testing.T) {
 
 // --- external access token ---
 
+// The config file is not a source for the access token: only the flag and
+// the environment variable are.
+func TestAccessToken_NotReadFromConfigFile(t *testing.T) {
+	setTestAccessToken("")
+	viper.Set("access_token", "left-over-in-config")
+	t.Cleanup(func() { viper.Set("access_token", nil) })
+	if got := config.GetAccessToken(); got != "" {
+		t.Errorf("GetAccessToken = %q, want nothing from the config file", got)
+	}
+	if !storedOAuthLoginActive() {
+		t.Error("a config-file access_token must not displace the stored login")
+	}
+
+	setTestAccessToken("  from-env  ")
+	t.Cleanup(func() { setTestAccessToken("") })
+	if got := config.GetAccessToken(); got != "from-env" {
+		t.Errorf("GetAccessToken = %q, want the trimmed environment value", got)
+	}
+
+	// The flag wins over the environment.
+	if err := rootCmd.PersistentFlags().Set("access-token", "from-flag"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = rootCmd.PersistentFlags().Set("access-token", "")
+		rootCmd.PersistentFlags().Lookup("access-token").Changed = false
+	})
+	if got := config.GetAccessToken(); got != "from-flag" {
+		t.Errorf("GetAccessToken = %q, want the flag value", got)
+	}
+}
+
 func TestAuthStatus_ReportsAccessTokenWithoutPrintingIt(t *testing.T) {
-	viper.Set("access_token", "ya29.secret-token-value")
-	t.Cleanup(func() { viper.Set("access_token", "") })
+	setTestAccessToken("ya29.secret-token-value")
+	t.Cleanup(func() { setTestAccessToken("") })
 
 	out, err := captureStdout(t, func() error { return runStatus(statusCmd, nil) })
 	if err != nil {
@@ -1444,8 +1479,8 @@ func TestAuthStatus_ReportsAccessTokenWithoutPrintingIt(t *testing.T) {
 
 func TestCurrentAuthMode_AccessTokenOverridesServiceAccount(t *testing.T) {
 	setAuthModeConfig(t, "service-account-app", "/tmp/key.json", "")
-	viper.Set("access_token", "tok")
-	t.Cleanup(func() { viper.Set("access_token", "") })
+	setTestAccessToken("tok")
+	t.Cleanup(func() { setTestAccessToken("") })
 	if got := currentAuthMode(); got != auth.AuthModeOAuth {
 		t.Errorf("currentAuthMode = %q, want %q", got, auth.AuthModeOAuth)
 	}
@@ -1469,4 +1504,14 @@ func containsStr(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// setTestAccessToken sets (or, with "", clears) the external access token
+// the way a user would: through the environment variable.
+func setTestAccessToken(value string) {
+	if value == "" {
+		_ = os.Unsetenv("GWS_ACCESS_TOKEN")
+		return
+	}
+	_ = os.Setenv("GWS_ACCESS_TOKEN", value)
 }

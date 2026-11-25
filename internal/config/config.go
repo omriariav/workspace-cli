@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -26,15 +27,31 @@ const (
 	KeyAuthMode          = "auth_mode"
 	KeyServiceAccountKey = "service_account_key_file"
 	KeyImpersonateUser   = "impersonate_user"
-	KeyAccessToken       = "access_token"
 	KeyConfirmSensitive  = "confirm_sensitive"
 )
 
-// GetAccessToken returns an externally managed OAuth access token
-// (GWS_ACCESS_TOKEN or --access-token). When set, gws uses it as-is: no
-// login, no refresh.
+// AccessTokenEnv is the environment variable that carries an externally
+// managed access token.
+const AccessTokenEnv = "GWS_ACCESS_TOKEN"
+
+// AccessTokenFlag returns the value of the --access-token flag. The cmd
+// package sets it; it is nil where there is no flag (library use, tests).
+var AccessTokenFlag func() string
+
+// GetAccessToken returns an externally managed OAuth access token. When
+// set, gws uses it as-is: no login, no refresh.
+//
+// Only the --access-token flag and the GWS_ACCESS_TOKEN environment
+// variable are read. The config file is deliberately not a source: a
+// token left in config.yaml would silently take precedence over the
+// stored login or a service account long after it was put there.
 func GetAccessToken() string {
-	return strings.TrimSpace(viper.GetString(KeyAccessToken))
+	if AccessTokenFlag != nil {
+		if v := strings.TrimSpace(AccessTokenFlag()); v != "" {
+			return v
+		}
+	}
+	return strings.TrimSpace(os.Getenv(AccessTokenEnv))
 }
 
 // GetConfirmSensitive reports whether sensitive commands (send, share,

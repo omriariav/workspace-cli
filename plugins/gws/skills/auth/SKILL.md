@@ -131,6 +131,8 @@ gws calendar events --days 1
 - `gws` uses it as-is: it is never refreshed, stored, or printed. An expired
   or under-scoped token surfaces the API error (exit code 3).
 - Check what a command needs first with `--show-scopes`.
+- The token is read only from the environment variable or the flag,
+  never from `config.yaml`.
 - `--access-token <token>` also works, but a flag value is visible in process
   listings and shell history — prefer the environment variable.
 
@@ -180,7 +182,8 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   resume delivery of events to a Pub/Sub topic); commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`, `unsubscribe`, `move`; Drive `share`, `unshare`,
-  `update-permission`, `move`, `start-approval`, `reassign-approval`; Chat
+  `update-permission`, `move`, `add-comment`, `reply`,
+  `start-approval`, `reassign-approval`; Chat
   `add-member`, `update-member`).
 - Not covered: creating or editing content, `untrash`, and responding to
   a Drive approval (`approve`, `decline`, `cancel-approval`).

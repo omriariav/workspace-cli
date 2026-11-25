@@ -63,6 +63,8 @@ var sensitiveCommands = map[string]string{
 	"drive unshare":           "removes access to a file",
 	"drive update-permission": "changes who can access a file",
 	"drive move":              "moves a file, which changes who can access it if the folders are shared differently",
+	"drive add-comment":       "posts a comment on a file, visible to everyone with access",
+	"drive reply":             "posts a reply to a comment, visible to everyone with access",
 	"drive start-approval":    "sends an approval request to reviewers",
 	"drive reassign-approval": "changes the reviewers of an approval request",
 	"drive delete-revision":   "deletes a file revision",
@@ -237,10 +239,14 @@ func confirmGate(cmd *cobra.Command, enabled, yes bool, in io.Reader, errW io.Wr
 	if _, err := fmt.Fprintf(errW, "gws %s %s. Proceed? [y/N]: ", key, effect); err != nil {
 		return fmt.Errorf("could not display the confirmation prompt for `gws %s` (%v), so it was not run; re-run with --yes after the user approves", key, err)
 	}
-	line, _ := bufio.NewReader(in).ReadString('\n')
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-		return nil
+	// Only a complete line counts: an answer cut off by EOF or a read
+	// error is not an approval.
+	line, readErr := bufio.NewReader(in).ReadString('\n')
+	if readErr == nil {
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "y", "yes":
+			return nil
+		}
 	}
 	return fmt.Errorf("cancelled: `gws %s` was not confirmed", key)
 }

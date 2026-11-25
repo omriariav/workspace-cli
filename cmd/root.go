@@ -230,7 +230,12 @@ func init() {
 	rootCmd.PersistentFlags().Bool("show-scopes", false, "print the OAuth scopes this command's service uses as JSON and exit without running it")
 
 	viper.BindPFlag("format", rootCmd.PersistentFlags().Lookup("format"))
-	viper.BindPFlag(config.KeyAccessToken, rootCmd.PersistentFlags().Lookup("access-token"))
+	// Read straight from the flag, never through viper: the config file
+	// must not be able to supply an access token.
+	config.AccessTokenFlag = func() string {
+		v, _ := rootCmd.PersistentFlags().GetString("access-token")
+		return v
+	}
 }
 
 func initConfig() {
