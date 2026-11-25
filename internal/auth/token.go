@@ -169,11 +169,15 @@ func LoadGrantedServices() []string {
 // The record carries a fingerprint of the token it describes, so metadata
 // left behind by another login (an interrupted write, two logins racing)
 // is recognised as stale and ignored on load.
-func SaveGrantedAccess(access map[string]string, token *oauth2.Token) error {
+//
+// scopes is the exact scope list the token was granted. It is what later
+// logins compare against: access levels are a summary for people, and two
+// different scope sets can share a level.
+func SaveGrantedAccess(access map[string]string, scopes []string, token *oauth2.Token) error {
 	if err := config.EnsureConfigDir(); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	data, err := json.Marshal(grantedAccessRecord{Token: tokenFingerprint(token), Services: access})
+	data, err := json.Marshal(grantedAccessRecord{Token: tokenFingerprint(token), Services: access, Scopes: scopes})
 	if err != nil {
 		return fmt.Errorf("failed to marshal granted access: %w", err)
 	}
@@ -233,6 +237,8 @@ type grantedAccessRecord struct {
 	// Token is a fingerprint of the refresh token the levels describe.
 	Token    string            `json:"token"`
 	Services map[string]string `json:"services"`
+	// Scopes is the exact scope list granted to that token.
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // tokenFingerprint identifies a stored authorization without revealing
@@ -250,6 +256,25 @@ func tokenFingerprint(token *oauth2.Token) string {
 // token. Returns nil when there is no metadata, no stored token, or the
 // metadata describes a different token than the one stored.
 func LoadGrantedAccess() map[string]string {
+	if record := loadGrantedRecord(); record != nil {
+		return record.Services
+	}
+	return nil
+}
+
+// LoadGrantedScopes returns the exact scopes granted to the stored token,
+// or nil when they are not known (no record, or a record for another
+// token).
+func LoadGrantedScopes() []string {
+	if record := loadGrantedRecord(); record != nil {
+		return record.Scopes
+	}
+	return nil
+}
+
+// loadGrantedRecord reads the access record and returns it only if it
+// belongs to the stored token.
+func loadGrantedRecord() *grantedAccessRecord {
 	data, err := os.ReadFile(config.GetGrantedAccessPath())
 	if err != nil {
 		return nil
@@ -265,7 +290,7 @@ func LoadGrantedAccess() map[string]string {
 	if fp := tokenFingerprint(token); fp == "" || fp != record.Token {
 		return nil
 	}
-	return record.Services
+	return &record
 }
 
 // DeleteGrantedMetadata removes the granted-services and granted-access

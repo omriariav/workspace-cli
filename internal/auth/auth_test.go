@@ -761,7 +761,8 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	}
 	tok := &oauth2.Token{AccessToken: "a1", RefreshToken: "refresh-1"}
 	want := map[string]string{"gmail": AccessReadOnly, "drive": AccessFull}
-	if err := SaveGrantedAccess(want, tok); err != nil {
+	wantScopes := []string{"scope-a", "scope-b"}
+	if err := SaveGrantedAccess(want, wantScopes, tok); err != nil {
 		t.Fatalf("SaveGrantedAccess: %v", err)
 	}
 
@@ -775,6 +776,9 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	got := LoadGrantedAccess()
 	if len(got) != 2 || got["gmail"] != AccessReadOnly || got["drive"] != AccessFull {
 		t.Errorf("round trip = %v", got)
+	}
+	if scopes := LoadGrantedScopes(); strings.Join(scopes, ",") != "scope-a,scope-b" {
+		t.Errorf("LoadGrantedScopes = %v", scopes)
 	}
 
 	// An access-token refresh keeps the refresh token: still valid.
@@ -796,6 +800,9 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	}
 	if got := LoadGrantedAccess(); got != nil {
 		t.Errorf("metadata for another token must be ignored, got %v", got)
+	}
+	if scopes := LoadGrantedScopes(); scopes != nil {
+		t.Errorf("scopes for another token must be ignored, got %v", scopes)
 	}
 	// The plain service list beside a mismatched record came from the same
 	// other login: it must not be used either.

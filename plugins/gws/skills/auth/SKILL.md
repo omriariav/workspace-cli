@@ -93,9 +93,10 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
   Leave `events` out of `--services` if a read-only login must not manage
   subscriptions.
 - `--add` merges the selected services into the existing authorization
-  instead of replacing it. The consent screen asks for the previous
-  services again together with the new ones; if the result would drop
-  access you already had, the login is rejected and nothing changes. It requires `--services` (or a `services` list
+  instead of replacing it. The consent screen asks for the previously
+  granted scopes again together with the new ones; if any previously
+  granted scope is missing from the result, the login is rejected and
+  nothing changes. It requires `--services` (or a `services` list
   in config), so it can never widen the request to every service. Without `--add`, a login replaces the previous
   grant.
 - Every login must return its own refresh token; if Google returns none,

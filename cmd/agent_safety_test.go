@@ -455,7 +455,7 @@ func TestStoredOAuthLoginActive(t *testing.T) {
 func TestExistingGrantedAccess_IgnoresMetadataWithoutToken(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	tok := &oauth2.Token{AccessToken: "a", RefreshToken: "r"}
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, tok); err != nil {
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, nil, tok); err != nil {
 		t.Fatal(err)
 	}
 	if got := existingGrantedAccess(); len(got) != 0 {
@@ -487,7 +487,7 @@ func TestExistingGrantedAccess_LegacyVersusInterruptedLogin(t *testing.T) {
 
 	// Interrupted login: an access record exists but belongs to another
 	// token. The service list must not be read as full access.
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, &oauth2.Token{RefreshToken: "other"}); err != nil {
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, &oauth2.Token{RefreshToken: "other"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := existingGrantedAccess(); len(got) != 0 {
@@ -495,7 +495,7 @@ func TestExistingGrantedAccess_LegacyVersusInterruptedLogin(t *testing.T) {
 	}
 
 	// Once the record matches the stored token it is used as written.
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, current); err != nil {
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, current); err != nil {
 		t.Fatal(err)
 	}
 	if got := existingGrantedAccess(); len(got) != 1 || got["gmail"] != auth.AccessReadOnly {
@@ -505,7 +505,7 @@ func TestExistingGrantedAccess_LegacyVersusInterruptedLogin(t *testing.T) {
 
 func TestLogout_ClearsGrantedMetadata(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, &oauth2.Token{RefreshToken: "r"}); err != nil {
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, &oauth2.Token{RefreshToken: "r"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := auth.SaveGrantedServices([]string{"gmail"}); err != nil {
@@ -644,22 +644,87 @@ func TestScopesForAccess_RequestsTheWholeMergedGrant(t *testing.T) {
 	}
 }
 
-func TestLostServices(t *testing.T) {
-	before := map[string]string{"gmail": auth.AccessFull, "drive": auth.AccessReadOnly, "tasks": auth.AccessFull}
+func TestMissingScopes_ComparesScopeByScope(t *testing.T) {
+	const pfx = "https://www.googleapis.com/auth/"
+	previous := []string{pfx + "userinfo.email", pfx + "gmail.readonly", pfx + "gmail.send", pfx + "drive.readonly"}
 
-	// Nothing lost: same or better everywhere, plus a new service.
-	same := map[string]string{"gmail": auth.AccessFull, "drive": auth.AccessFull, "tasks": auth.AccessFull, "docs": auth.AccessReadOnly}
-	if lost := lostServices(before, same); len(lost) != 0 {
-		t.Errorf("lost = %v, want none", lost)
+	// Everything kept, more added: nothing missing.
+	kept := append(append([]string(nil), previous...), pfx+"tasks.readonly")
+	if got := missingScopes(previous, kept); len(got) != 0 {
+		t.Errorf("missing = %v, want none", got)
 	}
-	// gmail downgraded, tasks gone: both are losses; drive is unchanged.
-	worse := map[string]string{"gmail": auth.AccessReadOnly, "drive": auth.AccessReadOnly}
-	if lost := strings.Join(lostServices(before, worse), ","); lost != "gmail,tasks" {
-		t.Errorf("lost = %q, want gmail,tasks", lost)
+
+	// gmail.send swapped for gmail.modify: both grants are "partial"
+	// Gmail, but sending would stop working, so it counts as a loss.
+	swapped := []string{pfx + "userinfo.email", pfx + "gmail.readonly", pfx + "gmail.modify", pfx + "drive.readonly"}
+	before, _ := deriveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, previous)
+	after, _ := deriveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, swapped)
+	if before["gmail"] != auth.AccessPartial || after["gmail"] != auth.AccessPartial {
+		t.Fatalf("test premise: both should be partial, got %q and %q", before["gmail"], after["gmail"])
 	}
-	// A replacing login has no previous access to lose.
-	if lost := lostServices(nil, worse); len(lost) != 0 {
-		t.Errorf("lost with no previous access = %v", lost)
+	if got := strings.Join(shortScopeNames(missingScopes(previous, swapped)), ","); got != "gmail.send" {
+		t.Errorf("missing = %q, want gmail.send", got)
+	}
+
+	// No recorded previous scopes (replacing login, or a login from an
+	// older version): nothing can be verified, so nothing is reported.
+	if got := missingScopes(nil, swapped); len(got) != 0 {
+		t.Errorf("missing with unknown previous scopes = %v", got)
+	}
+	// A scope gws no longer requests is not worth blocking a login over.
+	if got := missingScopes([]string{pfx + "some.retired.scope"}, swapped); len(got) != 0 {
+		t.Errorf("unknown scopes should be ignored, got %v", got)
+	}
+}
+
+func TestUnionScopes(t *testing.T) {
+	got := unionScopes([]string{"a", "b"}, []string{"b", "c", "a", "d"})
+	if strings.Join(got, ",") != "a,b,c,d" {
+		t.Errorf("union = %v", got)
+	}
+	if got := unionScopes(nil, []string{"x"}); len(got) != 1 || got[0] != "x" {
+		t.Errorf("union with nil = %v", got)
+	}
+}
+
+// A login from an older version recorded every service as granted in full.
+// Re-deriving labels from the scopes Google returns relabels groups and
+// driveactivity as read-only; that must not be mistaken for lost access.
+func TestAddOnLegacyLogin_IsNotRejected(t *testing.T) {
+	legacy := map[string]string{}
+	for _, svc := range auth.ValidServiceNames() {
+		legacy[svc] = auth.AccessFull
+	}
+	// No recorded scope list for a legacy login.
+	var previousScopes []string
+	carried := scopesForAccess(legacy)
+	requested := unionScopes(carried, auth.ScopesForServices([]string{"tasks"}))
+
+	// Google returns exactly what was requested.
+	if lost := missingScopes(previousScopes, requested); len(lost) != 0 {
+		t.Fatalf("legacy --add rejected for %v", lost)
+	}
+	access, notGranted := deriveGrantedAccess(mergeGrantedAccess(legacy, []string{"tasks"}, false), requested)
+	if access["groups"] != auth.AccessReadOnly || access["gmail"] != auth.AccessFull || len(notGranted) != 0 {
+		t.Errorf("access = %v, notGranted = %v", access, notGranted)
+	}
+}
+
+func TestMergeGrantedAccess_ReadOnlyAddKeepsPartialWriteAccess(t *testing.T) {
+	const pfx = "https://www.googleapis.com/auth/"
+	existing := map[string]string{"gmail": auth.AccessPartial, "chat": auth.AccessPartialReadOnly}
+	got := mergeGrantedAccess(existing, []string{"gmail", "chat"}, true)
+	if got["gmail"] != auth.AccessPartial {
+		t.Errorf("gmail = %q, want partial kept", got["gmail"])
+	}
+	if got["chat"] != auth.AccessReadOnly {
+		t.Errorf("chat = %q, want readonly", got["chat"])
+	}
+	// The consent request keeps the write scopes the token already holds.
+	previous := []string{pfx + "userinfo.email", pfx + "gmail.readonly", pfx + "gmail.send"}
+	request := unionScopes(previous, auth.ReadOnlyScopesForServices([]string{"gmail"}))
+	if !containsStr(request, pfx+"gmail.send") {
+		t.Errorf("request dropped an existing write scope: %v", request)
 	}
 }
 

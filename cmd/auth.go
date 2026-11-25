@@ -127,12 +127,23 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 	access := mergeGrantedAccess(existingAccess, services, readOnly)
 	scopes := loginScopes(services, readOnly, hasServiceSelection(cmd))
+
+	// previousScopes is the exact scope list of the stored token, when it
+	// is known. It is nil for a replacing login and for a stored login
+	// that predates scope recording.
+	var previousScopes []string
 	if add {
+		previousScopes = auth.LoadGrantedScopes()
 		// Ask for the whole merged grant explicitly. Google's incremental
 		// authorization (include_granted_scopes) is not dependable for
 		// Desktop OAuth clients, so the previous scopes are re-requested
-		// rather than assumed to carry over.
-		scopes = scopesForAccess(access)
+		// rather than assumed to carry over. Without a recorded scope
+		// list, the recorded access levels stand in for it.
+		carried := previousScopes
+		if carried == nil {
+			carried = scopesForAccess(existingAccess)
+		}
+		scopes = unionScopes(carried, scopes)
 	}
 
 	if config.GetAccessToken() != "" {
@@ -148,24 +159,26 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	// Report what Google actually granted, not what was requested: the
+	// Work from what Google actually granted, not what was requested: the
 	// user can untick scopes on the consent screen. If the response
-	// carries no scope list, `access` stands: every scope behind it was
-	// requested in this very exchange (--add re-requests earlier services
-	// explicitly), so it never credits the new token with a grant that
-	// was only made to a previous one.
+	// carries no scope list, the requested scopes stand in: all of them
+	// were requested in this very exchange (--add re-requests earlier
+	// scopes explicitly), so the new token is never credited with a grant
+	// that was only made to a previous one.
+	grantedScopes := scopes
 	if granted, ok := token.Extra("scope").(string); ok && strings.TrimSpace(granted) != "" {
-		var notGranted []string
-		access, notGranted = deriveGrantedAccess(access, strings.Fields(granted))
+		grantedScopes = strings.Fields(granted)
 		// An incremental login must not cost the user access they already
-		// had. If the new grant no longer covers a previously authorized
-		// service, keep the stored authorization instead.
-		if lost := lostServices(existingAccess, access); len(lost) > 0 {
-			return p.PrintError(fmt.Errorf("the new grant does not include previously authorized access for %s, so the stored authorization was left unchanged; approve every requested scope, or run `gws auth login` without --add to replace it", strings.Join(lost, ", ")))
+		// had. Compared scope by scope: access levels are too coarse, as
+		// two different sets of write scopes can share one level.
+		if lost := missingScopes(previousScopes, grantedScopes); len(lost) > 0 {
+			return p.PrintError(fmt.Errorf("the new grant is missing %d previously granted scope(s) (%s), so the stored authorization was left unchanged; approve every requested scope, or run `gws auth login` without --add to replace it", len(lost), strings.Join(shortScopeNames(lost), ", ")))
 		}
-		if len(notGranted) > 0 {
-			fmt.Fprintf(os.Stderr, "Warning: Google did not grant the requested access for: %s\n", strings.Join(notGranted, ", "))
-		}
+	}
+	var notGranted []string
+	access, notGranted = deriveGrantedAccess(access, grantedScopes)
+	if len(notGranted) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: Google did not grant the requested access for: %s\n", strings.Join(notGranted, ", "))
 	}
 
 	token, err = loginTokenToStore(token)
@@ -179,7 +192,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// presence stops the unbound service list from being trusted. The
 	// service list goes last, so it never describes a newer login than the
 	// access record does.
-	errAccess := auth.SaveGrantedAccess(access, token)
+	errAccess := auth.SaveGrantedAccess(access, grantedScopes, token)
 
 	if err := auth.SaveToken(token); err != nil {
 		return p.PrintError(err)
@@ -273,31 +286,47 @@ func scopesForAccess(access map[string]string) []string {
 	return scopes
 }
 
-// accessRank orders access levels from least to most capable.
-func accessRank(level string) int {
-	switch level {
-	case auth.AccessFull:
-		return 4
-	case auth.AccessPartial:
-		return 3
-	case auth.AccessReadOnly:
-		return 2
-	case auth.AccessPartialReadOnly:
-		return 1
-	}
-	return 0
-}
-
-// lostServices lists the services whose access in after is lower than it
-// was in before (or gone), in canonical order.
-func lostServices(before, after map[string]string) []string {
-	var lost []string
-	for _, svc := range auth.ValidServiceNames() {
-		if prev, ok := before[svc]; ok && accessRank(after[svc]) < accessRank(prev) {
-			lost = append(lost, svc)
+// unionScopes returns a followed by the scopes of b not already in a.
+func unionScopes(a, b []string) []string {
+	seen := make(map[string]bool, len(a)+len(b))
+	var out []string
+	for _, s := range append(append([]string(nil), a...), b...) {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
 		}
 	}
-	return lost
+	return out
+}
+
+// missingScopes returns the scopes in previous that are absent from
+// granted. Scopes gws no longer uses are ignored: losing one costs nothing.
+func missingScopes(previous, granted []string) []string {
+	have := make(map[string]bool, len(granted))
+	for _, s := range granted {
+		have[s] = true
+	}
+	var missing []string
+	for _, s := range previous {
+		if !have[s] && isKnownScope(s) {
+			missing = append(missing, s)
+		}
+	}
+	return missing
+}
+
+// isKnownScope reports whether gws requests the scope for some service.
+func isKnownScope(scope string) bool {
+	return auth.ServiceForScope(scope) != ""
+}
+
+// shortScopeNames strips the common Google scope URL prefix for display.
+func shortScopeNames(scopes []string) []string {
+	out := make([]string, len(scopes))
+	for i, s := range scopes {
+		out[i] = strings.TrimPrefix(s, "https://www.googleapis.com/auth/")
+	}
+	return out
 }
 
 // mergeGrantedAccess computes the per-service access levels after a login.
@@ -314,7 +343,9 @@ func mergeGrantedAccess(existing map[string]string, services []string, readOnly 
 		level = auth.AccessReadOnly
 	}
 	for _, svc := range services {
-		if readOnly && access[svc] == auth.AccessFull {
+		// Adding read-only never lowers a service that already holds
+		// write scopes (full or partial).
+		if prev := access[svc]; readOnly && (prev == auth.AccessFull || prev == auth.AccessPartial) {
 			continue
 		}
 		access[svc] = level
