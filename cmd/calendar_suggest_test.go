@@ -908,6 +908,40 @@ func TestQueryBusySpans_RequestBoundsAreUTC(t *testing.T) {
 	}
 }
 
+// A group that reports an error but still lists members: the group is
+// unavailable, yet a readable member's busy period must block that slot.
+func TestQueryBusySpans_GroupErrorStillUsesReturnedMembers(t *testing.T) {
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"groups": {"team@example.com": {"errors": [{"reason": "groupTooBig"}], "calendars": ["busy@example.com"]}},
+			"calendars": {
+				"primary": {"busy": []},
+				"busy@example.com": {"busy": [{"start": "2026-12-01T09:00:00Z", "end": "2026-12-01T16:00:00Z"}]}
+			}
+		}`))
+	})
+	from := mustTime(t, "2026-12-01T00:00:00Z")
+	to := mustTime(t, "2026-12-02T00:00:00Z")
+	busy, checked, unavailable, err := queryBusySpans(context.Background(), svc,
+		[]*calendar.FreeBusyRequestItem{{Id: "primary"}, {Id: "team@example.com"}}, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(checked, ",") != "primary" || len(unavailable) != 1 || unavailable[0]["calendar"] != "team@example.com" || unavailable[0]["reason"] != "groupTooBig" {
+		t.Errorf("checked = %v, unavailable = %v", checked, unavailable)
+	}
+	if len(busy) != 1 {
+		t.Fatalf("busy = %v, want the readable member's period", busy)
+	}
+	// With --allow-partial, only 16:00-17:00 is offered: the member is
+	// known to be busy until 16:00.
+	slots := suggestSlots(busy, from, to, time.Hour, 9*time.Hour, 17*time.Hour, time.UTC, true, 5)
+	if len(slots) != 1 || !slots[0].Start.Equal(mustTime(t, "2026-12-01T16:00:00Z")) {
+		t.Errorf("suggestions = %v, want a single slot at 16:00", slots)
+	}
+}
+
 func TestQueryBusySpans_NullErrorEntriesDoNotPanic(t *testing.T) {
 	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

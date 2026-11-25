@@ -628,26 +628,25 @@ func queryBusySpans(ctx context.Context, svc *calendar.Service, items []*calenda
 		// under their own IDs. The group is readable only if every member
 		// is; otherwise part of the group's availability is unknown.
 		if group, isGroup := resp.Groups[item.Id]; isGroup {
-			if len(group.Errors) > 0 {
-				markUnavailable(item.Id, firstErrorReason(group.Errors))
-				continue
-			}
-			if len(group.Calendars) == 0 {
-				markUnavailable(item.Id, "group has no readable members")
-				continue
-			}
-			// Every member is processed even after one turns out to be
-			// unreadable: the busy time of the members that can be read
-			// must still block slots when --allow-partial continues.
+			// Every member that came back is processed, whatever else is
+			// wrong with the group — an error on the group itself, or a
+			// member that cannot be read. The busy time of the members
+			// that can be read must still block slots when
+			// --allow-partial continues.
 			var unreadable []string
 			for _, member := range group.Calendars {
 				if ok, reason := addCalendar(member); !ok {
 					unreadable = append(unreadable, fmt.Sprintf("%s: %s", member, reason))
 				}
 			}
-			if len(unreadable) > 0 {
+			switch {
+			case len(group.Errors) > 0:
+				markUnavailable(item.Id, firstErrorReason(group.Errors))
+			case len(group.Calendars) == 0:
+				markUnavailable(item.Id, "group has no readable members")
+			case len(unreadable) > 0:
 				markUnavailable(item.Id, "group member "+strings.Join(unreadable, "; group member "))
-			} else {
+			default:
 				checked = append(checked, item.Id)
 			}
 			continue
