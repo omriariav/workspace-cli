@@ -357,6 +357,39 @@ func TestSuggestSlots(t *testing.T) {
 	}
 }
 
+// Liberia moved its clocks by 44 minutes 30 seconds on 1972-01-07. The
+// working-hours cutoff that day must still fall exactly on 17:00 local
+// time, not half a minute later.
+func TestDayWindows_SubMinuteOffsetChange(t *testing.T) {
+	loc, err := time.LoadLocation("Africa/Monrovia")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	civil := time.Date(1972, 1, 7, 12, 0, 0, 0, time.UTC)
+	before := time.Date(1972, 1, 6, 12, 0, 0, 0, loc)
+	after := time.Date(1972, 1, 8, 12, 0, 0, 0, loc)
+	_, offBefore := before.Zone()
+	_, offAfter := after.Zone()
+	if offBefore == offAfter || (offAfter-offBefore)%60 == 0 {
+		t.Skipf("tzdata does not model the sub-minute change (offsets %d -> %d)", offBefore, offAfter)
+	}
+
+	windows := dayWindows(civil, 9*time.Hour, 17*time.Hour, loc)
+	if len(windows) != 1 {
+		t.Fatalf("windows = %v, want one", windows)
+	}
+	start, end := windows[0].Start.In(loc), windows[0].End.In(loc)
+	if start.Hour() != 9 || start.Minute() != 0 || start.Second() != 0 {
+		t.Errorf("window starts at %v, want 09:00:00 local", start)
+	}
+	if end.Hour() != 17 || end.Minute() != 0 || end.Second() != 0 {
+		t.Errorf("window ends at %v, want exactly 17:00:00 local", end)
+	}
+	if got := windows[0].End.Sub(windows[0].Start); got != 8*time.Hour {
+		t.Errorf("window lasts %v, want 8h", got)
+	}
+}
+
 func TestSuggestSlots_ClipsToRangeAndHonoursTimezone(t *testing.T) {
 	loc, _ := time.LoadLocation("America/New_York")
 	// Range starts mid-morning New York time and ends early afternoon.

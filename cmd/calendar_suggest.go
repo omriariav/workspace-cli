@@ -337,16 +337,21 @@ func dayWindows(civil time.Time, whStart, whEnd time.Duration, loc *time.Locatio
 
 	var spans []timeSpan
 	open := false
-	for c := dayStart; c.Before(dayEnd); c = c.Add(time.Minute) {
+	// Sampled every second, not every minute: a few historical offset
+	// changes are not whole minutes (Monrovia moved by 44m30s in 1972),
+	// and a minute-wide sample would overshoot the working-hours cutoff.
+	// This path only runs on days that have a transition.
+	const step = time.Second
+	for c := dayStart; c.Before(dayEnd); c = c.Add(step) {
 		l := c.In(loc)
-		wall := time.Duration(l.Hour())*time.Hour + time.Duration(l.Minute())*time.Minute
+		wall := time.Duration(l.Hour())*time.Hour + time.Duration(l.Minute())*time.Minute + time.Duration(l.Second())*time.Second
 		inside := wall >= whStart && wall < whEnd
 		switch {
 		case inside && !open:
-			spans = append(spans, timeSpan{Start: c, End: c.Add(time.Minute)})
+			spans = append(spans, timeSpan{Start: c, End: c.Add(step)})
 			open = true
 		case inside:
-			spans[len(spans)-1].End = c.Add(time.Minute)
+			spans[len(spans)-1].End = c.Add(step)
 		default:
 			open = false
 		}
