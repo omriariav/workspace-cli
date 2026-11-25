@@ -329,6 +329,45 @@ func TestMergeGrantedAccess(t *testing.T) {
 	}
 }
 
+func TestDeriveGrantedAccess(t *testing.T) {
+	const pfx = "https://www.googleapis.com/auth/"
+	granted := append(auth.ScopesForServices([]string{"gmail"}), // gmail: everything
+		pfx+"drive.readonly",    // drive: read-only only, although full was requested
+		pfx+"tasks.readonly",    // tasks: read-only as requested
+		pfx+"calendar.readonly", // calendar: read-only scope only
+	)
+	requested := map[string]string{
+		"gmail":    auth.AccessFull,
+		"drive":    auth.AccessFull,
+		"tasks":    auth.AccessReadOnly,
+		"calendar": auth.AccessReadOnly,
+		"docs":     auth.AccessFull,     // nothing granted
+		"sheets":   auth.AccessReadOnly, // nothing granted
+	}
+
+	access, notGranted := deriveGrantedAccess(requested, granted)
+
+	want := map[string]string{"gmail": auth.AccessFull, "drive": auth.AccessReadOnly, "tasks": auth.AccessReadOnly, "calendar": auth.AccessReadOnly}
+	if len(access) != len(want) {
+		t.Fatalf("access = %v, want %v", access, want)
+	}
+	for svc, level := range want {
+		if access[svc] != level {
+			t.Errorf("access[%s] = %q, want %q", svc, access[svc], level)
+		}
+	}
+	if got := strings.Join(notGranted, "; "); got != "drive (write access); docs; sheets" {
+		t.Errorf("notGranted = %q", got)
+	}
+
+	// A read-only request is never reported as full, even when the
+	// service's full and read-only scope sets coincide.
+	groups, _ := deriveGrantedAccess(map[string]string{"groups": auth.AccessReadOnly}, auth.ScopesForServices([]string{"groups"}))
+	if groups["groups"] != auth.AccessReadOnly {
+		t.Errorf("groups = %q, want readonly", groups["groups"])
+	}
+}
+
 func TestAuthLoginCommand_HasReadonlyAndAddFlags(t *testing.T) {
 	for _, name := range []string{"readonly", "add", "services"} {
 		if loginCmd.Flags().Lookup(name) == nil {

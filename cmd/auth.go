@@ -132,6 +132,16 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// come with its own refresh token, otherwise a login that narrows
 	// access (e.g. --readonly) would keep refreshing with the old, wider
 	// grant while reporting the narrower one.
+	// Report what Google actually granted, not what was requested: the
+	// user can untick scopes on the consent screen.
+	if granted, ok := token.Extra("scope").(string); ok && strings.TrimSpace(granted) != "" {
+		var notGranted []string
+		access, notGranted = deriveGrantedAccess(access, strings.Fields(granted))
+		if len(notGranted) > 0 {
+			fmt.Fprintf(os.Stderr, "Warning: Google did not grant the requested access for: %s\n", strings.Join(notGranted, ", "))
+		}
+	}
+
 	existing, _ := auth.LoadToken()
 	token, err = loginTokenToStore(existing, token, add)
 	if err != nil {
@@ -218,6 +228,47 @@ func mergeGrantedAccess(existing map[string]string, services []string, readOnly 
 		access[svc] = level
 	}
 	return access
+}
+
+// deriveGrantedAccess checks the requested access levels against the
+// scopes Google actually granted. A service keeps its requested level only
+// when every scope of that level was granted; a full request that only got
+// the read-only scopes is recorded as read-only; a service with neither is
+// dropped and returned in notGranted.
+func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (access map[string]string, notGranted []string) {
+	granted := make(map[string]bool, len(grantedScopes))
+	for _, s := range grantedScopes {
+		granted[s] = true
+	}
+	hasAll := func(scopes []string) bool {
+		for _, s := range scopes {
+			if !granted[s] {
+				return false
+			}
+		}
+		return true
+	}
+
+	access = map[string]string{}
+	for _, svc := range auth.ValidServiceNames() {
+		level, ok := requested[svc]
+		if !ok {
+			continue
+		}
+		one := []string{svc}
+		switch {
+		case level == auth.AccessFull && hasAll(auth.ScopesForServices(one)):
+			access[svc] = auth.AccessFull
+		case hasAll(auth.ReadOnlyScopesForServices(one)):
+			access[svc] = auth.AccessReadOnly
+			if level == auth.AccessFull {
+				notGranted = append(notGranted, svc+" (write access)")
+			}
+		default:
+			notGranted = append(notGranted, svc)
+		}
+	}
+	return access, notGranted
 }
 
 // grantedServiceNames returns the service names in access, in the
