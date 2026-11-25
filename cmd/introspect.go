@@ -52,25 +52,32 @@ func scopeServicesFor(cmd *cobra.Command) []string {
 // handled=false when neither flag is present so normal execution proceeds.
 // Introspection never calls a Google API and never needs credentials.
 func handleIntrospection(root *cobra.Command, args []string, out io.Writer) (bool, error) {
-	wantSchema, wantScopes := false, false
+	// Cheap pre-check: most invocations never mention either flag.
+	mentioned := false
 	for _, a := range args {
-		if a == "--" {
+		if strings.HasPrefix(a, "--schema") || strings.HasPrefix(a, "--show-scopes") {
+			mentioned = true
 			break
 		}
-		switch a {
-		case "--schema", "--schema=true":
-			wantSchema = true
-		case "--show-scopes", "--show-scopes=true":
-			wantScopes = true
-		}
 	}
-	if !wantSchema && !wantScopes {
+	if !mentioned {
 		return false, nil
 	}
 
-	cmd, _, err := root.Find(args)
+	cmd, rest, err := root.Find(args)
 	if err != nil {
-		return true, err
+		// Let normal execution report the unknown command.
+		return false, nil
+	}
+
+	// Decide with real flag parsing, so that a flag *value* which happens
+	// to read "--schema" (e.g. `--body --schema`) is not mistaken for the
+	// flag. Parsing happens on a throwaway flag set that mirrors the
+	// command's flags, leaving the command's own flag state untouched for
+	// the normal execution path.
+	wantSchema, wantScopes, ok := parseIntrospectionFlags(cmd, rest)
+	if !ok || (!wantSchema && !wantScopes) {
+		return false, nil
 	}
 
 	result := map[string]interface{}{}
@@ -208,4 +215,52 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	}
 	joined := strings.Join(readOnly, ",")
 	return fmt.Sprintf("Hint: %s is authorized read-only. Grant write access with: gws auth login --add --services %s", joined, joined)
+}
+
+// discardValue is a flag value that accepts anything and stores nothing.
+// It reports the mirrored flag's type so pflag keeps treating bool flags
+// as value-less.
+type discardValue struct{ typ string }
+
+func (d *discardValue) String() string   { return "" }
+func (d *discardValue) Set(string) error { return nil }
+func (d *discardValue) Type() string     { return d.typ }
+func (d *discardValue) IsBoolFlag() bool { return d.typ == "bool" }
+
+// parseIntrospectionFlags parses args against a copy of cmd's flag
+// definitions and reports whether --schema / --show-scopes were set. ok is
+// false when the arguments do not parse; normal execution then reports
+// the error.
+func parseIntrospectionFlags(cmd *cobra.Command, args []string) (schema, scopes, ok bool) {
+	fs := pflag.NewFlagSet("introspection", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	fs.BoolVar(&schema, "schema", false, "")
+	fs.BoolVar(&scopes, "show-scopes", false, "")
+
+	mirror := func(f *pflag.Flag) {
+		if fs.Lookup(f.Name) != nil {
+			return
+		}
+		shorthand := f.Shorthand
+		if shorthand != "" && fs.ShorthandLookup(shorthand) != nil {
+			shorthand = ""
+		}
+		fs.AddFlag(&pflag.Flag{
+			Name:        f.Name,
+			Shorthand:   shorthand,
+			Value:       &discardValue{typ: f.Value.Type()},
+			NoOptDefVal: f.NoOptDefVal,
+		})
+	}
+	cmd.LocalFlags().VisitAll(mirror)
+	cmd.InheritedFlags().VisitAll(mirror)
+	if fs.Lookup("help") == nil {
+		fs.BoolP("help", "h", false, "")
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return false, false, false
+	}
+	return schema, scopes, true
 }

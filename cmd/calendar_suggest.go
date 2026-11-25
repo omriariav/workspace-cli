@@ -68,6 +68,11 @@ func parseSuggestDuration(s string) (time.Duration, error) {
 		if n <= 0 {
 			return 0, fmt.Errorf("must be positive")
 		}
+		// Bound the minute count before multiplying so a huge value
+		// cannot overflow into a negative duration.
+		if n > int(maxSuggestDuration/time.Minute) {
+			return 0, fmt.Errorf("must be at most 24h")
+		}
 		return time.Duration(n) * time.Minute, nil
 	}
 	d, err := time.ParseDuration(s)
@@ -77,8 +82,14 @@ func parseSuggestDuration(s string) (time.Duration, error) {
 	if d <= 0 {
 		return 0, fmt.Errorf("must be positive")
 	}
+	if d > maxSuggestDuration {
+		return 0, fmt.Errorf("must be at most 24h")
+	}
 	return d, nil
 }
+
+// maxSuggestDuration is the longest meeting suggest-time will look for.
+const maxSuggestDuration = 24 * time.Hour
 
 // parseWorkingHours parses "HH:MM-HH:MM" into offsets from midnight.
 // "any" (or an empty value) means the whole day.
@@ -286,40 +297,9 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	resp, err := svc.Freebusy.Query(&calendar.FreeBusyRequest{
-		TimeMin: from.Format(time.RFC3339),
-		TimeMax: to.Format(time.RFC3339),
-		Items:   items,
-	}).Do()
+	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
 	if err != nil {
-		return p.PrintError(fmt.Errorf("failed to query free/busy: %w", err))
-	}
-
-	var busy []timeSpan
-	checked := []string{}
-	unavailable := []map[string]interface{}{}
-	for _, item := range items {
-		fb, ok := resp.Calendars[item.Id]
-		if !ok {
-			unavailable = append(unavailable, map[string]interface{}{"calendar": item.Id, "reason": "missing from response"})
-			continue
-		}
-		if len(fb.Errors) > 0 {
-			unavailable = append(unavailable, map[string]interface{}{"calendar": item.Id, "reason": fb.Errors[0].Reason})
-			continue
-		}
-		checked = append(checked, item.Id)
-		for _, period := range fb.Busy {
-			start, err1 := time.Parse(time.RFC3339, period.Start)
-			end, err2 := time.Parse(time.RFC3339, period.End)
-			if err1 != nil || err2 != nil {
-				return p.PrintError(fmt.Errorf("unexpected busy period for %s: %s - %s", item.Id, period.Start, period.End))
-			}
-			busy = append(busy, timeSpan{Start: start, End: end})
-		}
-	}
-	if len(checked) == 0 {
-		return p.PrintError(fmt.Errorf("none of the requested calendars could be read; no suggestions made"))
+		return p.PrintError(err)
 	}
 
 	slots := suggestSlots(busy, from, to, dur, whStart, whEnd, loc, includeWeekends, max)
@@ -343,4 +323,46 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 		"suggestions":       suggestions,
 		"count":             len(suggestions),
 	})
+}
+
+// queryBusySpans runs the free/busy query and returns the busy periods of
+// the calendars that could be read, the IDs of those calendars, and the
+// calendars that could not be read (with the reason).
+func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem, from, to time.Time) (busy []timeSpan, checked []string, unavailable []map[string]interface{}, err error) {
+	resp, err := svc.Freebusy.Query(&calendar.FreeBusyRequest{
+		TimeMin: from.Format(time.RFC3339),
+		TimeMax: to.Format(time.RFC3339),
+		Items:   items,
+	}).Do()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to query free/busy: %w", err)
+	}
+
+	checked = []string{}
+	unavailable = []map[string]interface{}{}
+	for _, item := range items {
+		fb, ok := resp.Calendars[item.Id]
+		if !ok {
+			unavailable = append(unavailable, map[string]interface{}{"calendar": item.Id, "reason": "missing from response"})
+			continue
+		}
+		if len(fb.Errors) > 0 {
+			unavailable = append(unavailable, map[string]interface{}{"calendar": item.Id, "reason": fb.Errors[0].Reason})
+			continue
+		}
+		checked = append(checked, item.Id)
+		for _, period := range fb.Busy {
+			start, err1 := time.Parse(time.RFC3339, period.Start)
+			end, err2 := time.Parse(time.RFC3339, period.End)
+			if err1 != nil || err2 != nil {
+				return nil, nil, nil, fmt.Errorf("unexpected busy period for %s: %s - %s", item.Id, period.Start, period.End)
+			}
+			busy = append(busy, timeSpan{Start: start, End: end})
+		}
+	}
+	if len(checked) == 0 {
+		return nil, nil, nil, fmt.Errorf("none of the requested calendars could be read; no suggestions made")
+	}
+
+	return busy, checked, unavailable, nil
 }

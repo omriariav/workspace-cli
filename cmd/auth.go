@@ -127,9 +127,16 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	// Merge with existing token to preserve refresh token
+	// Only an incremental login (--add) may keep the previous refresh
+	// token: its grant is a subset of the new one. A replacing login must
+	// come with its own refresh token, otherwise a login that narrows
+	// access (e.g. --readonly) would keep refreshing with the old, wider
+	// grant while reporting the narrower one.
 	existing, _ := auth.LoadToken()
-	token = auth.MergeToken(existing, token)
+	token, err = loginTokenToStore(existing, token, add)
+	if err != nil {
+		return p.PrintError(err)
+	}
 
 	if err := auth.SaveToken(token); err != nil {
 		return p.PrintError(err)
@@ -150,6 +157,19 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		"services":  access,
 		"read_only": allReadOnly(access),
 	})
+}
+
+// loginTokenToStore decides which token a login persists. An incremental
+// login may fall back to the previous refresh token; a replacing login
+// must bring its own.
+func loginTokenToStore(existing, incoming *oauth2.Token, add bool) (*oauth2.Token, error) {
+	if add {
+		return auth.MergeToken(existing, incoming), nil
+	}
+	if incoming.RefreshToken == "" {
+		return nil, fmt.Errorf("Google returned no refresh token for this login, so the previous authorization was left unchanged; run `gws auth logout` and then `gws auth login` again")
+	}
+	return incoming, nil
 }
 
 // existingGrantedAccess returns the access levels recorded by earlier

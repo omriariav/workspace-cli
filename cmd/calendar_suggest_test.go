@@ -1,8 +1,18 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/googleapi"
+	"google.golang.org/api/option"
 )
 
 func mustTime(t *testing.T, s string) time.Time {
@@ -33,7 +43,11 @@ func TestParseSuggestDuration(t *testing.T) {
 			t.Errorf("parseSuggestDuration(%q) = %v, %v; want %v", in, got, err, want)
 		}
 	}
-	for _, in := range []string{"", "0", "-5", "-30m", "soon"} {
+	if got, err := parseSuggestDuration("1440"); err != nil || got != 24*time.Hour {
+		t.Errorf("24h in minutes = %v, %v", got, err)
+	}
+	// Huge values must be rejected, not overflow into a negative duration.
+	for _, in := range []string{"", "0", "-5", "-30m", "soon", "1441", "25h", "9223372036854775807", "153722867281"} {
 		if _, err := parseSuggestDuration(in); err == nil {
 			t.Errorf("parseSuggestDuration(%q) should fail", in)
 		}
@@ -174,5 +188,126 @@ func TestSuggestSlots_ClipsToRangeAndHonoursTimezone(t *testing.T) {
 	full := []timeSpan{{mustTime(t, "2026-12-01T00:00:00Z"), mustTime(t, "2026-12-02T12:00:00Z")}}
 	if none := suggestSlots(full, from, to, 30*time.Minute, 9*time.Hour, 17*time.Hour, loc, false, 5); len(none) != 0 {
 		t.Errorf("expected no suggestions on a busy day, got %v", none)
+	}
+}
+
+func newSuggestTestService(t *testing.T, handler http.HandlerFunc) *calendar.Service {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	svc, err := calendar.NewService(context.Background(), option.WithoutAuthentication(), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create calendar service: %v", err)
+	}
+	return svc
+}
+
+// TestQueryBusySpans_MockServer drives the free/busy request and response
+// handling behind suggest-time: the request body, per-calendar errors, and
+// the suggestions computed from the returned busy periods.
+func TestQueryBusySpans_MockServer(t *testing.T) {
+	var got calendar.FreeBusyRequest
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/freeBusy" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("bad request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
+			Calendars: map[string]calendar.FreeBusyCalendar{
+				"primary": {Busy: []*calendar.TimePeriod{
+					{Start: "2026-12-01T09:00:00Z", End: "2026-12-01T11:00:00Z"},
+				}},
+				"a@example.com": {Busy: []*calendar.TimePeriod{
+					{Start: "2026-12-01T10:30:00Z", End: "2026-12-01T15:00:00Z"},
+				}},
+				"b@example.com": {Errors: []*calendar.Error{{Domain: "global", Reason: "notFound"}}},
+				// "c@example.com" is absent from the response.
+			},
+		})
+	})
+
+	from := mustTime(t, "2026-12-01T00:00:00Z")
+	to := mustTime(t, "2026-12-02T00:00:00Z")
+	items := []*calendar.FreeBusyRequestItem{{Id: "primary"}, {Id: "a@example.com"}, {Id: "b@example.com"}, {Id: "c@example.com"}}
+
+	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	if err != nil {
+		t.Fatalf("queryBusySpans: %v", err)
+	}
+
+	if got.TimeMin != "2026-12-01T00:00:00Z" || got.TimeMax != "2026-12-02T00:00:00Z" || len(got.Items) != 4 || got.Items[1].Id != "a@example.com" {
+		t.Errorf("unexpected free/busy request: %+v", got)
+	}
+	if strings.Join(checked, ",") != "primary,a@example.com" {
+		t.Errorf("checked = %v", checked)
+	}
+	if len(unavailable) != 2 ||
+		unavailable[0]["calendar"] != "b@example.com" || unavailable[0]["reason"] != "notFound" ||
+		unavailable[1]["calendar"] != "c@example.com" || unavailable[1]["reason"] != "missing from response" {
+		t.Errorf("unavailable = %v", unavailable)
+	}
+	if len(busy) != 2 {
+		t.Fatalf("busy spans = %v", busy)
+	}
+
+	// The two calendars are jointly busy 09:00-15:00, so the only free
+	// window in working hours is 15:00-17:00.
+	slots := suggestSlots(busy, from, to, time.Hour, 9*time.Hour, 17*time.Hour, time.UTC, false, 5)
+	if len(slots) != 1 || !slots[0].Start.Equal(mustTime(t, "2026-12-01T15:00:00Z")) || !slots[0].FreeUntil.Equal(mustTime(t, "2026-12-01T17:00:00Z")) {
+		t.Errorf("suggestions = %v", slots)
+	}
+}
+
+func TestQueryBusySpans_Failures(t *testing.T) {
+	from := mustTime(t, "2026-12-01T00:00:00Z")
+	to := mustTime(t, "2026-12-02T00:00:00Z")
+	items := []*calendar.FreeBusyRequestItem{{Id: "a@example.com"}}
+
+	// No readable calendar: refuse to suggest anything.
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
+			Calendars: map[string]calendar.FreeBusyCalendar{
+				"a@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
+			},
+		})
+	})
+	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil || !strings.Contains(err.Error(), "none of the requested calendars") {
+		t.Errorf("error = %v, want unreadable-calendars error", err)
+	}
+
+	// API errors keep their HTTP status for exit-code mapping.
+	svc = newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":{"code":403,"message":"Request had insufficient authentication scopes."}}`))
+	})
+	_, _, _, err := queryBusySpans(svc, items, from, to)
+	if err == nil {
+		t.Fatal("expected an API error")
+	}
+	var apiErr *googleapi.Error
+	if !errors.As(err, &apiErr) || apiErr.Code != http.StatusForbidden {
+		t.Errorf("error = %v, want wrapped 403", err)
+	}
+	if exitCodeForError(err) != ExitAuth {
+		t.Errorf("exit code = %d, want %d", exitCodeForError(err), ExitAuth)
+	}
+
+	// A malformed busy period is an error, not a silently ignored slot.
+	svc = newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
+			Calendars: map[string]calendar.FreeBusyCalendar{
+				"a@example.com": {Busy: []*calendar.TimePeriod{{Start: "not-a-time", End: "2026-12-01T10:00:00Z"}}},
+			},
+		})
+	})
+	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil || !strings.Contains(err.Error(), "unexpected busy period") {
+		t.Errorf("error = %v, want malformed-period error", err)
 	}
 }

@@ -39,6 +39,7 @@ var sensitiveCommands = map[string]string{
 	"calendar clear":           "deletes every event on a calendar",
 	"calendar share":           "shares a calendar",
 	"calendar unshare":         "removes access to a calendar",
+	"calendar update-acl":      "changes who can access a calendar",
 
 	// Tasks
 	"tasks delete":      "deletes a task",
@@ -67,6 +68,7 @@ var sensitiveCommands = map[string]string{
 	"chat delete-space":  "deletes a chat space",
 	"chat add-member":    "adds a member to a chat space",
 	"chat remove-member": "removes a member from a chat space",
+	"chat update-member": "changes a member's role in a chat space",
 
 	// Contacts
 	"contacts delete":       "deletes a contact",

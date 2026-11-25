@@ -89,7 +89,8 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
   instead of replacing it. Without `--add`, a login replaces the previous
   grant.
 - Adding a service read-only never downgrades a service that already has
-  full access; to reduce access, log in again without `--add`.
+  full access. To reduce access, run `gws auth logout` (which revokes the
+  old grant) and then log in again with the narrower options.
 - `gws auth status` reports the access level per service (`full` or
   `readonly`) and `read_only: true` when nothing has write access.
 
@@ -142,11 +143,11 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   approval, then re-run the same command with `--yes`.** Never add `--yes`
   on your own initiative.
 - Covered: Gmail send/reply/forward/send-draft and trash/delete commands;
-  Calendar delete, clear, share, unshare; Tasks delete/clear; Drive delete,
-  empty-trash, share/unshare/update-permission and comment/revision/drive
-  deletes; Docs trash; Sheets delete-sheet; Slides delete-slide; Chat send,
-  delete, delete-space, add/remove-member; Contacts deletes; Events
-  subscription delete.
+  Calendar delete, clear, share, unshare, update-acl; Tasks delete/clear;
+  Drive delete, empty-trash, share/unshare/update-permission and
+  comment/revision/drive deletes; Docs trash; Sheets delete-sheet; Slides
+  delete-slide; Chat send, delete, delete-space, add/remove/update-member;
+  Contacts deletes; Events subscription delete.
 
 ## First-Time Setup
 

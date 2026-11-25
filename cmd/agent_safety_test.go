@@ -10,6 +10,7 @@ import (
 	"github.com/omriariav/workspace-cli/internal/auth"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/oauth2"
 )
 
 // --- confirmation gate ---
@@ -178,11 +179,67 @@ func TestIntrospection_BothFlags(t *testing.T) {
 	}
 }
 
-func TestIntrospection_UnknownCommand(t *testing.T) {
+func TestIntrospection_UnknownCommandFallsThrough(t *testing.T) {
+	// Normal execution reports the unknown command (exit code 2).
 	var out bytes.Buffer
 	handled, err := handleIntrospection(rootCmd, []string{"nope", "--schema"}, &out)
-	if !handled || err == nil {
-		t.Errorf("unknown command should be handled with an error, got handled=%v err=%v", handled, err)
+	if handled || err != nil || out.Len() != 0 {
+		t.Errorf("unknown command should fall through, got handled=%v err=%v out=%q", handled, err, out.String())
+	}
+}
+
+func TestIntrospection_FlagValueIsNotTheFlag(t *testing.T) {
+	// "--schema" here is the value of --body: the command must run.
+	cases := [][]string{
+		{"gmail", "send", "--to", "a@example.com", "--subject", "Hi", "--body", "--schema"},
+		{"gmail", "send", "--to", "a@example.com", "--subject", "--show-scopes", "--body", "x"},
+		{"gmail", "send", "--body=--schema", "--to", "a@example.com"},
+		{"gmail", "list", "--schema=false"},
+		{"gmail", "list", "--no-such-flag", "--schema"},
+	}
+	for _, args := range cases {
+		var out bytes.Buffer
+		handled, err := handleIntrospection(rootCmd, args, &out)
+		if handled || err != nil || out.Len() != 0 {
+			t.Errorf("%v: expected fall-through, got handled=%v err=%v out=%q", args, handled, err, out.String())
+		}
+	}
+
+	// The real flag still works alongside flags that take values.
+	for _, args := range [][]string{
+		{"gmail", "send", "--to", "a@example.com", "--schema"},
+		{"gmail", "send", "--schema=true", "--body", "x"},
+		{"--format", "yaml", "gmail", "send", "--schema"},
+	} {
+		if _, handled := runIntrospection(t, args...); !handled {
+			t.Errorf("%v: expected introspection", args)
+		}
+	}
+}
+
+func TestIntrospection_DoesNotMutateCommandFlags(t *testing.T) {
+	send, _, _ := rootCmd.Find([]string{"gmail", "send"})
+	runIntrospection(t, "gmail", "send", "--attachment", "a.pdf", "--to", "x@example.com", "--schema")
+	if send.Flags().Changed("attachment") || send.Flags().Changed("to") {
+		t.Error("introspection must not set the command's real flags")
+	}
+}
+
+func TestLoginTokenToStore(t *testing.T) {
+	old := &oauth2.Token{AccessToken: "old", RefreshToken: "old-refresh"}
+
+	// Replacing login without a refresh token must not inherit the old grant.
+	if _, err := loginTokenToStore(old, &oauth2.Token{AccessToken: "new"}, false); err == nil {
+		t.Error("replacing login without a refresh token should fail")
+	}
+	got, err := loginTokenToStore(old, &oauth2.Token{AccessToken: "new", RefreshToken: "new-refresh"}, false)
+	if err != nil || got.RefreshToken != "new-refresh" {
+		t.Errorf("replacing login = %+v, %v", got, err)
+	}
+	// Incremental login may keep the previous refresh token.
+	got, err = loginTokenToStore(old, &oauth2.Token{AccessToken: "new"}, true)
+	if err != nil || got.AccessToken != "new" || got.RefreshToken != "old-refresh" {
+		t.Errorf("incremental login = %+v, %v", got, err)
 	}
 }
 
