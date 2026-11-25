@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
 	"github.com/spf13/cobra"
@@ -283,13 +285,30 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	return hint + fmt.Sprintf("Grant them with: gws auth login --add --services %s", joined)
 }
 
-// discardValue is a flag value that accepts anything and stores nothing.
-// It reports the mirrored flag's type so pflag keeps treating bool flags
-// as value-less.
+// discardValue is a flag value that stores nothing. It reports the
+// mirrored flag's type so pflag keeps treating bool flags as value-less,
+// and it rejects values the real flag would reject for the common scalar
+// types, so `--max=abc --schema` is still reported as the usage error it
+// is rather than answered as if the command line were valid.
 type discardValue struct{ typ string }
 
-func (d *discardValue) String() string   { return "" }
-func (d *discardValue) Set(string) error { return nil }
+func (d *discardValue) String() string { return "" }
+func (d *discardValue) Set(v string) error {
+	var err error
+	switch d.typ {
+	case "bool":
+		_, err = strconv.ParseBool(v)
+	case "int", "int8", "int16", "int32", "int64", "count":
+		_, err = strconv.ParseInt(v, 0, 64)
+	case "uint", "uint8", "uint16", "uint32", "uint64":
+		_, err = strconv.ParseUint(v, 0, 64)
+	case "float32", "float64":
+		_, err = strconv.ParseFloat(v, 64)
+	case "duration":
+		_, err = time.ParseDuration(v)
+	}
+	return err
+}
 func (d *discardValue) Type() string     { return d.typ }
 func (d *discardValue) IsBoolFlag() bool { return d.typ == "bool" }
 

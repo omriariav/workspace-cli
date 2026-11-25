@@ -174,8 +174,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
 - Covered when a flag is used: `drive update --trashed`, `chat setup-space
   --members`, `calendar create --attendees`, `calendar update
   --add-attendees`, `calendar rsvp --message`, `forms update --file`, Drive commands given a
-  destination folder (`drive copy --folder`, `drive convert --folder`,
-  `drive upload --folder`, `drive create-folder --parent`), and `gmail label --add` / `gmail
+  destination folder (`drive upload --folder`, `drive create-folder --parent`), and `gmail label --add` / `gmail
   batch-modify --add-labels` when the labels include `TRASH` or `SPAM`.
 - Covered explicitly: `docs replace-content` (replaces the whole document
   body); `events subscriptions create`, `reactivate`, `renew` and
@@ -183,7 +182,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   Pub/Sub topic); `auth logout` (revokes the stored login); commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`, `unsubscribe`, `move`; Drive `share`, `unshare`,
-  `update-permission`, `move`, `add-comment`, `reply`,
+  `update-permission`, `move`, `copy`, `convert`, `add-comment`, `reply`,
   `start-approval`, `reassign-approval`; Chat
   `add-member`, `update-member`).
 - Not covered: creating or editing content, `untrash`, and responding to

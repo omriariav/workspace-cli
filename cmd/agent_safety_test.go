@@ -316,6 +316,10 @@ func TestIntrospection_FlagValueIsNotTheFlag(t *testing.T) {
 		{"gmail", "send", "--body=--schema", "--to", "a@example.com"},
 		{"gmail", "list", "--schema=false"},
 		{"gmail", "list", "--no-such-flag", "--schema"},
+		// A value the real flag would reject is still a usage error.
+		{"calendar", "suggest-time", "--max=abc", "--schema"},
+		{"calendar", "suggest-time", "--max", "abc", "--show-scopes"},
+		{"calendar", "suggest-time", "--include-weekends=maybe", "--schema"},
 	}
 	for _, args := range cases {
 		var out bytes.Buffer
@@ -330,6 +334,7 @@ func TestIntrospection_FlagValueIsNotTheFlag(t *testing.T) {
 		{"gmail", "send", "--to", "a@example.com", "--schema"},
 		{"gmail", "send", "--schema=true", "--body", "x"},
 		{"--format", "yaml", "gmail", "send", "--schema"},
+		{"calendar", "suggest-time", "--max=3", "--include-weekends", "--schema"},
 	} {
 		if _, handled := runIntrospection(t, args...); !handled {
 			t.Errorf("%v: expected introspection", args)
@@ -377,7 +382,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"drive", "add-comment"}, {"drive", "reply"},
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},
-		{"drive", "move"},
+		{"drive", "move"}, {"drive", "copy"}, {"drive", "convert"},
 		{"calendar", "move"},
 	}
 	for _, path := range covered {

@@ -63,6 +63,10 @@ var sensitiveCommands = map[string]string{
 	"drive unshare":           "removes access to a file",
 	"drive update-permission": "changes who can access a file",
 	"drive move":              "moves a file, which changes who can access it if the folders are shared differently",
+	// A copy lands in --folder or, when that is omitted, beside the source,
+	// and takes on that folder's sharing either way.
+	"drive copy":              "creates a copy of a file, which takes on the sharing of the folder it lands in",
+	"drive convert":           "creates a converted copy of a file, which takes on the sharing of the folder it lands in",
 	"drive add-comment":       "posts a comment on a file, visible to everyone with access",
 	"drive reply":             "posts a reply to a comment, visible to everyone with access",
 	"drive start-approval":    "sends an approval request to reviewers",
@@ -112,8 +116,6 @@ var conditionalSensitive = map[string]conditionalRule{
 	"calendar update":  {flag: "add-attendees", effect: "invites attendees to an event"},
 	"calendar rsvp":    {flag: "message", effect: "sends a message to all attendees of an event"},
 	// Placing a file in a specific folder gives it that folder's sharing.
-	"drive copy":          {flag: "folder", effect: "puts a copy in a folder, where it takes on that folder's sharing"},
-	"drive convert":       {flag: "folder", effect: "puts the converted file in a folder, where it takes on that folder's sharing"},
 	"drive upload":        {flag: "folder", effect: "uploads a file into a folder, where it takes on that folder's sharing"},
 	"drive create-folder": {flag: "parent", effect: "creates a folder inside another, where it takes on that folder's sharing"},
 	"forms update":        {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},
