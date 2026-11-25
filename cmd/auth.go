@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -281,6 +282,15 @@ func loginTokenToStore(incoming *oauth2.Token) (*oauth2.Token, error) {
 	return incoming, nil
 }
 
+// warnIfRefreshNotSaved reports a failure to store a refreshed token. The
+// command at hand still works, but if the refresh token was rotated the
+// stored login may stop working, so the user should hear about it.
+func warnIfRefreshNotSaved(w io.Writer, err error) {
+	if err != nil {
+		fmt.Fprintf(w, "Warning: the refreshed login could not be saved (%v); if later commands fail to authenticate, run `gws auth login` again\n", err)
+	}
+}
+
 // addGrantedAccess adds the per-service access levels and the read_only
 // summary to a status result. It adds nothing when no levels are recorded.
 func addGrantedAccess(result map[string]interface{}, access map[string]string) {
@@ -488,9 +498,20 @@ func unionScopes(a, b []string) []string {
 	return out
 }
 
-// unrequestedScopes returns the granted scopes that gws knows and did not
-// ask for. Scopes gws does not use (such as `openid`, which Google adds on
-// its own) are ignored.
+// identityScopes are the sign-in scopes Google may add to a grant on its
+// own. They identify the account and give no access to Workspace data.
+var identityScopes = map[string]bool{
+	"openid":  true,
+	"email":   true,
+	"profile": true,
+	"https://www.googleapis.com/auth/userinfo.email":   true,
+	"https://www.googleapis.com/auth/userinfo.profile": true,
+}
+
+// unrequestedScopes returns the granted scopes that were not asked for.
+// Only the identity scopes above are tolerated; anything else — including
+// a scope gws has never heard of — is reported, since an unknown scope
+// could carry access that a read-only login was meant to exclude.
 func unrequestedScopes(requested, granted []string) []string {
 	asked := make(map[string]bool, len(requested))
 	for _, s := range requested {
@@ -498,7 +519,7 @@ func unrequestedScopes(requested, granted []string) []string {
 	}
 	var extra []string
 	for _, s := range granted {
-		if !asked[s] && isKnownScope(s) {
+		if !asked[s] && !identityScopes[s] {
 			extra = append(extra, s)
 		}
 	}
@@ -799,7 +820,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 
 		// Save refreshed token
-		_ = auth.SaveRefreshedToken(token, newToken)
+		warnIfRefreshNotSaved(os.Stderr, auth.SaveRefreshedToken(token, newToken))
 		token = newToken
 	}
 

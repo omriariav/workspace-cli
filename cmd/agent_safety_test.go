@@ -879,8 +879,9 @@ func TestUnrequestedScopes(t *testing.T) {
 	const pfx = "https://www.googleapis.com/auth/"
 	requested := []string{pfx + "userinfo.email", pfx + "gmail.readonly", pfx + "calendar.readonly"}
 
-	// Exactly what was asked for, plus `openid` that Google adds itself.
-	if extra := unrequestedScopes(requested, append([]string{"openid"}, requested...)); len(extra) != 0 {
+	// Exactly what was asked for, plus the identity scopes Google adds.
+	withIdentity := append([]string{"openid", "email", "profile", pfx + "userinfo.profile"}, requested...)
+	if extra := unrequestedScopes(requested, withIdentity); len(extra) != 0 {
 		t.Errorf("extra = %v, want none", extra)
 	}
 	// Write scopes from an earlier grant coming back must be caught.
@@ -888,9 +889,27 @@ func TestUnrequestedScopes(t *testing.T) {
 	if extra := strings.Join(shortScopeNames(unrequestedScopes(requested, returned)), ","); extra != "gmail.send,drive" {
 		t.Errorf("extra = %q, want gmail.send,drive", extra)
 	}
+	// So must a scope gws has never heard of: it could grant access a
+	// read-only login was meant to exclude.
+	unknown := append(append([]string(nil), requested...), pfx+"cloud-platform", pfx+"some.future.scope")
+	if extra := strings.Join(shortScopeNames(unrequestedScopes(requested, unknown)), ","); extra != "cloud-platform,some.future.scope" {
+		t.Errorf("extra = %q, want the unknown scopes reported", extra)
+	}
 	// Fewer scopes than requested is not this check's concern.
 	if extra := unrequestedScopes(requested, requested[:1]); len(extra) != 0 {
 		t.Errorf("extra = %v", extra)
+	}
+}
+
+func TestWarnIfRefreshNotSaved(t *testing.T) {
+	var out bytes.Buffer
+	warnIfRefreshNotSaved(&out, nil)
+	if out.Len() != 0 {
+		t.Errorf("no warning expected on success: %q", out.String())
+	}
+	warnIfRefreshNotSaved(&out, errors.New("disk full"))
+	if !strings.Contains(out.String(), "could not be saved (disk full)") || !strings.Contains(out.String(), "gws auth login") {
+		t.Errorf("warning = %q", out.String())
 	}
 }
 

@@ -124,7 +124,12 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 
 	// Save refreshed token if it changed
 	if newToken.AccessToken != token.AccessToken {
-		_ = auth.SaveRefreshedToken(token, newToken)
+		// The command at hand still works, but if the refresh token was
+		// rotated the stored login may stop working, so say so. The error
+		// is a file or lock error and carries no credential.
+		if err := auth.SaveRefreshedToken(token, newToken); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: the refreshed login could not be saved (%v); if later commands fail to authenticate, run `gws auth login` again\n", err)
+		}
 	}
 
 	return &Factory{

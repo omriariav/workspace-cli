@@ -712,6 +712,37 @@ func TestQueryBusySpans_SingleGroupPartlyReadable(t *testing.T) {
 	}
 }
 
+// A null entry in the response must not crash the command. The Go client
+// models calendars and groups as values, so null decodes to an empty
+// entry rather than a nil pointer.
+func TestQueryBusySpans_NullEntriesDoNotPanic(t *testing.T) {
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"calendars":{"primary":null,"a@example.com":{"busy":[{"start":"2026-12-01T09:00:00Z","end":"2026-12-01T10:00:00Z"}]}},"groups":{"team@example.com":null}}`))
+	})
+	from := mustTime(t, "2026-12-01T00:00:00Z")
+	to := mustTime(t, "2026-12-02T00:00:00Z")
+	items := []*calendar.FreeBusyRequestItem{{Id: "primary"}, {Id: "a@example.com"}, {Id: "team@example.com"}}
+
+	busy, _, unavailable, err := queryBusySpans(svc, items, from, to)
+	if err != nil {
+		t.Fatalf("queryBusySpans: %v", err)
+	}
+	if len(busy) != 1 {
+		t.Errorf("busy = %v, want the one real period", busy)
+	}
+	// The null group has no members to read, so it is unavailable.
+	found := false
+	for _, u := range unavailable {
+		if u["calendar"] == "team@example.com" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("a null group should be reported as unavailable: %v", unavailable)
+	}
+}
+
 func newSuggestTestService(t *testing.T, handler http.HandlerFunc) *calendar.Service {
 	t.Helper()
 	server := httptest.NewServer(handler)
