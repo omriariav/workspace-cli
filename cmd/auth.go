@@ -128,8 +128,8 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	access := mergeGrantedAccess(existingAccess, services, readOnly)
 	scopes := loginScopes(services, readOnly, hasServiceSelection(cmd))
 
-	// previousScopes is what the stored authorization holds and --add must
-	// preserve. It is nil for a replacing login.
+	// previousScopes is the exact scope list the stored authorization
+	// holds, which --add must preserve. It is nil for a replacing login.
 	var previousScopes []string
 	previousAccount := ""
 	// The authorization this login starts from. --add extends it, so it
@@ -143,15 +143,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			// way to tell whether the account about to consent matches.
 			return p.PrintError(fmt.Errorf("could not confirm which Google account the stored authorization belongs to (%v), so --add was not started; try again, or run `gws auth login` without --add to replace it", err))
 		}
-		previousScopes = auth.LoadGrantedScopes()
 		// Ask for the whole merged grant explicitly: the previous scopes
 		// are re-requested, never assumed to carry over from an earlier
 		// grant, so the token holds exactly what this consent approved.
-		// A login that predates scope recording has no exact list; the
-		// scopes its recorded access levels stand for take its place, both
-		// in the request and in the check on what comes back.
-		if previousScopes == nil {
-			previousScopes = scopesForAccess(existingAccess)
+		previousScopes, err = storedScopes()
+		if err != nil {
+			// Guessing would mean asking again for scopes the user may
+			// have declined, or failing to preserve ones they hold.
+			return p.PrintError(fmt.Errorf("could not determine which scopes the stored authorization holds (%v), so --add was not started; try again, or run `gws auth login` without --add to replace it", err))
 		}
 		scopes = unionScopes(previousScopes, scopes)
 	}
@@ -307,29 +306,51 @@ func loginScopes(services []string, readOnly, scoped bool) []string {
 	return auth.ScopesForServices(services)
 }
 
-// scopesForAccess returns the scopes that make up the given per-service
-// access levels: the read-only set for read-only services and the full
-// set for everything else. Always includes userinfo scopes.
-func scopesForAccess(access map[string]string) []string {
-	var full, readOnly []string
-	for _, svc := range auth.ValidServiceNames() {
-		switch access[svc] {
-		case "":
-		case auth.AccessReadOnly, auth.AccessPartialReadOnly:
-			readOnly = append(readOnly, svc)
-		default:
-			full = append(full, svc)
-		}
+// lookupTokenScopes asks Google which scopes a stored token actually
+// holds, refreshing it first if needed. A variable so tests can replace
+// the network call.
+var lookupTokenScopes = func(token *oauth2.Token) ([]string, error) {
+	ctx := context.Background()
+	ts := auth.GetTokenSource(ctx, config.GetClientID(), config.GetClientSecret(), token)
+	fresh, err := ts.Token()
+	if err != nil {
+		return nil, err
 	}
-	seen := map[string]bool{}
-	var scopes []string
-	for _, s := range append(auth.ScopesForServices(full), auth.ReadOnlyScopesForServices(readOnly)...) {
-		if !seen[s] {
-			seen[s] = true
-			scopes = append(scopes, s)
-		}
+	svc, err := oauth2api.NewService(ctx, option.WithTokenSource(ts))
+	if err != nil {
+		return nil, err
 	}
-	return scopes
+	info, err := svc.Tokeninfo().AccessToken(fresh.AccessToken).Do()
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(info.Scope), nil
+}
+
+// storedScopes returns the exact scopes the stored authorization holds:
+// the list recorded at login, or, for a login that predates that record,
+// what Google reports for the stored token. It returns nil with no error
+// only when nothing is stored; a stored token whose scopes cannot be
+// determined is an error.
+func storedScopes() ([]string, error) {
+	if scopes := auth.LoadGrantedScopes(); len(scopes) > 0 {
+		return scopes, nil
+	}
+	if !auth.TokenExists() {
+		return nil, nil
+	}
+	token, err := auth.LoadToken()
+	if err != nil {
+		return nil, err
+	}
+	scopes, err := lookupTokenScopes(token)
+	if err != nil {
+		return nil, err
+	}
+	if len(scopes) == 0 {
+		return nil, fmt.Errorf("no scopes were reported for the stored token")
+	}
+	return scopes, nil
 }
 
 // lookupAccountID returns the stable Google account ID a token belongs to.

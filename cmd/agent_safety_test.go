@@ -612,38 +612,6 @@ func TestMergeGrantedAccess(t *testing.T) {
 	}
 }
 
-func TestScopesForAccess_RequestsTheWholeMergedGrant(t *testing.T) {
-	const pfx = "https://www.googleapis.com/auth/"
-	// Existing: gmail full, drive read-only. Adding tasks read-only must
-	// re-request all three, because an incremental grant cannot be relied
-	// on to carry earlier scopes over.
-	access := mergeGrantedAccess(map[string]string{"gmail": auth.AccessFull, "drive": auth.AccessReadOnly}, []string{"tasks"}, true)
-	scopes := scopesForAccess(access)
-
-	for _, want := range []string{"userinfo.email", "gmail.send", "gmail.readonly", "drive.readonly", "tasks.readonly"} {
-		if !containsStr(scopes, pfx+want) {
-			t.Errorf("merged request is missing %s: %v", want, scopes)
-		}
-	}
-	for _, unwanted := range []string{"drive", "drive.file", "tasks"} {
-		if containsStr(scopes, pfx+unwanted) {
-			t.Errorf("merged request must not widen to %s: %v", unwanted, scopes)
-		}
-	}
-	seen := map[string]bool{}
-	for _, s := range scopes {
-		if seen[s] {
-			t.Errorf("duplicate scope %s", s)
-		}
-		seen[s] = true
-	}
-	// A partial grant is re-requested in full; a partial read grant read-only.
-	partial := scopesForAccess(map[string]string{"gmail": auth.AccessPartial, "chat": auth.AccessPartialReadOnly})
-	if !containsStr(partial, pfx+"gmail.modify") || containsStr(partial, pfx+"chat.messages") || !containsStr(partial, pfx+"chat.messages.readonly") {
-		t.Errorf("partial levels = %v", partial)
-	}
-}
-
 func TestMissingScopes_ComparesScopeByScope(t *testing.T) {
 	const pfx = "https://www.googleapis.com/auth/"
 	previous := []string{pfx + "userinfo.email", pfx + "gmail.readonly", pfx + "gmail.send", pfx + "drive.readonly"}
@@ -809,38 +777,58 @@ func TestUnionScopes(t *testing.T) {
 	}
 }
 
-// A login from an older version recorded every service as granted in full
-// and has no exact scope list. --add stands those levels in for it: it
-// re-requests their scopes and checks the result against the same set.
-func TestAddOnLegacyLogin(t *testing.T) {
+func TestStoredScopes(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := lookupTokenScopes
+	t.Cleanup(func() { lookupTokenScopes = original })
+	lookups := 0
+	var reported []string
+	var lookupErr error
+	lookupTokenScopes = func(*oauth2.Token) ([]string, error) { lookups++; return reported, lookupErr }
+
+	// Nothing stored: nothing to preserve, no network call.
+	if got, err := storedScopes(); got != nil || err != nil || lookups != 0 {
+		t.Errorf("no stored token: %v, %v after %d lookups", got, err, lookups)
+	}
+
+	tok := &oauth2.Token{AccessToken: "a", RefreshToken: "r"}
+	if err := auth.SaveToken(tok); err != nil {
+		t.Fatal(err)
+	}
+	// A login from an older version has no recorded list, so Google is
+	// asked what the token really holds — here, Gmail without gmail.send,
+	// which the user declined back then. Nothing wider is assumed.
 	const pfx = "https://www.googleapis.com/auth/"
-	legacy := map[string]string{}
-	for _, svc := range auth.ValidServiceNames() {
-		legacy[svc] = auth.AccessFull
+	reported = []string{pfx + "userinfo.email", pfx + "gmail.readonly", pfx + "gmail.modify"}
+	got, err := storedScopes()
+	if err != nil || strings.Join(shortScopeNames(got), ",") != "userinfo.email,gmail.readonly,gmail.modify" {
+		t.Fatalf("legacy scopes = %v, %v", got, err)
 	}
-	previousScopes := scopesForAccess(legacy)
-	requested := unionScopes(previousScopes, auth.ScopesForServices([]string{"tasks"}))
-
-	// Google returns exactly what was requested: accepted. Re-deriving
-	// labels relabels groups as read-only, which is not a loss.
-	if lost := missingScopes(previousScopes, requested); len(lost) != 0 {
-		t.Fatalf("legacy --add rejected for %v", lost)
+	request := unionScopes(got, auth.ScopesForServices([]string{"tasks"}))
+	if containsStr(request, pfx+"gmail.send") {
+		t.Errorf("--add must not ask again for a scope the user declined: %v", request)
 	}
-	access, notGranted := deriveGrantedAccess(mergeGrantedAccess(legacy, []string{"tasks"}, false), requested)
-	if access["groups"] != auth.AccessReadOnly || access["gmail"] != auth.AccessFull || len(notGranted) != 0 {
-		t.Errorf("access = %v, notGranted = %v", access, notGranted)
+	if !containsStr(request, pfx+"tasks") || !containsStr(request, pfx+"gmail.modify") {
+		t.Errorf("--add request should keep held scopes and add the new service: %v", request)
 	}
 
-	// The user unticks gmail.send while adding: the login must be refused
-	// rather than overwrite the stored authorization.
-	var withoutSend []string
-	for _, s := range requested {
-		if s != pfx+"gmail.send" {
-			withoutSend = append(withoutSend, s)
-		}
+	// The scopes cannot be determined: an error, never a guess.
+	lookupErr = errors.New("network down")
+	if got, err := storedScopes(); err == nil || got != nil {
+		t.Errorf("failed lookup: %v, %v; want an error", got, err)
 	}
-	if lost := strings.Join(shortScopeNames(missingScopes(previousScopes, withoutSend)), ","); lost != "gmail.send" {
-		t.Errorf("lost = %q, want gmail.send", lost)
+	lookupErr, reported = nil, nil
+	if _, err := storedScopes(); err == nil {
+		t.Error("an empty scope report should be an error")
+	}
+
+	// A recorded list is used directly, without asking Google.
+	before := lookups
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, []string{"recorded-scope"}, "acct", tok); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := storedScopes(); err != nil || len(got) != 1 || got[0] != "recorded-scope" || lookups != before {
+		t.Errorf("recorded scopes = %v, %v after %d lookups", got, err, lookups-before)
 	}
 }
 
