@@ -341,6 +341,12 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 		// cause is a command that changes data; say that rather than
 		// assert it, since the exact scope the endpoint wanted is not
 		// known here.
+		if len(lacking) == 1 && lacking[0] == "events" {
+			// Changing data is not the test here: Chat and Meet
+			// subscriptions can be created and managed with read scopes.
+			// Only Drive targets need more.
+			return "Hint: events is authorized read-only, which covers Chat and Meet subscriptions. Subscriptions to Drive resources need full access: gws auth login --add --services events. For Chat or Meet targets, check that you can access the target itself."
+		}
 		return fmt.Sprintf("Hint: %s is authorized read-only. If this command changes data, grant full access with: gws auth login --add --services %s", joined, joined)
 	case incompleteReadOnly == len(lacking):
 		// Some read scopes were declined. Completing read-only access may

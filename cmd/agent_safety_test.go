@@ -1360,7 +1360,8 @@ func TestDeriveGrantedAccess(t *testing.T) {
 	granted := append(auth.ScopesForServices([]string{"gmail"}), // gmail: everything
 		pfx+"drive.readonly",    // drive: read-only only, although full was requested
 		pfx+"tasks.readonly",    // tasks: read-only as requested
-		pfx+"calendar.readonly", // calendar: read-only scope only
+		pfx+"calendar.readonly", // calendar: read-only scopes only
+		pfx+"calendar.acls.readonly",
 	)
 	requested := map[string]string{
 		"gmail":    auth.AccessFull,
@@ -1910,5 +1911,38 @@ func TestConfirmGate_SheetsMergeNeedsConfirmation(t *testing.T) {
 	}
 	if schema, _ := runIntrospection(t, "sheets", "merge", "--schema"); schema["sensitive"] != true {
 		t.Errorf("sheets merge --schema: sensitive = %v, want true", schema["sensitive"])
+	}
+}
+
+// A read-only Calendar login must be able to run every read command,
+// including `gws calendar acl`: Acl.list does not accept calendar.readonly.
+func TestReadOnlyCalendarScopesCoverACLs(t *testing.T) {
+	scopes := auth.ReadOnlyScopesForServices([]string{"calendar"})
+	for _, want := range []string{"calendar.readonly", "calendar.acls.readonly"} {
+		if !containsStr(scopes, "https://www.googleapis.com/auth/"+want) {
+			t.Errorf("read-only calendar scopes %v are missing %s", scopes, want)
+		}
+	}
+	for _, s := range scopes {
+		if s == "https://www.googleapis.com/auth/calendar" || s == "https://www.googleapis.com/auth/calendar.acls" {
+			t.Errorf("read-only calendar scopes include a write scope: %s", s)
+		}
+	}
+}
+
+// A read-only Events login already covers creating and managing Chat and
+// Meet subscriptions, so the hint must not suggest full access just
+// because the command changes something: only Drive targets need it.
+func TestReadOnlyScopeHint_EventsNamesTheDriveException(t *testing.T) {
+	create, _, err := rootCmd.Find([]string{"events", "subscriptions", "create"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hint := readOnlyScopeHint(create, errors.New("googleapi: Error 403: insufficient authentication scopes"), map[string]string{"events": auth.AccessReadOnly})
+	if !strings.Contains(hint, "covers Chat and Meet subscriptions") || !strings.Contains(hint, "Drive") {
+		t.Errorf("hint = %q, want it to name the Chat/Meet coverage and the Drive exception", hint)
+	}
+	if strings.Contains(hint, "If this command changes data") {
+		t.Errorf("hint = %q, must not tie full access to changing data", hint)
 	}
 }

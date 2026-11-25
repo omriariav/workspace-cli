@@ -41,8 +41,10 @@ var ServiceScopes = map[string][]string{
 // scope; commands that create, modify, or delete data fail with an
 // insufficient-scope error until write access is granted.
 var ReadOnlyServiceScopes = map[string][]string{
-	"gmail":         {"gmail.readonly"},
-	"calendar":      {"calendar.readonly"},
+	"gmail": {"gmail.readonly"},
+	// calendar.readonly does not cover Acl.list (`gws calendar acl`),
+	// which accepts only the ACL scopes or the full calendar scope.
+	"calendar":      {"calendar.readonly", "calendar.acls.readonly"},
 	"drive":         {"drive.readonly"},
 	"docs":          {"documents.readonly"},
 	"sheets":        {"spreadsheets.readonly"},
