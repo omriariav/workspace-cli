@@ -10,9 +10,10 @@ import (
 
 // acquireLock creates path + ".lock" with O_CREATE|O_EXCL and returns a
 // function that removes it. This platform has no OS-enforced file lock
-// wired up, so a lock left by a process that died is taken over once it
-// is older than staleLockAge. That is best effort: a holder paused for
-// longer than that can lose its lock.
+// wired up, so a lock left by a process that died cannot be told from one
+// that is held, and it cannot be taken over safely: two processes could
+// both judge it stale, and the second remove the lock the first had just
+// created. A stale lock is therefore reported, not removed.
 func acquireLock(path string) (unlock func(), err error) {
 	lockPath := path + lockSuffix
 	deadline := time.Now().Add(lockTimeout)
@@ -33,13 +34,7 @@ func acquireLock(path string) (unlock func(), err error) {
 			return nil, fmt.Errorf("lock file error: %w", createErr)
 		}
 		if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > staleLockAge {
-			if rmErr := os.Remove(lockPath); rmErr == nil || os.IsNotExist(rmErr) {
-				continue
-			} else {
-				// Retrying would never end: a stale lock that cannot be
-				// removed stays where it is.
-				return nil, fmt.Errorf("lock file error: stale lock %s could not be removed: %w", lockPath, rmErr)
-			}
+			return nil, fmt.Errorf("lock file error: %s is %s old and was probably left by a gws process that did not exit cleanly; if no gws command is running, delete it and try again", lockPath, time.Since(info.ModTime()).Round(time.Second))
 		}
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("%w: %s", errLockTimeout, lockPath)

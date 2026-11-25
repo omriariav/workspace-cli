@@ -130,11 +130,12 @@ var conditionalSensitive = map[string]conditionalRule{
 	"drive unresolve-comment": {flag: "content", effect: "posts a reply on a file comment, visible to everyone with access"},
 	"forms update":            {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},
 	// An empty replacement deletes every match.
-	"docs replace":        {flag: "replace", effect: "deletes every occurrence of the matched text", when: isEmptyValue, values: emptyValue},
-	"slides replace-text": {flag: "replace", effect: "deletes every occurrence of the matched text", when: isEmptyValue, values: emptyValue},
-	"sheets find-replace": {flag: "replace", effect: "deletes every occurrence of the matched text", when: isEmptyValue, values: emptyValue},
-	"gmail label":         {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
-	"gmail batch-modify":  {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
+	"docs replace":             {flag: "replace", effect: "deletes every occurrence of the matched text", when: isEmptyValue, values: emptyValue},
+	"slides replace-text":      {flag: "replace", effect: "deletes every occurrence of the matched text", when: isEmptyValue, values: emptyValue},
+	"docs replace-named-range": {flag: "text", effect: "erases the contents of every range with that name", when: isEmptyValue, values: emptyValue},
+	"sheets find-replace":      {flag: "replace", effect: "deletes every occurrence of the matched text", when: isEmptyValue, values: emptyValue},
+	"gmail label":              {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
+	"gmail batch-modify":       {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam, values: trashOrSpamLabels},
 }
 
 // conditionalRule makes a command sensitive when flag is set, or, if when

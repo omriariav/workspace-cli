@@ -474,7 +474,7 @@ Usage: gws calendar suggest-time [flags]
 |------|------|---------|----------|-------------|
 | `--from` | string | | Yes | Start of the search range |
 | `--to` | string | | Yes | End of the search range; a date-only value includes that day |
-| `--duration` | string | `30m` | No | Meeting length, e.g. `30m`, `1h30m`, or minutes as a number |
+| `--duration` | string | `30m` | No | Meeting length in whole minutes, up to 24 hours: e.g. `30m`, `1h30m`, or minutes as a number |
 | `--calendars` | string | `primary` | No | Comma-separated calendar IDs that must be free |
 | `--attendees` | string | | No | Comma-separated attendee emails that must also be free |
 | `--working-hours` | string | `09:00-17:00` | No | Daily window `HH:MM-HH:MM`, or `any` for the whole day |

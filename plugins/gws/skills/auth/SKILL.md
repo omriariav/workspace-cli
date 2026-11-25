@@ -202,7 +202,8 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   destination folder (`drive upload --folder`, `drive create-folder --parent`), and `gmail label --add` / `gmail
   batch-modify --add-labels` when the labels include `TRASH` or `SPAM`, and
   `docs replace`, `slides replace-text` and `sheets find-replace` when
-  `--replace` is empty (that deletes every match).
+  `--replace` is empty, and `docs replace-named-range` when `--text` is
+  empty (that deletes every match).
 - Covered explicitly: `docs replace-content` (replaces the whole document
   body); `sheets merge` (discards every value in the range except the upper-left one); `sheets copy-to` (copies a sheet into another spreadsheet); `events subscriptions create`, `reactivate`, `renew` and
   `update` (start, resume, extend or change delivery of events to a

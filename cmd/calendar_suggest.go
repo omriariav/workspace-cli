@@ -41,7 +41,7 @@ func init() {
 
 	calendarSuggestTimeCmd.Flags().String("from", "", "Start of the search range (required)")
 	calendarSuggestTimeCmd.Flags().String("to", "", "End of the search range; a date-only value includes that day (required)")
-	calendarSuggestTimeCmd.Flags().String("duration", "30m", "Meeting length, e.g. 30m, 1h, 1h30m, or minutes as a number")
+	calendarSuggestTimeCmd.Flags().String("duration", "30m", "Meeting length in whole minutes, up to 24h: e.g. 30m, 1h, 1h30m, or minutes as a number")
 	calendarSuggestTimeCmd.Flags().String("calendars", "primary", "Comma-separated calendar IDs that must be free")
 	calendarSuggestTimeCmd.Flags().String("attendees", "", "Comma-separated attendee emails that must also be free")
 	calendarSuggestTimeCmd.Flags().String("working-hours", "09:00-17:00", "Daily window to search, HH:MM-HH:MM, or 'any' for the whole day")
