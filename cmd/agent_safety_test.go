@@ -356,6 +356,8 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"events", "subscriptions", "delete"},
 		{"events", "subscriptions", "create"},
 		{"events", "subscriptions", "reactivate"},
+		{"events", "subscriptions", "renew"}, {"events", "subscriptions", "update"},
+		{"auth", "logout"},
 		{"drive", "start-approval"}, {"drive", "reassign-approval"},
 		{"drive", "add-comment"}, {"drive", "reply"},
 		{"calendar", "unsubscribe"},
@@ -376,7 +378,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 	notCovered := [][]string{
 		{"gmail", "list"}, {"gmail", "untrash"}, {"gmail", "untrash-thread"}, {"gmail", "create-draft"},
 		{"drive", "download"}, {"docs", "read"}, {"sheets", "write"}, {"calendar", "create"},
-		{"auth", "logout"}, {"hooks", "disable"}, {"gmail"}, {"events", "subscriptions"},
+		{"auth", "status"}, {"hooks", "disable"}, {"gmail"}, {"events", "subscriptions"},
 	}
 	for _, path := range notCovered {
 		cmd, _, err := rootCmd.Find(path)
@@ -518,7 +520,7 @@ func TestConditionalSensitive_GmailLabelsToTrashOrSpam(t *testing.T) {
 }
 
 func TestConditionalSensitive_RulesResolveAndTrigger(t *testing.T) {
-	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash", "event-types": "google.workspace.chat.message.v1.created", "file": "changes.json", "folder": "folder-id", "parent": "folder-id"}
+	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash", "file": "changes.json", "folder": "folder-id", "parent": "folder-id"}
 	for key, rule := range conditionalSensitive {
 		cmd, _, err := rootCmd.Find(strings.Fields(key))
 		if err != nil || commandKey(cmd) != key {

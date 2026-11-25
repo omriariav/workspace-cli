@@ -95,18 +95,22 @@ var sensitiveCommands = map[string]string{
 	"events subscriptions delete":     "deletes an event subscription",
 	"events subscriptions create":     "starts ongoing delivery of Workspace events to a Pub/Sub topic",
 	"events subscriptions reactivate": "resumes delivery of Workspace events to a Pub/Sub topic",
+	"events subscriptions renew":      "extends how long Workspace events are delivered to a Pub/Sub topic",
+	"events subscriptions update":     "changes what a subscription delivers or how long it runs",
+
+	// Credentials
+	"auth logout": "revokes the stored Google authorization and deletes the local login",
 }
 
 // conditionalSensitive lists commands that send, share or delete only when
 // a specific flag carries a value: the same command without that flag is
 // an ordinary create or edit.
 var conditionalSensitive = map[string]conditionalRule{
-	"drive update":                {flag: "trashed", effect: "moves a file to Trash"},
-	"chat setup-space":            {flag: "members", effect: "creates a chat space and adds members to it"},
-	"calendar create":             {flag: "attendees", effect: "invites attendees to an event"},
-	"calendar update":             {flag: "add-attendees", effect: "invites attendees to an event"},
-	"calendar rsvp":               {flag: "message", effect: "sends a message to all attendees of an event"},
-	"events subscriptions update": {flag: "event-types", effect: "changes which Workspace events a subscription delivers"},
+	"drive update":     {flag: "trashed", effect: "moves a file to Trash"},
+	"chat setup-space": {flag: "members", effect: "creates a chat space and adds members to it"},
+	"calendar create":  {flag: "attendees", effect: "invites attendees to an event"},
+	"calendar update":  {flag: "add-attendees", effect: "invites attendees to an event"},
+	"calendar rsvp":    {flag: "message", effect: "sends a message to all attendees of an event"},
 	// Placing a file in a specific folder gives it that folder's sharing.
 	"drive copy":          {flag: "folder", effect: "puts a copy in a folder, where it takes on that folder's sharing"},
 	"drive convert":       {flag: "folder", effect: "puts the converted file in a folder, where it takes on that folder's sharing"},
