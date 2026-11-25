@@ -234,10 +234,15 @@ func mergeGrantedAccess(existing map[string]string, services []string, readOnly 
 // not just the requested ones: incremental authorization can return scopes
 // granted in an earlier login that local metadata no longer knows about.
 //
-// A service is full when every one of its full scopes is present,
-// read-only when only its read-only scopes are, and absent otherwise.
-// Where the two sets coincide (e.g. groups, whose scopes are all
-// read-only) the requested label is kept, defaulting to read-only.
+// A service is:
+//   - full when every one of its full scopes is present;
+//   - partial when it holds at least one write scope but not all of them
+//     (the user unticked some on the consent screen) — never read-only;
+//   - read-only when it holds its read-only scopes and no write scope;
+//   - absent otherwise.
+//
+// Where the full and read-only sets coincide (e.g. groups, whose scopes
+// are all read-only) the requested label is kept, defaulting to read-only.
 // notGranted lists requested services that came back with less than was
 // asked for.
 func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (access map[string]string, notGranted []string) {
@@ -261,9 +266,27 @@ func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (a
 		full := auth.ScopesForServices(one)
 		readOnly := auth.ReadOnlyScopesForServices(one)
 
+		// Write scopes: in the full set but not in the read-only set.
+		isReadOnlyScope := make(map[string]bool, len(readOnly))
+		for _, s := range readOnly {
+			isReadOnlyScope[s] = true
+		}
+		hasWriteScope := false
+		for _, s := range full {
+			if !isReadOnlyScope[s] && granted[s] {
+				hasWriteScope = true
+				break
+			}
+		}
+
 		switch {
 		case hasAll(full) && (len(full) > len(readOnly) || level == auth.AccessFull):
 			access[svc] = auth.AccessFull
+		case hasWriteScope:
+			access[svc] = auth.AccessPartial
+			if wasRequested {
+				notGranted = append(notGranted, svc+" (only some scopes)")
+			}
 		case hasAll(readOnly):
 			access[svc] = auth.AccessReadOnly
 			if level == auth.AccessFull {
@@ -271,6 +294,14 @@ func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (a
 			}
 		case wasRequested:
 			notGranted = append(notGranted, svc)
+		}
+	}
+
+	// `people` shares the contacts scopes; when contacts itself is
+	// recorded, a partial people entry is only an echo of it.
+	if _, ok := access["contacts"]; ok && access["people"] == auth.AccessPartial {
+		if _, requestedPeople := requested["people"]; !requestedPeople {
+			delete(access, "people")
 		}
 	}
 	return access, notGranted

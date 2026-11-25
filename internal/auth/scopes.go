@@ -58,6 +58,9 @@ var ReadOnlyServiceScopes = map[string][]string{
 const (
 	AccessFull     = "full"
 	AccessReadOnly = "readonly"
+	// AccessPartial marks a service that holds at least one write scope
+	// but not the complete full set (the user unticked some scopes).
+	AccessPartial = "partial"
 )
 
 // AllScopes is the union of all service scopes. Computed at init time for backward compat.

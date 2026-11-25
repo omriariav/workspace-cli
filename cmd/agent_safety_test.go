@@ -367,6 +367,32 @@ func TestSensitiveEffect_ChatSetupSpaceOnlyWithMembers(t *testing.T) {
 	}
 }
 
+func TestConditionalSensitive_LiteralFalseAndBracketMessages(t *testing.T) {
+	// "false" and "[]" are real RSVP messages, not empty values.
+	rsvp, _, _ := rootCmd.Find([]string{"calendar", "rsvp"})
+	t.Cleanup(func() { _ = rsvp.Flags().Set("message", "") })
+	for _, msg := range []string{"false", "[]", "ok"} {
+		if err := rsvp.Flags().Set("message", msg); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := sensitiveEffect(rsvp); !ok {
+			t.Errorf("calendar rsvp --message %q should require confirmation", msg)
+		}
+	}
+	for _, msg := range []string{"", "   "} {
+		_ = rsvp.Flags().Set("message", msg)
+		if _, ok := sensitiveEffect(rsvp); ok {
+			t.Errorf("calendar rsvp --message %q should not require confirmation", msg)
+		}
+	}
+	// Bool flags are judged as bools.
+	update, _, _ := rootCmd.Find([]string{"drive", "update"})
+	_ = update.Flags().Set("trashed", "false")
+	if _, ok := sensitiveEffect(update); ok {
+		t.Error("drive update --trashed=false should not require confirmation")
+	}
+}
+
 func TestConditionalSensitive_RulesResolveAndTrigger(t *testing.T) {
 	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late"}
 	for key, rule := range conditionalSensitive {
@@ -470,6 +496,9 @@ func TestReadOnlyScopeHint(t *testing.T) {
 
 	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessReadOnly}); !strings.Contains(hint, "gws auth login --add --services gmail") {
 		t.Errorf("hint = %q", hint)
+	}
+	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessPartial}); !strings.Contains(hint, "--add --services gmail") {
+		t.Errorf("partial-access hint = %q", hint)
 	}
 	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessFull}); hint != "" {
 		t.Errorf("no hint expected for full access, got %q", hint)
@@ -586,6 +615,30 @@ func TestDeriveGrantedAccess(t *testing.T) {
 	}
 	if allReadOnly(seen) {
 		t.Error("a token carrying gmail write scopes must not be reported read-only")
+	}
+
+	// A partial grant that includes a write scope (gmail.readonly +
+	// gmail.send, the rest unticked) is never reported as read-only.
+	partial, missing := deriveGrantedAccess(map[string]string{"gmail": auth.AccessFull, "tasks": auth.AccessReadOnly},
+		[]string{pfx + "userinfo.email", pfx + "gmail.readonly", pfx + "gmail.send", pfx + "tasks.readonly"})
+	if partial["gmail"] != auth.AccessPartial || partial["tasks"] != auth.AccessReadOnly {
+		t.Errorf("partial grant = %v", partial)
+	}
+	if allReadOnly(partial) {
+		t.Error("a token that can send mail must not be reported read-only")
+	}
+	if strings.Join(missing, "; ") != "gmail (only some scopes)" {
+		t.Errorf("missing = %v", missing)
+	}
+	// A write scope alone (read-only scope unticked) is still partial.
+	writeOnly, _ := deriveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, []string{pfx + "userinfo.email", pfx + "gmail.send"})
+	if writeOnly["gmail"] != auth.AccessPartial {
+		t.Errorf("write-only grant = %v", writeOnly)
+	}
+	// Full contacts access does not surface a spurious partial `people`.
+	contacts, _ := deriveGrantedAccess(map[string]string{"contacts": auth.AccessFull}, auth.ScopesForServices([]string{"contacts"}))
+	if _, ok := contacts["people"]; ok || contacts["contacts"] != auth.AccessFull {
+		t.Errorf("contacts grant = %v", contacts)
 	}
 
 	// When a service's full and read-only scope sets coincide, the

@@ -203,7 +203,8 @@ func commandScopes(cmd *cobra.Command) map[string]interface{} {
 }
 
 // readOnlyScopeHint returns a one-line hint when a command failed with an
-// insufficient-scope error on a service that was authorized read-only.
+// insufficient-scope error on a service that was authorized read-only or
+// only partially.
 // Returns "" when the failure has another cause.
 func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) string {
 	if cmd == nil || err == nil || len(access) == 0 {
@@ -214,7 +215,7 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	}
 	var readOnly []string
 	for _, svc := range scopeServicesFor(cmd) {
-		if access[svc] == auth.AccessReadOnly {
+		if level := access[svc]; level == auth.AccessReadOnly || level == auth.AccessPartial {
 			readOnly = append(readOnly, svc)
 		}
 	}
@@ -222,7 +223,7 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 		return ""
 	}
 	joined := strings.Join(readOnly, ",")
-	return fmt.Sprintf("Hint: %s is authorized read-only. Grant write access with: gws auth login --add --services %s", joined, joined)
+	return fmt.Sprintf("Hint: %s is not authorized for full write access. Grant it with: gws auth login --add --services %s", joined, joined)
 }
 
 // discardValue is a flag value that accepts anything and stores nothing.

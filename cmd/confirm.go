@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"golang.org/x/term"
 )
 
@@ -97,14 +98,19 @@ var conditionalSensitive = map[string]struct{ flag, effect string }{
 	"calendar rsvp":    {"message", "sends a message to all attendees of an event"},
 }
 
-// flagIsSet reports whether a flag's string value is a real value rather
-// than the empty/false zero value of a string, bool, or slice flag.
-func flagIsSet(v string) bool {
-	switch strings.TrimSpace(v) {
-	case "", "false", "[]":
-		return false
+// flagIsSet reports whether a flag carries a real value, judged by the
+// flag's type: a bool must be true, a slice non-empty, and anything else a
+// non-blank string (so a literal message of "false" or "[]" still counts).
+func flagIsSet(f *pflag.Flag) bool {
+	v := f.Value.String()
+	switch f.Value.Type() {
+	case "bool":
+		return v == "true"
+	case "stringSlice", "stringArray", "intSlice":
+		return v != "[]"
+	default:
+		return strings.TrimSpace(v) != ""
 	}
-	return true
 }
 
 // destructivePrefixes are the command-name prefixes that mark a command as
@@ -124,7 +130,7 @@ func sensitiveEffect(cmd *cobra.Command) (string, bool) {
 	}
 	// Commands that are sensitive only when a particular flag is used.
 	if rule, ok := conditionalSensitive[key]; ok {
-		if f := cmd.Flags().Lookup(rule.flag); f != nil && flagIsSet(f.Value.String()) {
+		if f := cmd.Flags().Lookup(rule.flag); f != nil && flagIsSet(f) {
 			return rule.effect, true
 		}
 	}
