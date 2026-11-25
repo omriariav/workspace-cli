@@ -193,8 +193,10 @@ func civilInstant(year int, month time.Month, day, hour, min int, loc *time.Loca
 		}
 		return t
 	}
-	// The requested time does not exist: scan the surrounding hours.
-	for c := t.Add(-3 * time.Hour); !c.After(t.Add(3 * time.Hour)); c = c.Add(time.Minute) {
+	// The requested time does not exist: scan around it. The window is
+	// wide enough for a zone that skipped a whole calendar day (Samoa
+	// crossed the date line by dropping 2011-12-30).
+	for c := t.Add(-26 * time.Hour); !c.After(t.Add(26 * time.Hour)); c = c.Add(time.Minute) {
 		if !wall(c).Before(want) {
 			return c
 		}
@@ -208,11 +210,16 @@ func startOfCivilDate(year int, month time.Month, day int, loc *time.Location) t
 	return civilInstant(year, month, day, 0, 0, loc)
 }
 
-// endOfCivilDate returns the first instant after the civil date that t
-// falls on in loc — the exclusive end of that day.
-func endOfCivilDate(t time.Time, loc *time.Location) time.Time {
-	local := t.In(loc)
-	return startOfCivilDate(local.Year(), local.Month(), local.Day()+1, loc)
+// endOfDateOnly returns the exclusive end of a "YYYY-MM-DD" day in loc:
+// the first instant of the following civil date. It works from the
+// written date, not from an instant derived from it, so a date the zone
+// skipped entirely cannot shift the boundary onto another day.
+func endOfDateOnly(date string, loc *time.Location) (time.Time, error) {
+	d, err := time.Parse("2006-01-02", strings.TrimSpace(date))
+	if err != nil {
+		return time.Time{}, err
+	}
+	return startOfCivilDate(d.Year(), d.Month(), d.Day()+1, loc), nil
 }
 
 // mergeSpans sorts spans and merges the ones that overlap or touch.
@@ -402,7 +409,9 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 		return usageErrorf("invalid --to: %s", err.Error())
 	}
 	if toDateOnly {
-		to = endOfCivilDate(to, loc)
+		if to, err = endOfDateOnly(toStr, loc); err != nil {
+			return usageErrorf("invalid --to: %s", err.Error())
+		}
 	}
 	// Work in whole seconds throughout: the free/busy query and the output
 	// are RFC3339 without fractions. Shrinking the range inward keeps every
@@ -505,27 +514,73 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 
 	checked = []string{}
 	unavailable = []map[string]interface{}{}
-	for _, item := range items {
-		fb, ok := resp.Calendars[item.Id]
+	markUnavailable := func(id, reason string) {
+		unavailable = append(unavailable, map[string]interface{}{"calendar": id, "reason": reason})
+	}
+	// addCalendar records one calendar's busy periods. It reports false,
+	// with the reason, when that calendar's availability is unknown.
+	addCalendar := func(id string) (bool, string, error) {
+		fb, ok := resp.Calendars[id]
 		if !ok {
-			unavailable = append(unavailable, map[string]interface{}{"calendar": item.Id, "reason": "missing from response"})
-			continue
+			return false, "missing from response", nil
 		}
 		if len(fb.Errors) > 0 {
-			unavailable = append(unavailable, map[string]interface{}{"calendar": item.Id, "reason": fb.Errors[0].Reason})
-			continue
+			return false, fb.Errors[0].Reason, nil
 		}
-		checked = append(checked, item.Id)
 		for _, period := range fb.Busy {
 			start, err1 := time.Parse(time.RFC3339, period.Start)
 			end, err2 := time.Parse(time.RFC3339, period.End)
 			if err1 != nil || err2 != nil {
-				return nil, nil, nil, fmt.Errorf("unexpected busy period for %s: %s - %s", item.Id, period.Start, period.End)
+				return false, "", fmt.Errorf("unexpected busy period for %s: %s - %s", id, period.Start, period.End)
 			}
 			// Widen busy periods to whole seconds so a slot reported
 			// without fractions can never sit inside one.
 			busy = append(busy, timeSpan{Start: start.Truncate(time.Second), End: ceilSecond(end)})
 		}
+		return true, "", nil
+	}
+
+	for _, item := range items {
+		// A group address is answered under resp.Groups: the group lists
+		// its member calendars, whose busy periods are in resp.Calendars
+		// under their own IDs. The group is readable only if every member
+		// is; otherwise part of the group's availability is unknown.
+		if group, isGroup := resp.Groups[item.Id]; isGroup {
+			if len(group.Errors) > 0 {
+				markUnavailable(item.Id, group.Errors[0].Reason)
+				continue
+			}
+			if len(group.Calendars) == 0 {
+				markUnavailable(item.Id, "group has no readable members")
+				continue
+			}
+			groupOK := true
+			for _, member := range group.Calendars {
+				ok, reason, err := addCalendar(member)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				if !ok {
+					markUnavailable(item.Id, fmt.Sprintf("group member %s: %s", member, reason))
+					groupOK = false
+					break
+				}
+			}
+			if groupOK {
+				checked = append(checked, item.Id)
+			}
+			continue
+		}
+
+		ok, reason, err := addCalendar(item.Id)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if !ok {
+			markUnavailable(item.Id, reason)
+			continue
+		}
+		checked = append(checked, item.Id)
 	}
 	if len(checked) == 0 {
 		// Never suggest from zero calendars, whatever --allow-partial says;

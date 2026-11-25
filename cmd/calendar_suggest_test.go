@@ -439,13 +439,15 @@ func TestCivilDateBoundaries_MidnightDSTTransition(t *testing.T) {
 	}
 	// A date-only --to of the day before includes all of that day: the
 	// exclusive cutoff is the first instant of the transition date.
-	to, _, _ := parseTimeIn("2018-11-03", loc)
-	if got := endOfCivilDate(to, loc); !got.Equal(firstInstant) {
-		t.Errorf("endOfCivilDate(2018-11-03) = %v, want %v", got.UTC(), firstInstant)
+	if got, err := endOfDateOnly("2018-11-03", loc); err != nil || !got.Equal(firstInstant) {
+		t.Errorf("endOfDateOnly(2018-11-03) = %v, %v; want %v", got.UTC(), err, firstInstant)
 	}
 	// ...and a date-only --to on the transition date ends a civil day later.
-	if got := endOfCivilDate(from, loc); !got.Equal(time.Date(2018, 11, 5, 0, 0, 0, 0, loc)) {
-		t.Errorf("endOfCivilDate(2018-11-04) = %v", got)
+	if got, err := endOfDateOnly("2018-11-04", loc); err != nil || !got.Equal(time.Date(2018, 11, 5, 0, 0, 0, 0, loc)) {
+		t.Errorf("endOfDateOnly(2018-11-04) = %v, %v", got, err)
+	}
+	if _, err := endOfDateOnly("not-a-date", loc); err == nil {
+		t.Error("endOfDateOnly should reject a malformed date")
 	}
 	// Ordinary dates and month overflow are unaffected.
 	if got := startOfCivilDate(2026, 1, 32, time.UTC); !got.Equal(mustTime(t, "2026-02-01T00:00:00Z")) {
@@ -527,6 +529,85 @@ func TestSuggestSlots_WorkingHoursBoundaryInSpringForwardGap(t *testing.T) {
 	}
 	if h := got[0].Start.In(loc).Hour(); h < 2 {
 		t.Errorf("suggestion starts at %v, before the working-hours lower bound", got[0].Start.In(loc))
+	}
+}
+
+func TestCivilDates_WholeDaySkipped(t *testing.T) {
+	loc, err := time.LoadLocation("Pacific/Apia")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	// Samoa went from Thursday 2011-12-29 straight to Saturday 2011-12-31:
+	// December 30 never happened there.
+	dec31 := time.Date(2011, 12, 31, 0, 0, 0, 0, loc)
+	if l := dec31.In(loc); l.Day() != 31 {
+		t.Skipf("tzdata does not model the skipped day (got %v)", l)
+	}
+
+	// The skipped date starts where the next real day starts...
+	if got := startOfCivilDate(2011, 12, 30, loc); !got.Equal(dec31) {
+		t.Errorf("startOfCivilDate(skipped day) = %v, want %v", got.In(loc), dec31)
+	}
+	// ...a date-only --to of the 29th ends at that same instant, having
+	// covered the whole of the 29th and nothing of the 31st...
+	end29, err := endOfDateOnly("2011-12-29", loc)
+	if err != nil || !end29.Equal(dec31) {
+		t.Errorf("endOfDateOnly(2011-12-29) = %v, %v; want %v", end29.In(loc), err, dec31)
+	}
+	// ...and a date-only --to of the skipped day adds no time at all: it
+	// does not spill onto the 31st.
+	end30, err := endOfDateOnly("2011-12-30", loc)
+	if err != nil || !end30.Equal(dec31) {
+		t.Errorf("endOfDateOnly(2011-12-30) = %v, %v; want %v", end30.In(loc), err, dec31)
+	}
+	// The 31st itself is a full, ordinary day.
+	end31, _ := endOfDateOnly("2011-12-31", loc)
+	if end31.Sub(dec31) != 24*time.Hour {
+		t.Errorf("2011-12-31 lasts %v, want 24h", end31.Sub(dec31))
+	}
+}
+
+func TestQueryBusySpans_ExpandsGroups(t *testing.T) {
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
+			Groups: map[string]calendar.FreeBusyGroup{
+				"team@example.com":   {Calendars: []string{"a@example.com", "b@example.com"}},
+				"broken@example.com": {Errors: []*calendar.Error{{Reason: "groupTooBig"}}},
+				"half@example.com":   {Calendars: []string{"a@example.com", "hidden@example.com"}},
+				"empty@example.com":  {},
+			},
+			Calendars: map[string]calendar.FreeBusyCalendar{
+				"a@example.com":      {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T09:00:00Z", End: "2026-12-01T10:00:00Z"}}},
+				"b@example.com":      {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T14:00:00Z", End: "2026-12-01T15:00:00Z"}}},
+				"hidden@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
+			},
+		})
+	})
+	from := mustTime(t, "2026-12-01T00:00:00Z")
+	to := mustTime(t, "2026-12-02T00:00:00Z")
+	items := []*calendar.FreeBusyRequestItem{{Id: "team@example.com"}, {Id: "broken@example.com"}, {Id: "half@example.com"}, {Id: "empty@example.com"}}
+
+	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The expanded group is readable, and its members' busy time counts.
+	if strings.Join(checked, ",") != "team@example.com" {
+		t.Errorf("checked = %v, want only the fully readable group", checked)
+	}
+	merged := mergeSpans(busy)
+	if len(merged) != 2 || !merged[0].Start.Equal(mustTime(t, "2026-12-01T09:00:00Z")) || !merged[1].Start.Equal(mustTime(t, "2026-12-01T14:00:00Z")) {
+		t.Errorf("busy = %v, want both members' periods", merged)
+	}
+	reasons := map[string]string{}
+	for _, u := range unavailable {
+		reasons[u["calendar"].(string)] = u["reason"].(string)
+	}
+	if reasons["broken@example.com"] != "groupTooBig" ||
+		!strings.Contains(reasons["half@example.com"], "hidden@example.com") ||
+		reasons["empty@example.com"] == "" || len(reasons) != 3 {
+		t.Errorf("unavailable = %v", reasons)
 	}
 }
 
