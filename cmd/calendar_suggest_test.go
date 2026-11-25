@@ -1246,3 +1246,32 @@ func TestEndOfDateOnly_SubMinuteGap(t *testing.T) {
 		t.Errorf("the boundary reads %v, want the first instant of January 7", first)
 	}
 }
+
+// On 2010-11-07 St. John's clocks went from Sunday 00:01 back to Saturday
+// 23:01, so part of Saturday evening repeats after Sunday has begun. A
+// window for Sunday must contain only instants that read Sunday.
+func TestDayWindows_TransitionAcrossMidnight(t *testing.T) {
+	loc, err := time.LoadLocation("America/St_Johns")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	// Skip unless tzdata models the 00:01 rollback.
+	before := time.Date(2010, 11, 7, 2, 30, 0, 0, time.UTC).In(loc) // Sunday 00:00 NDT
+	after := before.Add(2 * time.Minute)
+	if before.Day() != 7 || after.Day() != 6 {
+		t.Skipf("tzdata does not model the midnight-crossing change (%v -> %v)", before, after)
+	}
+
+	sunday := time.Date(2010, 11, 7, 12, 0, 0, 0, time.UTC)
+	windows := dayWindows(sunday, 23*time.Hour, 24*time.Hour, loc)
+	if len(windows) == 0 {
+		t.Fatal("no window for Sunday 23:00-24:00")
+	}
+	for _, w := range windows {
+		for _, instant := range []time.Time{w.Start, w.End.Add(-time.Second)} {
+			if l := instant.In(loc); l.Day() != 7 || l.Hour() != 23 {
+				t.Errorf("window %v..%v contains %v, want only Sunday 23:xx", w.Start.In(loc), w.End.In(loc), l)
+			}
+		}
+	}
+}

@@ -358,7 +358,12 @@ func dayWindows(civil time.Time, whStart, whEnd time.Duration, loc *time.Locatio
 	for c := dayStart; c.Before(dayEnd); c = c.Add(step) {
 		l := c.In(loc)
 		wall := time.Duration(l.Hour())*time.Hour + time.Duration(l.Minute())*time.Minute + time.Duration(l.Second())*time.Second
-		inside := wall >= whStart && wall < whEnd
+		// The date is checked too: a change that crosses midnight makes
+		// the clock read the previous date again part-way through this
+		// one (St. John's went from Sunday 00:01 back to Saturday 23:01
+		// in 2010), and those instants belong to that other date.
+		onDate := l.Year() == civil.Year() && l.Month() == civil.Month() && l.Day() == civil.Day()
+		inside := onDate && wall >= whStart && wall < whEnd
 		switch {
 		case inside && !open:
 			spans = append(spans, timeSpan{Start: c, End: c.Add(step)})
