@@ -1175,9 +1175,13 @@ func runChatMembers(cmd *cobra.Command, args []string) error {
 	// Resolve display names via People API + local cache
 	// The name cache on disk belongs to the stored login. With an external
 	// access token the members may come from another account's directory,
-	// so that cache is neither read nor written.
-	cache, cacheErr := usercache.New()
-	if cacheErr == nil && config.GetAccessToken() == "" {
+	// so that cache is not even opened.
+	var cache *usercache.Cache
+	cacheErr := errors.New("name cache unavailable with an external access token")
+	if config.GetAccessToken() == "" {
+		cache, cacheErr = usercache.New()
+	}
+	if cacheErr == nil {
 		// Collect human user IDs missing display_name (skip bots)
 		var toResolve []string
 		for _, r := range results {
