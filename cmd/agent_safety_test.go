@@ -844,6 +844,46 @@ func TestAddOnLegacyLogin(t *testing.T) {
 	}
 }
 
+// Logout holds the same lock as login, so it cannot delete metadata while
+// a login is writing it: with the lock held elsewhere, logout must wait
+// and then fail rather than proceed.
+func TestLogout_WaitsForTheLoginLock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for the lock timeout")
+	}
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	tok := &oauth2.Token{AccessToken: "a", RefreshToken: "r"}
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, nil, "acct", tok); err != nil {
+		t.Fatal(err)
+	}
+
+	unlock, err := auth.LockLoginState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	logoutErr := captureStderrStr(t, func() {
+		if err := runLogout(logoutCmd, nil); err == nil {
+			t.Error("logout should not proceed while a login holds the lock")
+		}
+	})
+	if !strings.Contains(logoutErr, "login appears to be in progress") {
+		t.Errorf("logout error output = %q", logoutErr)
+	}
+	// Nothing was deleted behind the login's back.
+	if _, err := os.Stat(config.GetGrantedAccessPath()); err != nil {
+		t.Errorf("metadata should be untouched while the lock is held: %v", err)
+	}
+
+	// Once the login is done, logout goes through and clears it.
+	unlock()
+	if _, err := captureStdout(t, func() error { return runLogout(logoutCmd, nil) }); err != nil {
+		t.Fatalf("logout after release: %v", err)
+	}
+	if _, err := os.Stat(config.GetGrantedAccessPath()); !os.IsNotExist(err) {
+		t.Error("logout should delete the metadata once it holds the lock")
+	}
+}
+
 func TestLockLoginState_CanBeReacquiredAfterRelease(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	unlock, err := auth.LockLoginState()

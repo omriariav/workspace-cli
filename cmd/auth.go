@@ -600,6 +600,15 @@ func allReadOnly(access map[string]string) bool {
 func runLogout(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 
+	// Logout and login write the same files; holding the login lock keeps
+	// a logout from deleting metadata that a login is in the middle of
+	// writing (which would leave a token without its access record).
+	unlock, err := auth.LockLoginState()
+	if err != nil {
+		return p.PrintError(err)
+	}
+	defer unlock()
+
 	if !auth.TokenExists() {
 		auth.DeleteGrantedMetadata()
 		return p.Print(map[string]interface{}{

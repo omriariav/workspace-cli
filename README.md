@@ -257,7 +257,7 @@ variant is Developer Preview).
 | `gws calendar unshare` | Remove access (`--calendar-id`, `--rule-id`) |
 | `gws calendar update-acl` | Update access rule (`--calendar-id`, `--rule-id`, `--role`) |
 | `gws calendar freebusy` | Query free/busy (`--from`, `--to`, `--calendars`) |
-| `gws calendar suggest-time` | Suggest free meeting slots (`--from`, `--to`, `--attendees`, `--duration`, `--working-hours`, `--timezone`, `--max`, `--allow-partial`) |
+| `gws calendar suggest-time` | Suggest free meeting slots (`--from`, `--to`, `--calendars`, `--attendees`, `--duration`, `--working-hours`, `--include-weekends`, `--timezone`, `--max`, `--allow-partial`) |
 | `gws calendar colors` | List available calendar colors |
 | `gws calendar settings` | List user calendar settings |
 
