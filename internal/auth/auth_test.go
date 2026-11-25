@@ -836,19 +836,13 @@ func TestTokenFingerprint(t *testing.T) {
 	}
 }
 
-func TestAuthURLOptions_IncludeGrantedScopes(t *testing.T) {
+func TestAuthURLOptions_NeverAsksForPreviouslyGrantedScopes(t *testing.T) {
 	c := NewOAuthClient("id", "secret", []string{"scope-a"})
 	url := c.config.AuthCodeURL("state", c.authURLOptions("challenge")...)
 	if strings.Contains(url, "include_granted_scopes") {
-		t.Errorf("replacing login must not request granted scopes: %s", url)
+		t.Errorf("login must not pull in scopes from earlier grants: %s", url)
 	}
-	if !strings.Contains(url, "code_challenge=challenge") || !strings.Contains(url, "prompt=consent") {
-		t.Errorf("auth URL lost PKCE/consent params: %s", url)
-	}
-
-	c.SetIncludeGrantedScopes(true)
-	url = c.config.AuthCodeURL("state", c.authURLOptions("challenge")...)
-	if !strings.Contains(url, "include_granted_scopes=true") {
-		t.Errorf("incremental login should request granted scopes: %s", url)
+	if !strings.Contains(url, "code_challenge=challenge") || !strings.Contains(url, "prompt=consent") || !strings.Contains(url, "access_type=offline") {
+		t.Errorf("auth URL lost PKCE/consent/offline params: %s", url)
 	}
 }

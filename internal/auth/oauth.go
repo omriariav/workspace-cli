@@ -19,30 +19,21 @@ import (
 // OAuthClient handles the OAuth2 authentication flow.
 type OAuthClient struct {
 	config *oauth2.Config
-	// includeGranted asks Google to fold previously granted scopes into
-	// the new token (incremental authorization).
-	includeGranted bool
-}
-
-// SetIncludeGrantedScopes enables incremental authorization: the token
-// returned by Login also carries every scope the user granted this OAuth
-// client before.
-func (c *OAuthClient) SetIncludeGrantedScopes(include bool) {
-	c.includeGranted = include
 }
 
 // authURLOptions returns the authorization-URL parameters for the flow.
+//
+// include_granted_scopes is deliberately not sent: it would let Google
+// fold scopes from earlier grants into the new token, so a login could
+// come back with more access than it asked for. Callers that want to keep
+// earlier access request those scopes explicitly.
 func (c *OAuthClient) authURLOptions(challenge string) []oauth2.AuthCodeOption {
-	opts := []oauth2.AuthCodeOption{
+	return []oauth2.AuthCodeOption{
 		oauth2.SetAuthURLParam("code_challenge", challenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 		oauth2.SetAuthURLParam("access_type", "offline"),
 		oauth2.SetAuthURLParam("prompt", "consent"),
 	}
-	if c.includeGranted {
-		opts = append(opts, oauth2.SetAuthURLParam("include_granted_scopes", "true"))
-	}
-	return opts
 }
 
 // NewOAuthClient creates a new OAuth client with the given credentials and scopes.

@@ -706,10 +706,12 @@ func TestStoredAccountID(t *testing.T) {
 	original := lookupAccountID
 	t.Cleanup(func() { lookupAccountID = original })
 	lookups := 0
-	lookupAccountID = func(*oauth2.Token) (string, error) { lookups++; return "acct-from-google", nil }
+	var lookupErr error
+	lookupAccountID = func(*oauth2.Token) (string, error) { lookups++; return "acct-from-google", lookupErr }
 
-	if got := storedAccountID(); got != "" || lookups != 0 {
-		t.Errorf("no stored token: got %q after %d lookups", got, lookups)
+	// Nothing stored: no account, no error, no network call.
+	if got, err := storedAccountID(); got != "" || err != nil || lookups != 0 {
+		t.Errorf("no stored token: got %q, %v after %d lookups", got, err, lookups)
 	}
 
 	tok := &oauth2.Token{AccessToken: "a", RefreshToken: "r"}
@@ -717,15 +719,43 @@ func TestStoredAccountID(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Login from an older version: no recorded account, so Google is asked.
-	if got := storedAccountID(); got != "acct-from-google" || lookups != 1 {
-		t.Errorf("legacy login: got %q after %d lookups", got, lookups)
+	if got, err := storedAccountID(); got != "acct-from-google" || err != nil || lookups != 1 {
+		t.Errorf("legacy login: got %q, %v after %d lookups", got, err, lookups)
 	}
+	// A stored token whose account cannot be determined is an error, not
+	// "nothing to compare against" — otherwise --add could switch accounts.
+	lookupErr = errors.New("network down")
+	if got, err := storedAccountID(); err == nil || got != "" {
+		t.Errorf("failed lookup with a stored token: got %q, %v; want an error", got, err)
+	}
+	lookupErr = nil
+
 	// Recorded account: used directly, no network call.
+	before := lookups
 	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, nil, "acct-recorded", tok); err != nil {
 		t.Fatal(err)
 	}
-	if got := storedAccountID(); got != "acct-recorded" || lookups != 1 {
-		t.Errorf("recorded account: got %q after %d lookups", got, lookups)
+	if got, err := storedAccountID(); got != "acct-recorded" || err != nil || lookups != before {
+		t.Errorf("recorded account: got %q, %v after %d lookups", got, err, lookups-before)
+	}
+}
+
+func TestUnrequestedScopes(t *testing.T) {
+	const pfx = "https://www.googleapis.com/auth/"
+	requested := []string{pfx + "userinfo.email", pfx + "gmail.readonly", pfx + "calendar.readonly"}
+
+	// Exactly what was asked for, plus `openid` that Google adds itself.
+	if extra := unrequestedScopes(requested, append([]string{"openid"}, requested...)); len(extra) != 0 {
+		t.Errorf("extra = %v, want none", extra)
+	}
+	// Write scopes from an earlier grant coming back must be caught.
+	returned := append(append([]string(nil), requested...), pfx+"gmail.send", pfx+"drive")
+	if extra := strings.Join(shortScopeNames(unrequestedScopes(requested, returned)), ","); extra != "gmail.send,drive" {
+		t.Errorf("extra = %q, want gmail.send,drive", extra)
+	}
+	// Fewer scopes than requested is not this check's concern.
+	if extra := unrequestedScopes(requested, requested[:1]); len(extra) != 0 {
+		t.Errorf("extra = %v", extra)
 	}
 }
 

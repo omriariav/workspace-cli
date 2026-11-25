@@ -133,13 +133,17 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	var previousScopes []string
 	previousAccount := ""
 	if add {
-		previousAccount = storedAccountID()
+		var err error
+		previousAccount, err = storedAccountID()
+		if err != nil {
+			// Without knowing whose authorization is stored, there is no
+			// way to tell whether the account about to consent matches.
+			return p.PrintError(fmt.Errorf("could not confirm which Google account the stored authorization belongs to (%v), so --add was not started; try again, or run `gws auth login` without --add to replace it", err))
+		}
 		previousScopes = auth.LoadGrantedScopes()
-		// Ask for the whole merged grant explicitly. Google's incremental
-		// authorization (include_granted_scopes) is not dependable for
-		// Desktop OAuth clients, so the previous scopes are re-requested
-		// rather than assumed to carry over. Without a recorded scope
-		// list, the recorded access levels stand in for it.
+		// Ask for the whole merged grant explicitly: the previous scopes
+		// are re-requested, never assumed to carry over from an earlier
+		// grant, so the token holds exactly what this consent approved.
 		// A login that predates scope recording has no exact list; the
 		// scopes its recorded access levels stand for take its place, both
 		// in the request and in the check on what comes back.
@@ -154,7 +158,6 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	client := auth.NewOAuthClient(clientID, clientSecret, scopes)
-	client.SetIncludeGrantedScopes(add)
 
 	ctx := context.Background()
 	token, err := client.Login(ctx)
@@ -182,6 +185,12 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	grantedScopes := scopes
 	if granted, ok := token.Extra("scope").(string); ok && strings.TrimSpace(granted) != "" {
 		grantedScopes = strings.Fields(granted)
+		// The token must not carry more than was asked for — for example
+		// write scopes from an earlier grant that a later read-only login
+		// was meant to replace.
+		if extra := unrequestedScopes(scopes, grantedScopes); len(extra) > 0 {
+			return p.PrintError(fmt.Errorf("the grant includes %d scope(s) that were not requested (%s), so the stored authorization was left unchanged; run `gws auth logout` to revoke earlier grants, then log in again", len(extra), strings.Join(shortScopeNames(extra), ", ")))
+		}
 		// An incremental login must not cost the user access they already
 		// had. Compared scope by scope: access levels are too coarse, as
 		// two different sets of write scopes can share one level.
@@ -325,21 +334,30 @@ var lookupAccountID = func(token *oauth2.Token) (string, error) {
 
 // storedAccountID returns the account ID of the stored authorization: the
 // one recorded at login, or, for a login that predates that record, the
-// result of asking Google with the stored token. "" if it cannot be
-// determined.
-func storedAccountID() string {
+// result of asking Google with the stored token.
+//
+// It returns "" with no error only when nothing is stored. A stored token
+// whose account cannot be determined is an error, so callers never treat
+// "could not check" as "nothing to check".
+func storedAccountID() (string, error) {
 	if id := auth.LoadGrantedAccount(); id != "" {
-		return id
+		return id, nil
+	}
+	if !auth.TokenExists() {
+		return "", nil
 	}
 	token, err := auth.LoadToken()
 	if err != nil {
-		return ""
+		return "", err
 	}
 	id, err := lookupAccountID(token)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return id
+	if id == "" {
+		return "", fmt.Errorf("no account ID was returned")
+	}
+	return id, nil
 }
 
 // checkSameAccount rejects an incremental login made with a different
@@ -370,6 +388,23 @@ func unionScopes(a, b []string) []string {
 		}
 	}
 	return out
+}
+
+// unrequestedScopes returns the granted scopes that gws knows and did not
+// ask for. Scopes gws does not use (such as `openid`, which Google adds on
+// its own) are ignored.
+func unrequestedScopes(requested, granted []string) []string {
+	asked := make(map[string]bool, len(requested))
+	for _, s := range requested {
+		asked[s] = true
+	}
+	var extra []string
+	for _, s := range granted {
+		if !asked[s] && isKnownScope(s) {
+			extra = append(extra, s)
+		}
+	}
+	return extra
 }
 
 // missingScopes returns the scopes in previous that are absent from
@@ -428,8 +463,8 @@ func mergeGrantedAccess(existing map[string]string, services []string, readOnly 
 
 // deriveGrantedAccess builds the per-service access levels from the
 // complete set of scopes Google returned. Every known service is examined,
-// not just the requested ones: incremental authorization can return scopes
-// granted in an earlier login that local metadata no longer knows about.
+// not just the requested ones, so the result describes the token rather
+// than the request.
 //
 // A service is:
 //   - full when every one of its full scopes is present;
