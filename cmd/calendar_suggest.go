@@ -31,6 +31,7 @@ Examples:
   gws calendar suggest-time --from 2026-12-01 --to 2026-12-05
   gws calendar suggest-time --from 2026-12-01 --to 2026-12-05 --attendees a@example.com,b@example.com --duration 45m
   gws calendar suggest-time --from "2026-12-01 13:00" --to "2026-12-01 18:00" --working-hours any --timezone Europe/London`,
+	Args: cobra.NoArgs,
 	RunE: runCalendarSuggestTime,
 }
 

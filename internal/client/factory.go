@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
@@ -198,9 +197,11 @@ func (f *Factory) checkServiceScopes(service string) {
 	}
 	f.scopeWarned[service] = true
 
-	allServices := append(f.grantedServices, service)
-	fmt.Fprintf(os.Stderr, "%s requires additional permissions. Re-authorize with:\n  gws auth login --services %s\n",
-		service, strings.Join(allServices, ","))
+	// Suggest adding just the missing service, so following the hint
+	// neither replaces the stored authorization nor widens other
+	// services, and offer the read-only variant.
+	fmt.Fprintf(os.Stderr, "%s requires additional permissions. Add it with:\n  gws auth login --add --services %s\n(append --readonly if read-only access is enough)\n",
+		service, service)
 }
 
 // canonicalService returns the canonical name for a service, resolving any

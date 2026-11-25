@@ -172,6 +172,22 @@ func TestUserModes_AllowServiceClients(t *testing.T) {
 	}
 }
 
+func TestMissingServiceHint_SuggestsIncrementalLogin(t *testing.T) {
+	f := &Factory{grantedServices: []string{"gmail"}, scopeWarned: map[string]bool{}}
+	out := captureStderr(t, func() { f.checkServiceScopes("calendar") })
+
+	if !strings.Contains(out, "gws auth login --add --services calendar") {
+		t.Errorf("hint should add only the missing service: %q", out)
+	}
+	if !strings.Contains(out, "--readonly") {
+		t.Errorf("hint should offer the read-only variant: %q", out)
+	}
+	// It must not suggest re-requesting (and widening) other services.
+	if strings.Contains(out, "gmail") {
+		t.Errorf("hint should not mention already-granted services: %q", out)
+	}
+}
+
 func TestNewFactory_AccessTokenTakesPrecedence(t *testing.T) {
 	// No stored token, no client credentials, and a service-account mode
 	// configured: the external token must still win and be used verbatim.

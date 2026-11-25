@@ -149,7 +149,11 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	// Report what Google actually granted, not what was requested: the
-	// user can untick scopes on the consent screen.
+	// user can untick scopes on the consent screen. If the response
+	// carries no scope list, `access` stands: every scope behind it was
+	// requested in this very exchange (--add re-requests earlier services
+	// explicitly), so it never credits the new token with a grant that
+	// was only made to a previous one.
 	if granted, ok := token.Extra("scope").(string); ok && strings.TrimSpace(granted) != "" {
 		var notGranted []string
 		access, notGranted = deriveGrantedAccess(access, strings.Fields(granted))

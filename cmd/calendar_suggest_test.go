@@ -71,6 +71,15 @@ func TestCalendarSuggestTime_RejectsTooManyCalendars(t *testing.T) {
 	}
 }
 
+func TestCalendarSuggestTime_RejectsPositionalArgs(t *testing.T) {
+	if err := calendarSuggestTimeCmd.Args(calendarSuggestTimeCmd, []string{"a@example.com"}); err == nil {
+		t.Error("a stray positional argument should be rejected")
+	}
+	if err := calendarSuggestTimeCmd.Args(calendarSuggestTimeCmd, nil); err != nil {
+		t.Errorf("no arguments should be accepted: %v", err)
+	}
+}
+
 func TestParseSuggestDuration(t *testing.T) {
 	good := map[string]time.Duration{"30m": 30 * time.Minute, "1h30m": 90 * time.Minute, "45": 45 * time.Minute, " 1h ": time.Hour}
 	for in, want := range good {
