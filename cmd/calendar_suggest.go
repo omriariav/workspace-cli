@@ -110,8 +110,11 @@ func parseSuggestDuration(s string) (time.Duration, error) {
 const maxSuggestRange = 92 * 24 * time.Hour
 
 // maxFreeBusyCalendars is the most calendars a single Calendar free/busy
-// query will report on.
+// query will report on, counting the members that groups expand into.
 const maxFreeBusyCalendars = 50
+
+// maxGroupExpansion is the most members one group may expand into.
+const maxGroupExpansion = 100
 
 // maxSuggestDuration is the longest meeting suggest-time will look for.
 const maxSuggestDuration = 24 * time.Hour
@@ -541,6 +544,13 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		TimeMin: from.UTC().Format(time.RFC3339),
 		TimeMax: to.UTC().Format(time.RFC3339),
 		Items:   items,
+		// Stated explicitly rather than left to server defaults: a group
+		// is expanded into at most this many members, and at most this
+		// many calendars are reported on in total, members included. A
+		// group or request beyond these comes back with an error entry,
+		// which is reported as unavailable.
+		GroupExpansionMax:    maxGroupExpansion,
+		CalendarExpansionMax: maxFreeBusyCalendars,
 	}).Do()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to query free/busy: %w", err)

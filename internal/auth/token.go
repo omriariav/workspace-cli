@@ -555,7 +555,11 @@ func saveRefreshedTokenLocked(stored, refreshed *oauth2.Token) error {
 	// token, and only then is the token replaced. Whichever of the two
 	// writes an interruption lands between, the token on disk still has
 	// its record; if the token cannot be saved, the record is put back.
-	record := loadGrantedRecord()
+	// Only a record that belongs to the token being rotated is carried
+	// over. A record left by another login (for instance one interrupted
+	// before it saved its own token) is not this token's, and binding it
+	// here would attach that login's account and scopes to this one.
+	record := readGrantedRecordFor(stored)
 	if record == nil {
 		return SaveToken(&toSave)
 	}

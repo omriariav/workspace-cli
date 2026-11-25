@@ -1172,6 +1172,35 @@ func TestGrantedMetadataFor_UsesTheGivenToken(t *testing.T) {
 	}
 }
 
+// A record left on disk by another login must not be carried over to a
+// token being rotated: it would attach that login's account and scopes.
+func TestSaveRefreshedToken_RotationIgnoresAnotherLoginsRecord(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	mine := &oauth2.Token{AccessToken: "m1", RefreshToken: "mine-1"}
+	if err := SaveToken(mine); err != nil {
+		t.Fatal(err)
+	}
+	// A replacing login wrote its access record and was interrupted before
+	// saving its token, so my token is still the stored one.
+	interrupted := &oauth2.Token{RefreshToken: "someone-else"}
+	if err := SaveGrantedAccess(map[string]string{"drive": AccessFull}, []string{"their-scope"}, "their-account", interrupted); err != nil {
+		t.Fatal(err)
+	}
+
+	// My token is rotated.
+	if err := SaveRefreshedToken(mine, &oauth2.Token{AccessToken: "m2", RefreshToken: "mine-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := LoadToken(); got.RefreshToken != "mine-2" {
+		t.Fatalf("rotated token not saved: %+v", got)
+	}
+	// The other login's metadata is not mine now.
+	if LoadGrantedAccess() != nil || LoadGrantedScopes() != nil || LoadGrantedAccount() != "" {
+		t.Errorf("another login's record was bound to the rotated token: access=%v scopes=%v account=%q",
+			LoadGrantedAccess(), LoadGrantedScopes(), LoadGrantedAccount())
+	}
+}
+
 func TestTokenRefreshed(t *testing.T) {
 	stored := &oauth2.Token{AccessToken: "a1", RefreshToken: "r1"}
 	cases := []struct {

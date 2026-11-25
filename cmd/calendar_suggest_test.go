@@ -922,6 +922,10 @@ func TestQueryBusySpans_MockServer(t *testing.T) {
 	if got.TimeMin != "2026-12-01T00:00:00Z" || got.TimeMax != "2026-12-02T00:00:00Z" || len(got.Items) != 4 || got.Items[1].Id != "a@example.com" {
 		t.Errorf("unexpected free/busy request: %+v", got)
 	}
+	// Expansion limits are stated explicitly, not left to server defaults.
+	if got.CalendarExpansionMax != maxFreeBusyCalendars || got.GroupExpansionMax != maxGroupExpansion {
+		t.Errorf("expansion limits = %d calendars, %d group members", got.CalendarExpansionMax, got.GroupExpansionMax)
+	}
 	if strings.Join(checked, ",") != "primary,a@example.com" {
 		t.Errorf("checked = %v", checked)
 	}
