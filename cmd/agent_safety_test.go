@@ -720,10 +720,26 @@ func TestAuthLogin_AddRequiresServices(t *testing.T) {
 			_ = loginCmd.Flags().Set("services", value)
 		}
 		err := runLogin(loginCmd, nil)
-		if err == nil || !strings.Contains(err.Error(), "--add requires --services") {
-			t.Fatalf("--services %q: error = %v, want --add requires --services", value, err)
+		want := "names no service"
+		if value == "(unset)" {
+			want = "--add requires --services"
+		}
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("--services %q: error = %v, want %q", value, err, want)
 		}
 	}
+
+	// Without --add, an explicit but empty --services is rejected too,
+	// instead of silently becoming "every service".
+	_ = loginCmd.Flags().Set("add", "false")
+	for _, value := range []string{"", " , "} {
+		_ = loginCmd.Flags().Set("services", value)
+		err := runLogin(loginCmd, nil)
+		if err == nil || !strings.Contains(err.Error(), "names no service") {
+			t.Fatalf("--services %q: error = %v, want names-no-service", value, err)
+		}
+	}
+	_ = loginCmd.Flags().Set("add", "true")
 
 	// And an empty --services never counts as a scoped selection.
 	if hasServiceSelection(loginCmd) {

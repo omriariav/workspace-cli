@@ -500,7 +500,8 @@ Usage: gws calendar suggest-time [flags]
 ```
 
 Each suggestion is the earliest slot of one free window. Calendars under
-`unavailable` could not be read and are not taken into account.
+`unavailable` could not be read and are not taken into account. At most 50
+calendars (`--calendars` and `--attendees` combined) can be checked at once.
 
 ---
 

@@ -209,7 +209,14 @@ func SaveGrantedAccess(access map[string]string, token *oauth2.Token) error {
 // another login, and falls back to the plain service list written by
 // versions that did not record access levels.
 func GrantedServicesForToken() []string {
-	if access := LoadGrantedAccess(); access != nil {
+	// An access record that exists but does not match the stored token
+	// was written by another login, and so was the plain service list
+	// beside it: use neither.
+	if _, err := os.Stat(config.GetGrantedAccessPath()); err == nil {
+		access := LoadGrantedAccess()
+		if access == nil {
+			return nil
+		}
 		var services []string
 		for _, svc := range ValidServiceNames() {
 			if _, ok := access[svc]; ok {

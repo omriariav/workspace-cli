@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,6 +35,39 @@ func TestCalendarSuggestTimeCommand_Flags(t *testing.T) {
 		if cmd.Flags().Lookup(flag) == nil {
 			t.Errorf("expected --%s flag", flag)
 		}
+	}
+}
+
+func TestCalendarSuggestTime_RejectsTooManyCalendars(t *testing.T) {
+	cmd := calendarSuggestTimeCmd
+	set := func(name, value string) {
+		t.Helper()
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, name := range []string{"from", "to", "attendees"} {
+			_ = cmd.Flags().Set(name, "")
+			cmd.Flags().Lookup(name).Changed = false
+		}
+	})
+
+	attendees := make([]string, 0, maxFreeBusyCalendars)
+	for i := 0; i < maxFreeBusyCalendars; i++ {
+		attendees = append(attendees, fmt.Sprintf("user%d@example.com", i))
+	}
+	set("from", "2026-12-01")
+	set("to", "2026-12-02")
+	// 50 attendees plus the default "primary" calendar is one too many;
+	// the command fails before it needs credentials or the network.
+	set("attendees", strings.Join(attendees, ","))
+	err := runCalendarSuggestTime(cmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "too many calendars: 51") {
+		t.Fatalf("error = %v, want too-many-calendars usage error", err)
+	}
+	if resolveExitError(err, io.Discard) != ExitUsage {
+		t.Errorf("exit code = %d, want %d", resolveExitError(err, io.Discard), ExitUsage)
 	}
 }
 

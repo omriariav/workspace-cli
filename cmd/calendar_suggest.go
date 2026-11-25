@@ -92,6 +92,10 @@ func parseSuggestDuration(s string) (time.Duration, error) {
 	return d, nil
 }
 
+// maxFreeBusyCalendars is the most calendars a single Calendar free/busy
+// query will report on.
+const maxFreeBusyCalendars = 50
+
 // maxSuggestDuration is the longest meeting suggest-time will look for.
 const maxSuggestDuration = 24 * time.Hour
 
@@ -412,6 +416,9 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 	}
 	if len(items) == 0 {
 		return usageErrorf("at least one calendar is required: set --calendars or --attendees")
+	}
+	if len(items) > maxFreeBusyCalendars {
+		return usageErrorf("too many calendars: %d given, but one free/busy query covers at most %d (--calendars and --attendees combined)", len(items), maxFreeBusyCalendars)
 	}
 
 	ctx := context.Background()

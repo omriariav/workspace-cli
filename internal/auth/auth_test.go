@@ -787,12 +787,21 @@ func TestGrantedAccess_RoundTrip(t *testing.T) {
 	if got := LoadGrantedAccess(); got != nil {
 		t.Errorf("metadata for another token must be ignored, got %v", got)
 	}
-	// With no matching record, the legacy service list is used.
+	// The plain service list beside a mismatched record came from the same
+	// other login: it must not be used either.
 	if err := SaveGrantedServices([]string{"tasks"}); err != nil {
 		t.Fatal(err)
 	}
+	if got := GrantedServicesForToken(); got != nil {
+		t.Errorf("GrantedServicesForToken with a stale record = %v, want nil", got)
+	}
+	// With no access record at all (a login from an older version), the
+	// plain list is the only metadata there is.
+	if err := os.Remove(config.GetGrantedAccessPath()); err != nil {
+		t.Fatal(err)
+	}
 	if got := strings.Join(GrantedServicesForToken(), ","); got != "tasks" {
-		t.Errorf("GrantedServicesForToken fallback = %q, want tasks", got)
+		t.Errorf("GrantedServicesForToken legacy fallback = %q, want tasks", got)
 	}
 }
 

@@ -94,6 +94,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return usageErrorf("missing credentials: set GWS_CLIENT_ID and GWS_CLIENT_SECRET environment variables, or use --client-id and --client-secret flags")
 	}
 
+	// An explicitly supplied --services that names nothing (`--services=`,
+	// `--services ' , '`, often an unset shell variable) is a mistake, not
+	// a request for every service.
+	if cmd.Flags().Changed("services") && len(splitList(flagString(cmd, "services"))) == 0 {
+		return usageErrorf("--services was given but names no service\nValid services: %s",
+			strings.Join(auth.ValidServiceNames(), ", "))
+	}
+
 	// Determine the services from the --services flag, config, or all
 	services := resolveServices(cmd)
 
