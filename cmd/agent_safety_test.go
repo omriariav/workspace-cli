@@ -2382,3 +2382,18 @@ func TestConfirmGate_ApprovalMessagesNeedConfirmation(t *testing.T) {
 		}
 	}
 }
+
+// A reaction is visible to everyone in the space and can notify the
+// message's author, so adding one is confirmed like removing one.
+func TestConfirmGate_ChatReactNeedsConfirmation(t *testing.T) {
+	for _, name := range []string{"react", "unreact"} {
+		cmd, _, err := rootCmd.Find([]string{"chat", name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = confirmGate(cmd, true, false, strings.NewReader(""), io.Discard, false)
+		if err == nil || !strings.Contains(err.Error(), "confirmation required") {
+			t.Errorf("chat %s without a terminal: err = %v, want confirmation required", name, err)
+		}
+	}
+}

@@ -237,7 +237,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   `update-permission`, `move`, `copy`, `convert`, `add-comment`, `reply`,
   `comment-approval`,
   `start-approval`, `reassign-approval`; Chat
-  `add-member`, `update-member`); Chat `unreact`.
+  `add-member`, `update-member`); Chat `react` and `unreact`.
 - Not covered: creating or editing content, `untrash`, and responding to
   a Drive approval (`approve`, `decline`, `cancel-approval`).
 - To check before running: `gws <command> --schema` shows
