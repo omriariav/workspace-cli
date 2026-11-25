@@ -114,30 +114,28 @@ func NewFactory(ctx context.Context) (*Factory, error) {
 		return nil, fmt.Errorf("missing OAuth credentials")
 	}
 
-	ts := auth.GetTokenSource(ctx, clientID, clientSecret, token)
-
-	// Check if token is valid by trying to get a token
-	newToken, err := ts.Token()
+	// Refresh (if needed) and save under the login lock, so concurrent
+	// commands never race each other's refresh.
+	token, saveErr, err := auth.EnsureFreshToken(ctx, clientID, clientSecret, token)
 	if err != nil {
 		return nil, fmt.Errorf("token expired, run: gws auth login")
 	}
-
-	// Save refreshed token if it changed
-	if auth.TokenRefreshed(token, newToken) {
+	if saveErr != nil {
 		// The command at hand still works, but if the refresh token was
 		// rotated the stored login may stop working, so say so. The error
 		// is a file or lock error and carries no credential.
-		if err := auth.SaveRefreshedToken(token, newToken); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: the refreshed login could not be saved (%v); if later commands fail to authenticate, run `gws auth login` again\n", err)
-		}
+		fmt.Fprintf(os.Stderr, "Warning: the refreshed login could not be saved (%v); if later commands fail to authenticate, run `gws auth login` again\n", saveErr)
 	}
+	ts := auth.GetTokenSource(ctx, clientID, clientSecret, token)
 
 	return &Factory{
-		ctx:             ctx,
-		authMode:        modeCfg,
-		tokenSource:     ts,
-		grantedServices: auth.GrantedServicesForToken(),
-		grantedScopes:   auth.LoadGrantedScopes(),
+		ctx:         ctx,
+		authMode:    modeCfg,
+		tokenSource: ts,
+		// Read for the token this factory actually uses, not whatever is
+		// on disk by now.
+		grantedServices: auth.GrantedServicesFor(token),
+		grantedScopes:   auth.LoadGrantedScopesFor(token),
 		scopeWarned:     make(map[string]bool),
 	}, nil
 }

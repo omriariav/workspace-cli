@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -894,6 +896,101 @@ func TestSaveRefreshedToken_RotationSurvivesMetadataFailure(t *testing.T) {
 	// The stale record no longer matches and is simply ignored.
 	if LoadGrantedAccess() != nil {
 		t.Error("the old record must not be read as describing the rotated token")
+	}
+}
+
+func TestEnsureFreshToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(_ context.Context, _, _ string, tok *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: fmt.Sprintf("fresh-%d", exchanges), RefreshToken: fmt.Sprintf("rotated-%d", exchanges), Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	ctx := context.Background()
+
+	// A valid token is returned as is: no exchange, nothing written.
+	valid := &oauth2.Token{AccessToken: "ok", RefreshToken: "r0", Expiry: time.Now().Add(time.Hour)}
+	if got, saveErr, err := EnsureFreshToken(ctx, "id", "secret", valid); err != nil || saveErr != nil || got != valid || exchanges != 0 {
+		t.Fatalf("valid token: %v, %v, %v after %d exchanges", got, saveErr, err, exchanges)
+	}
+
+	// An expired stored token is refreshed once and the rotation saved.
+	expired := &oauth2.Token{AccessToken: "old", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(expired); err != nil {
+		t.Fatal(err)
+	}
+	first, saveErr, err := EnsureFreshToken(ctx, "id", "secret", expired)
+	if err != nil || saveErr != nil || first.AccessToken != "fresh-1" || exchanges != 1 {
+		t.Fatalf("first refresh: %+v, %v, %v after %d exchanges", first, saveErr, err, exchanges)
+	}
+	if onDisk, _ := LoadToken(); onDisk.RefreshToken != "rotated-1" {
+		t.Errorf("rotated token not on disk: %+v", onDisk)
+	}
+
+	// A second process that loaded the same expired token before the
+	// first one refreshed must reuse the first's result, not exchange the
+	// now-retired refresh token again and overwrite the rotation.
+	second, saveErr, err := EnsureFreshToken(ctx, "id", "secret", expired)
+	if err != nil || saveErr != nil || exchanges != 1 {
+		t.Fatalf("second caller exchanged again: %v, %v after %d exchanges", saveErr, err, exchanges)
+	}
+	if second.AccessToken != "fresh-1" || second.RefreshToken != "rotated-1" {
+		t.Errorf("second caller got %+v, want the first refresh's token", second)
+	}
+	if onDisk, _ := LoadToken(); onDisk.RefreshToken != "rotated-1" {
+		t.Errorf("token on disk changed: %+v", onDisk)
+	}
+
+	// A failed exchange is an error and leaves the stored token alone.
+	if err := SaveToken(expired); err != nil {
+		t.Fatal(err)
+	}
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		return nil, errors.New("invalid_grant")
+	}
+	if _, _, err := EnsureFreshToken(ctx, "id", "secret", expired); err == nil {
+		t.Error("a failed refresh should be an error")
+	}
+	if onDisk, _ := LoadToken(); onDisk.RefreshToken != "r0" {
+		t.Errorf("a failed refresh must not change the stored token: %+v", onDisk)
+	}
+	if _, _, err := EnsureFreshToken(ctx, "id", "secret", nil); err == nil {
+		t.Error("nil token should be an error")
+	}
+}
+
+func TestGrantedMetadataFor_UsesTheGivenToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	mine := &oauth2.Token{AccessToken: "a", RefreshToken: "mine"}
+	if err := SaveToken(mine); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGrantedAccess(map[string]string{"gmail": AccessReadOnly}, []string{"scope-mine"}, "", mine); err != nil {
+		t.Fatal(err)
+	}
+	// Another login replaces the stored credentials and metadata.
+	other := &oauth2.Token{AccessToken: "b", RefreshToken: "other"}
+	if err := SaveGrantedAccess(map[string]string{"drive": AccessFull}, []string{"scope-other"}, "", other); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveToken(other); err != nil {
+		t.Fatal(err)
+	}
+	// A factory still holding the first token must not pick up the other
+	// login's metadata.
+	if got := GrantedServicesFor(mine); got != nil {
+		t.Errorf("GrantedServicesFor(replaced token) = %v, want nil", got)
+	}
+	if got := LoadGrantedScopesFor(mine); got != nil {
+		t.Errorf("LoadGrantedScopesFor(replaced token) = %v, want nil", got)
+	}
+	if got := strings.Join(GrantedServicesFor(other), ","); got != "drive" {
+		t.Errorf("GrantedServicesFor(current token) = %q", got)
+	}
+	if got := LoadGrantedScopesFor(other); len(got) != 1 || got[0] != "scope-other" {
+		t.Errorf("LoadGrantedScopesFor(current token) = %v", got)
 	}
 }
 

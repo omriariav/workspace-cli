@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -222,11 +223,34 @@ var saveGrantedRecord = func(record grantedAccessRecord) error {
 // another login, and falls back to the plain service list written by
 // versions that did not record access levels.
 func GrantedServicesForToken() []string {
-	// An access record that exists but does not match the stored token
-	// was written by another login, and so was the plain service list
-	// beside it: use neither.
+	token, err := LoadToken()
+	if err != nil {
+		token = nil
+	}
+	return GrantedServicesFor(token)
+}
+
+// LoadGrantedScopesFor returns the exact scopes recorded for the given
+// token, or nil if the record on disk belongs to another one.
+func LoadGrantedScopesFor(token *oauth2.Token) []string {
+	if record := readGrantedRecordFor(token); record != nil {
+		return record.Scopes
+	}
+	return nil
+}
+
+// GrantedServicesFor is GrantedServicesForToken for a specific token, so
+// a caller that already holds one reads metadata for that same login even
+// if another login replaces the stored one in the meantime.
+func GrantedServicesFor(token *oauth2.Token) []string {
+	// An access record that exists but does not match the token was
+	// written by another login, and so was the plain service list beside
+	// it: use neither.
 	if _, err := os.Stat(config.GetGrantedAccessPath()); err == nil {
-		access := LoadGrantedAccess()
+		var access map[string]string
+		if record := readGrantedRecordFor(token); record != nil {
+			access = record.Services
+		}
 		if access == nil {
 			return nil
 		}
@@ -320,6 +344,68 @@ func StoredTokenFingerprint() string {
 	return tokenFingerprint(token)
 }
 
+// exchangeRefreshToken performs the network refresh. A variable so tests
+// can replace it.
+var exchangeRefreshToken = func(ctx context.Context, clientID, clientSecret string, token *oauth2.Token) (*oauth2.Token, error) {
+	return GetTokenSource(ctx, clientID, clientSecret, token).Token()
+}
+
+// EnsureFreshToken returns a currently valid token for the stored login,
+// refreshing it if needed.
+//
+// The refresh exchange and the save happen together under the login lock,
+// and the token is re-read from disk once the lock is held. Two processes
+// that find the same expired token therefore refresh one after the other:
+// the second sees the first's result and reuses it instead of refreshing
+// again, so a provider that rotates refresh tokens can never leave an
+// already-invalidated one as the last thing written.
+//
+// saveErr is non-nil when the refresh worked but could not be stored; the
+// returned token is still usable for the current command.
+func EnsureFreshToken(ctx context.Context, clientID, clientSecret string, loaded *oauth2.Token) (token *oauth2.Token, saveErr, err error) {
+	if loaded == nil {
+		return nil, nil, fmt.Errorf("no token")
+	}
+	if loaded.Valid() {
+		return loaded, nil, nil
+	}
+
+	unlock, lockErr := LockLoginState()
+	if lockErr == nil {
+		defer unlock()
+		// Another process may have refreshed, or replaced the login,
+		// while this one waited for the lock.
+		if current, loadErr := LoadToken(); loadErr == nil {
+			if current.Valid() {
+				return current, nil, nil
+			}
+			loaded = current
+		}
+	}
+
+	fresh, err := exchangeRefreshToken(ctx, clientID, clientSecret, loaded)
+	if err != nil {
+		return nil, nil, err
+	}
+	if fresh.RefreshToken == "" {
+		copied := *fresh
+		copied.RefreshToken = loaded.RefreshToken
+		fresh = &copied
+	}
+	if !TokenRefreshed(loaded, fresh) {
+		return fresh, nil, nil
+	}
+	if lockErr != nil {
+		// Could not serialise with other processes; the refresh still has
+		// to be offered for saving, and the lock failure reported.
+		if err := SaveRefreshedToken(loaded, fresh); err != nil {
+			return fresh, err, nil
+		}
+		return fresh, nil, nil
+	}
+	return fresh, saveRefreshedTokenLocked(loaded, fresh), nil
+}
+
 // TokenRefreshed reports whether a token source handed back something
 // other than the stored token: a new access token, or a rotated refresh
 // token (which can arrive even when the access token is unchanged).
@@ -348,7 +434,12 @@ func SaveRefreshedToken(stored, refreshed *oauth2.Token) error {
 		return err
 	}
 	defer unlock()
+	return saveRefreshedTokenLocked(stored, refreshed)
+}
 
+// saveRefreshedTokenLocked is SaveRefreshedToken for a caller that already
+// holds the login lock.
+func saveRefreshedTokenLocked(stored, refreshed *oauth2.Token) error {
 	base := tokenFingerprint(stored)
 	if base == "" || StoredTokenFingerprint() != base {
 		return nil

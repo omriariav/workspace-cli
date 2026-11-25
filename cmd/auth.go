@@ -393,15 +393,11 @@ var refreshStoredToken = func() error {
 	if err != nil {
 		return err
 	}
-	ts := auth.GetTokenSource(context.Background(), config.GetClientID(), config.GetClientSecret(), stored)
-	fresh, err := ts.Token()
+	_, saveErr, err := auth.EnsureFreshToken(context.Background(), config.GetClientID(), config.GetClientSecret(), stored)
 	if err != nil {
 		return redactSecrets(err, stored.AccessToken, stored.RefreshToken)
 	}
-	if !auth.TokenRefreshed(stored, fresh) {
-		return nil
-	}
-	return auth.SaveRefreshedToken(stored, fresh)
+	return saveErr
 }
 
 // storedScopes returns the exact scopes the stored authorization holds:
@@ -809,19 +805,15 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			})
 		}
 	} else {
-		ts := auth.GetTokenSource(context.Background(), clientID, clientSecret, token)
-		current, err := ts.Token()
+		current, saveErr, err := auth.EnsureFreshToken(context.Background(), clientID, clientSecret, token)
 		switch {
 		case err != nil && expired:
 			return p.Print(map[string]interface{}{
 				"authenticated": false,
 				"message":       "Token expired and refresh failed, run: gws auth login",
 			})
-		case err == nil && auth.TokenRefreshed(token, current):
-			warnIfRefreshNotSaved(os.Stderr, auth.SaveRefreshedToken(token, current))
-			if current.RefreshToken == "" {
-				current.RefreshToken = token.RefreshToken
-			}
+		case err == nil:
+			warnIfRefreshNotSaved(os.Stderr, saveErr)
 			token = current
 		}
 	}
