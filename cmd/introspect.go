@@ -54,6 +54,23 @@ var commandScopeOverrides = map[string][]string{
 	"chat find-space":  {"chat", "contacts"},
 }
 
+// commandExtraScopes lists commands whose endpoint requires a scope that
+// `gws auth login` does not request, with how to supply it.
+var commandExtraScopes = map[string]struct {
+	scopes []string
+	note   string
+}{
+	"gmail delete":        {[]string{gmailFullScope}, gmailFullScopeNote},
+	"gmail delete-thread": {[]string{gmailFullScope}, gmailFullScopeNote},
+	"gmail batch-delete":  {[]string{gmailFullScope}, gmailFullScopeNote},
+}
+
+const (
+	gmailFullScope     = "https://mail.google.com/"
+	gmailFullScopeNote = "Permanent deletion requires the full Gmail scope, which gws auth login does not request. " +
+		"Supply a token that carries it through GWS_ACCESS_TOKEN, or use the trash commands instead."
+)
+
 // scopeServicesFor returns the scope services a command uses.
 func scopeServicesFor(cmd *cobra.Command) []string {
 	key := commandKey(cmd)
@@ -238,6 +255,12 @@ func commandScopes(cmd *cobra.Command) map[string]interface{} {
 	}
 	result["scopes"] = auth.ScopesForServices(services)
 	result["readonly_scopes"] = auth.ReadOnlyScopesForServices(services)
+	// Some endpoints need a scope `gws auth login` never requests. Say so,
+	// or the login suggested below would look like it is enough.
+	if extra, ok := commandExtraScopes[commandKey(cmd)]; ok {
+		result["additional_scopes"] = extra.scopes
+		result["additional_scopes_note"] = extra.note
+	}
 	joined := strings.Join(services, ",")
 	// Suggested logins use --add so that following them extends the
 	// stored authorization instead of replacing it.

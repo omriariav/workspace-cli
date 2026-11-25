@@ -110,7 +110,9 @@ existing authorization instead of replacing it. `gws auth status` shows the acce
 #### External access token
 
 ```bash
-export GWS_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+# Any command that prints a Google OAuth access token carrying the scopes
+# the gws command needs (check them with `--show-scopes`).
+export GWS_ACCESS_TOKEN="$(your-token-command)"
 gws calendar events --days 1
 ```
 

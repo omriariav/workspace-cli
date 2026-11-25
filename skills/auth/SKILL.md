@@ -119,8 +119,7 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
 ## External Access Token
 
 If another system already manages Google OAuth tokens (CI, a secrets broker,
-`gcloud auth print-access-token`, a domain-wide-delegation token service),
-hand the token to `gws` directly:
+a domain-wide-delegation token service), hand the token to `gws` directly:
 
 ```bash
 export GWS_ACCESS_TOKEN="$(my-token-broker)"
@@ -131,7 +130,9 @@ gws calendar events --days 1
   service-account modes. No login is needed.
 - `gws` uses it as-is: it is never refreshed, stored, or printed. An expired
   or under-scoped token surfaces the API error (exit code 3).
-- Check what a command needs first with `--show-scopes`.
+- The token must carry the scopes the command needs; check them first
+  with `--show-scopes`. A default `gcloud auth print-access-token` token,
+  for example, has no Workspace scopes.
 - The token is read only from the environment variable or the flag,
   never from `config.yaml`.
 - `--access-token <token>` also works, but a flag value is visible in process

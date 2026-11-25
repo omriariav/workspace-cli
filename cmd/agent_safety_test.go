@@ -235,6 +235,21 @@ func TestIntrospection_ShowScopes(t *testing.T) {
 		t.Errorf("docs read scopes = %v, want Docs scopes", docsRead["scopes"])
 	}
 
+	// Permanent Gmail deletion needs a scope gws auth login never
+	// requests; the output must say so rather than imply the login is
+	// enough.
+	for _, name := range []string{"delete", "delete-thread", "batch-delete"} {
+		del, _ := runIntrospection(t, "gmail", name, "--show-scopes")
+		extra := toStrings(del["additional_scopes"])
+		note, _ := del["additional_scopes_note"].(string)
+		if len(extra) != 1 || extra[0] != "https://mail.google.com/" || !strings.Contains(note, "GWS_ACCESS_TOKEN") {
+			t.Errorf("gmail %s --show-scopes = %v", name, del)
+		}
+	}
+	if trash, _ := runIntrospection(t, "gmail", "trash", "--show-scopes"); trash["additional_scopes"] != nil {
+		t.Errorf("gmail trash needs no extra scope: %v", trash)
+	}
+
 	// chat build-cache also resolves members through the People API.
 	cache, _ := runIntrospection(t, "chat", "build-cache", "--show-scopes")
 	cacheScopes := toStrings(cache["scopes"])
@@ -658,6 +673,15 @@ func TestLogout_ClearsGrantedMetadata(t *testing.T) {
 	}
 	if auth.LoadGrantedAccess() != nil || auth.LoadGrantedServices() != nil {
 		t.Error("logout should remove granted-services and granted-access metadata")
+	}
+}
+
+func TestCommandExtraScopes_ResolveToRealCommands(t *testing.T) {
+	for key := range commandExtraScopes {
+		cmd, _, err := rootCmd.Find(strings.Fields(key))
+		if err != nil || commandKey(cmd) != key {
+			t.Errorf("extra-scope entry %q does not resolve to a real command", key)
+		}
 	}
 }
 
