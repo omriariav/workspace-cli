@@ -139,7 +139,9 @@ gws calendar events --days 1
   login in that case. Unset the variable to use the stored login.
 - Local caches belong to the stored login: with an external token,
   `chat build-cache`, `chat find-group` and `chat find-space` refuse to
-  run, and `chat members` does not use the local name cache.
+  run, and `chat members` does not use the local name cache or the People
+  lookup that fills it: members come back as Chat reports them, so some
+  may lack `display_name` / `email`.
 - Session context hooks (`gws hooks`) never use it, and while it is set
   they add no Workspace context at all: that context is gathered and
   cached with the stored login, which may be a different account.

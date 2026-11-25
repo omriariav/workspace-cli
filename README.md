@@ -124,7 +124,8 @@ visible in process listings; prefer the environment variable.
 Exceptions, all to keep one account's data out of files that belong to the
 stored login: `chat build-cache`, `chat find-group` and `chat find-space`
 refuse to run with an external token, `chat members` skips its local name
-cache, and session hooks (`gws hooks`) add no Workspace context while one is
+cache and the name lookup that fills it (members are returned as Chat reports
+them), and session hooks (`gws hooks`) add no Workspace context while one is
 set. A token that is supplied but empty is an error, never a fallback to the
 stored login.
 
