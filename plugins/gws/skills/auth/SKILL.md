@@ -180,7 +180,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   body); `sheets copy-to` (copies a sheet into another spreadsheet); `events subscriptions create`, `reactivate`, `renew` and
   `update` (start, resume, extend or change delivery of events to a
   Pub/Sub topic); `auth logout` (revokes the stored login); commands that send (Gmail `send`, `reply`, `forward`,
-  `send-draft`; Chat `send`) and commands that change access (Calendar
+  `send-draft`; Chat `send`, `upload`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`, `unsubscribe`, `move`; Drive `share`, `unshare`,
   `update-permission`, `move`, `copy`, `convert`, `add-comment`, `reply`,
   `comment-approval`,

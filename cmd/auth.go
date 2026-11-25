@@ -342,7 +342,8 @@ func loginScopes(services []string, readOnly, scoped bool) []string {
 var lookupTokenScopes = func(token *oauth2.Token) ([]string, error) {
 	// The token is used as given, never refreshed here: the caller has
 	// already refreshed the stored login through the guarded path.
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), identityLookupTimeout)
+	defer cancel()
 	fresh := token
 	svc, err := oauth2api.NewService(ctx, option.WithTokenSource(oauth2.StaticTokenSource(token)))
 	if err != nil {
@@ -351,7 +352,7 @@ var lookupTokenScopes = func(token *oauth2.Token) ([]string, error) {
 	// The tokeninfo endpoint takes the access token as a URL parameter,
 	// and a transport error quotes the request URL. Never let that reach
 	// the terminal or a log.
-	info, err := svc.Tokeninfo().AccessToken(fresh.AccessToken).Do()
+	info, err := svc.Tokeninfo().AccessToken(fresh.AccessToken).Context(ctx).Do()
 	if err != nil {
 		return nil, redactSecrets(err, fresh.AccessToken, fresh.RefreshToken, token.AccessToken, token.RefreshToken)
 	}
@@ -875,14 +876,20 @@ func runStatus(cmd *cobra.Command, args []string) error {
 // second, private refresh here could race it. Callers pass a token they
 // have already made fresh.
 func getUserInfo(token *oauth2.Token) (*oauth2api.Userinfo, error) {
-	ctx := context.Background()
+	// Bounded: this runs during login, after consent, and a stalled
+	// request must not leave the command hanging.
+	ctx, cancel := context.WithTimeout(context.Background(), identityLookupTimeout)
+	defer cancel()
 	svc, err := oauth2api.NewService(ctx, option.WithTokenSource(oauth2.StaticTokenSource(token)))
 	if err != nil {
 		return nil, err
 	}
 
-	return svc.Userinfo.Get().Do()
+	return svc.Userinfo.Get().Context(ctx).Do()
 }
+
+// identityLookupTimeout bounds the account and scope lookups.
+const identityLookupTimeout = 15 * time.Second
 
 // flagString returns a string flag's value, or "" if it is not defined.
 func flagString(cmd *cobra.Command, name string) string {

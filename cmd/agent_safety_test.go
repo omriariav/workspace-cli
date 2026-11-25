@@ -399,7 +399,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},
 		{"drive", "move"}, {"drive", "copy"}, {"drive", "convert"},
-		{"sheets", "copy-to"},
+		{"sheets", "copy-to"}, {"chat", "upload"},
 		{"calendar", "move"},
 	}
 	for _, path := range covered {
