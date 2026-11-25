@@ -298,6 +298,38 @@ func StoredTokenFingerprint() string {
 	return tokenFingerprint(token)
 }
 
+// SaveRefreshedToken stores an access-token refresh of the given stored
+// token. It takes the login lock and saves only if `stored` is still the
+// authorization on disk: if a login or logout replaced it in the meantime
+// (for example a read-only login narrowing access), writing the refresh
+// would put the old, wider grant back. In that case nothing is written;
+// the refreshed token still works for the command that obtained it.
+func SaveRefreshedToken(stored, refreshed *oauth2.Token) error {
+	if stored == nil || refreshed == nil {
+		return nil
+	}
+	unlock, err := LockLoginState()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	base := tokenFingerprint(stored)
+	if base == "" || StoredTokenFingerprint() != base {
+		return nil
+	}
+	// A refresh response may omit the refresh token; keep the stored one
+	// so the token on disk stays the same authorization.
+	toSave := *refreshed
+	if toSave.RefreshToken == "" {
+		toSave.RefreshToken = stored.RefreshToken
+	}
+	if tokenFingerprint(&toSave) != base {
+		return nil
+	}
+	return SaveToken(&toSave)
+}
+
 // LockLoginState serialises the writes a login makes (token, access
 // record, service list) across processes. The returned function releases
 // the lock.

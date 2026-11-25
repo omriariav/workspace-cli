@@ -732,7 +732,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 
 		// Save refreshed token
-		_ = auth.SaveToken(newToken)
+		_ = auth.SaveRefreshedToken(token, newToken)
 		token = newToken
 	}
 

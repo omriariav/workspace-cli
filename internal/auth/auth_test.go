@@ -853,6 +853,52 @@ func TestStoredTokenFingerprint_ChangesOnlyWhenTheLoginIsReplaced(t *testing.T) 
 	}
 }
 
+func TestSaveRefreshedToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	stored := &oauth2.Token{AccessToken: "a1", RefreshToken: "login-1"}
+	if err := SaveToken(stored); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ordinary refresh: saved, and the refresh token is kept even when
+	// the refresh response omits it.
+	if err := SaveRefreshedToken(stored, &oauth2.Token{AccessToken: "a2"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := LoadToken()
+	if got.AccessToken != "a2" || got.RefreshToken != "login-1" {
+		t.Errorf("after refresh = %+v", got)
+	}
+
+	// A read-only login replaces the authorization while an API command
+	// that started earlier is still refreshing the old, wider token.
+	if err := SaveToken(&oauth2.Token{AccessToken: "ro1", RefreshToken: "login-2-readonly"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveRefreshedToken(stored, &oauth2.Token{AccessToken: "a3", RefreshToken: "login-1"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = LoadToken()
+	if got.AccessToken != "ro1" || got.RefreshToken != "login-2-readonly" {
+		t.Errorf("a stale refresh overwrote the new login: %+v", got)
+	}
+
+	// After logout there is nothing to refresh into.
+	if err := DeleteToken(); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveRefreshedToken(stored, &oauth2.Token{AccessToken: "a4", RefreshToken: "login-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if TokenExists() {
+		t.Error("a refresh must not bring back a token after logout")
+	}
+	// Nil arguments are a no-op.
+	if err := SaveRefreshedToken(nil, stored); err != nil {
+		t.Errorf("nil stored: %v", err)
+	}
+}
+
 func TestTokenFingerprint(t *testing.T) {
 	if tokenFingerprint(nil) != "" || tokenFingerprint(&oauth2.Token{AccessToken: "a"}) != "" {
 		t.Error("no refresh token means no fingerprint")

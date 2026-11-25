@@ -52,6 +52,16 @@ func init() {
 	calendarSuggestTimeCmd.MarkFlagRequired("to")
 }
 
+// suggestTimeCalendarService returns the Calendar client suggest-time
+// uses. A variable so tests can point the whole command at a mock server.
+var suggestTimeCalendarService = func(ctx context.Context) (*calendar.Service, error) {
+	factory, err := client.NewFactory(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return factory.Calendar()
+}
+
 // timeSpan is a half-open interval [Start, End).
 type timeSpan struct {
 	Start, End time.Time
@@ -144,8 +154,11 @@ func parseTimeIn(s string, loc *time.Location) (t time.Time, dateOnly bool, err 
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t, false, nil
 	}
-	if t, err := time.ParseInLocation("2006-01-02 15:04", s, loc); err == nil {
-		return t, false, nil
+	// Zone-less values are read as wall-clock time in loc through
+	// civilInstant, so a time that a DST change skips moves forward to the
+	// first real instant instead of backward, before what was asked for.
+	if t, err := time.Parse("2006-01-02 15:04", s); err == nil {
+		return civilInstant(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), loc), false, nil
 	}
 	if t, err := time.Parse("2006-01-02", s); err == nil {
 		return startOfCivilDate(t.Year(), t.Month(), t.Day(), loc), true, nil
@@ -426,12 +439,7 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 		return usageErrorf("too many calendars: %d given, but one free/busy query covers at most %d (--calendars and --attendees combined)", len(items), maxFreeBusyCalendars)
 	}
 
-	ctx := context.Background()
-	factory, err := client.NewFactory(ctx)
-	if err != nil {
-		return p.PrintError(err)
-	}
-	svc, err := factory.Calendar()
+	svc, err := suggestTimeCalendarService(context.Background())
 	if err != nil {
 		return p.PrintError(err)
 	}

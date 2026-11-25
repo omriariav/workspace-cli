@@ -115,6 +115,137 @@ func TestParseWorkingHours(t *testing.T) {
 	}
 }
 
+// End to end through the command handler against a mock Calendar server:
+// flag parsing, the free/busy request, and the printed result.
+func TestCalendarSuggestTime_CommandAgainstMockServer(t *testing.T) {
+	var got calendar.FreeBusyRequest
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/freeBusy" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("bad request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
+			Calendars: map[string]calendar.FreeBusyCalendar{
+				"primary":       {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T09:00:00Z", End: "2026-12-01T12:00:00Z"}}},
+				"a@example.com": {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T13:00:00Z", End: "2026-12-01T16:00:00Z"}}},
+				"b@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
+			},
+		})
+	})
+	original := suggestTimeCalendarService
+	suggestTimeCalendarService = func(context.Context) (*calendar.Service, error) { return svc, nil }
+	t.Cleanup(func() { suggestTimeCalendarService = original })
+
+	cmd := calendarSuggestTimeCmd
+	flags := map[string]string{
+		"from": "2026-12-01", "to": "2026-12-01", "timezone": "UTC", "duration": "45",
+		"attendees": "a@example.com, b@example.com", "max": "3",
+	}
+	set := func(name, value string) {
+		t.Helper()
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatalf("set --%s: %v", name, err)
+		}
+	}
+	for name, value := range flags {
+		set(name, value)
+	}
+	t.Cleanup(func() {
+		for name := range flags {
+			f := cmd.Flags().Lookup(name)
+			_ = f.Value.Set(f.DefValue)
+			f.Changed = false
+		}
+		f := cmd.Flags().Lookup("allow-partial")
+		_ = f.Value.Set("false")
+		f.Changed = false
+	})
+
+	// One attendee is unreadable: by default the command refuses.
+	if _, err := captureStdout(t, func() error { return runCalendarSuggestTime(cmd, nil) }); err == nil || !strings.Contains(err.Error(), "b@example.com (notFound)") {
+		t.Fatalf("error = %v, want the unreadable calendar named", err)
+	}
+	// The request covered the whole date (a date-only --to is inclusive)
+	// and every calendar, de-duplicated and in order.
+	if got.TimeMin != "2026-12-01T00:00:00Z" || got.TimeMax != "2026-12-02T00:00:00Z" {
+		t.Errorf("request range = %s - %s", got.TimeMin, got.TimeMax)
+	}
+	var ids []string
+	for _, item := range got.Items {
+		ids = append(ids, item.Id)
+	}
+	if strings.Join(ids, ",") != "primary,a@example.com,b@example.com" {
+		t.Errorf("request calendars = %v", ids)
+	}
+
+	// With --allow-partial it proceeds and says the result is partial.
+	set("allow-partial", "true")
+	out, err := captureStdout(t, func() error { return runCalendarSuggestTime(cmd, nil) })
+	if err != nil {
+		t.Fatalf("runCalendarSuggestTime: %v", err)
+	}
+	var result struct {
+		Timezone         string   `json:"timezone"`
+		DurationMinutes  int      `json:"duration_minutes"`
+		CalendarsChecked []string `json:"calendars_checked"`
+		Partial          bool     `json:"partial"`
+		Count            int      `json:"count"`
+		Unavailable      []struct {
+			Calendar string `json:"calendar"`
+			Reason   string `json:"reason"`
+		} `json:"unavailable"`
+		Suggestions []struct {
+			Start       string `json:"start"`
+			End         string `json:"end"`
+			FreeUntil   string `json:"free_until"`
+			FreeMinutes int    `json:"free_minutes"`
+		} `json:"suggestions"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out)
+	}
+	if !result.Partial || len(result.Unavailable) != 1 || result.Unavailable[0].Calendar != "b@example.com" || result.Unavailable[0].Reason != "notFound" {
+		t.Errorf("partial = %v, unavailable = %+v", result.Partial, result.Unavailable)
+	}
+	if strings.Join(result.CalendarsChecked, ",") != "primary,a@example.com" || result.DurationMinutes != 45 || result.Timezone != "UTC" {
+		t.Errorf("checked = %v, duration = %d, timezone = %s", result.CalendarsChecked, result.DurationMinutes, result.Timezone)
+	}
+	// Working hours 09:00-17:00, busy 09:00-12:00 and 13:00-16:00: the
+	// free windows are 12:00-13:00 and 16:00-17:00.
+	if result.Count != 2 || len(result.Suggestions) != 2 {
+		t.Fatalf("suggestions = %+v", result.Suggestions)
+	}
+	first, second := result.Suggestions[0], result.Suggestions[1]
+	if first.Start != "2026-12-01T12:00:00Z" || first.End != "2026-12-01T12:45:00Z" || first.FreeUntil != "2026-12-01T13:00:00Z" || first.FreeMinutes != 60 {
+		t.Errorf("first suggestion = %+v", first)
+	}
+	if second.Start != "2026-12-01T16:00:00Z" || second.FreeUntil != "2026-12-01T17:00:00Z" {
+		t.Errorf("second suggestion = %+v", second)
+	}
+}
+
+func TestParseTimeIn_NonexistentLocalTimeMovesForward(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	// 02:30 on 2026-03-08 does not exist in New York. As a --from it must
+	// become 03:00 EDT (07:00 UTC), never 01:30 EST, which is earlier
+	// than what was asked for.
+	got, dateOnly, err := parseTimeIn("2026-03-08 02:30", loc)
+	if err != nil || dateOnly || !got.Equal(mustTime(t, "2026-03-08T07:00:00Z")) {
+		t.Errorf("parseTimeIn = %v, %v, %v; want 2026-03-08T07:00:00Z", got.UTC(), dateOnly, err)
+	}
+	slots := suggestSlots(nil, got, got.Add(6*time.Hour), time.Hour, 0, 24*time.Hour, loc, true, 1)
+	if len(slots) != 1 || slots[0].Start.Before(mustTime(t, "2026-03-08T07:00:00Z")) {
+		t.Errorf("suggestion %v starts before the requested --from", slots)
+	}
+}
+
 func TestParseTimeIn(t *testing.T) {
 	loc, _ := time.LoadLocation("America/New_York")
 	got, dateOnly, err := parseTimeIn("2026-12-01", loc)
