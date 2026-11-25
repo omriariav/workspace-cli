@@ -327,6 +327,61 @@ func TestSensitiveEffect_DriveUpdateOnlyWhenTrashing(t *testing.T) {
 	}
 }
 
+func TestSensitiveEffect_ChatSetupSpaceOnlyWithMembers(t *testing.T) {
+	setup, _, _ := rootCmd.Find([]string{"chat", "setup-space"})
+	t.Cleanup(func() { _ = setup.Flags().Set("members", "") })
+
+	if _, ok := sensitiveEffect(setup); ok {
+		t.Error("chat setup-space without --members should not require confirmation")
+	}
+	if err := setup.Flags().Set("members", "users/123,users/456"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := sensitiveEffect(setup); !ok {
+		t.Error("chat setup-space --members should require confirmation")
+	}
+	var errW bytes.Buffer
+	if err := confirmGate(setup, true, false, strings.NewReader(""), &errW, false); err == nil || !strings.Contains(err.Error(), "confirmation required") {
+		t.Errorf("gate error = %v", err)
+	}
+}
+
+func TestConditionalSensitive_RulesResolveAndTrigger(t *testing.T) {
+	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com"}
+	for key, rule := range conditionalSensitive {
+		cmd, _, err := rootCmd.Find(strings.Fields(key))
+		if err != nil || commandKey(cmd) != key {
+			t.Errorf("conditional rule %q does not resolve to a real command", key)
+			continue
+		}
+		f := cmd.Flags().Lookup(rule.flag)
+		if f == nil {
+			t.Errorf("gws %s has no --%s flag", key, rule.flag)
+			continue
+		}
+		if _, ok := sensitiveEffect(cmd); ok {
+			t.Errorf("gws %s without --%s should not require confirmation", key, rule.flag)
+		}
+		original := f.Value.String()
+		if err := cmd.Flags().Set(rule.flag, values[rule.flag]); err != nil {
+			t.Fatalf("set --%s: %v", rule.flag, err)
+		}
+		if _, ok := sensitiveEffect(cmd); !ok {
+			t.Errorf("gws %s --%s should require confirmation", key, rule.flag)
+		}
+		// Restore the flag for other tests (slice flags need replacing).
+		if sv, ok := f.Value.(interface{ Replace([]string) error }); ok {
+			_ = sv.Replace(nil)
+		} else {
+			_ = cmd.Flags().Set(rule.flag, original)
+		}
+		f.Changed = false
+		if _, ok := sensitiveEffect(cmd); ok {
+			t.Errorf("gws %s should not require confirmation after the flag is cleared", key)
+		}
+	}
+}
+
 func TestStoredOAuthLoginActive(t *testing.T) {
 	if !storedOAuthLoginActive() {
 		t.Error("default configuration uses the stored OAuth login")
@@ -492,8 +547,16 @@ func TestDeriveGrantedAccess(t *testing.T) {
 		t.Errorf("notGranted = %q", got)
 	}
 
-	// A read-only request is never reported as full, even when the
-	// service's full and read-only scope sets coincide.
+	// An incremental read-only login can return write scopes granted
+	// earlier; with no local metadata the level must still be full.
+	prior := append(auth.ScopesForServices([]string{"drive"}), auth.ReadOnlyScopesForServices([]string{"drive", "sheets"})...)
+	up, missing := deriveGrantedAccess(map[string]string{"drive": auth.AccessReadOnly, "sheets": auth.AccessReadOnly}, prior)
+	if up["drive"] != auth.AccessFull || up["sheets"] != auth.AccessReadOnly || len(missing) != 0 {
+		t.Errorf("readonly request with prior write scopes = %v (missing %v), want drive full", up, missing)
+	}
+
+	// When a service's full and read-only scope sets coincide, the
+	// requested label is kept.
 	groups, _ := deriveGrantedAccess(map[string]string{"groups": auth.AccessReadOnly}, auth.ScopesForServices([]string{"groups"}))
 	if groups["groups"] != auth.AccessReadOnly {
 		t.Errorf("groups = %q, want readonly", groups["groups"])

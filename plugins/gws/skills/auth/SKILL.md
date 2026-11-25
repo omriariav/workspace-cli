@@ -147,8 +147,10 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   on your own initiative.
 - Covered by name: every command that starts with `delete`, `trash`,
   `remove`, `clear`, `empty` or `batch-delete`, in any service (including
-  content deletes such as `docs delete-table-row` or `sheets clear`), and
-  `drive update --trashed`.
+  content deletes such as `docs delete-table-row` or `sheets clear`).
+- Covered when a flag is used: `drive update --trashed`, `chat setup-space
+  --members`, `calendar create --attendees`, `calendar update
+  --add-attendees`.
 - Covered explicitly: commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`; Drive `share`, `unshare`,

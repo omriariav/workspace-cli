@@ -232,11 +232,11 @@ func mergeGrantedAccess(existing map[string]string, services []string, readOnly 
 	return access
 }
 
-// deriveGrantedAccess checks the requested access levels against the
-// scopes Google actually granted. A service keeps its requested level only
-// when every scope of that level was granted; a full request that only got
-// the read-only scopes is recorded as read-only; a service with neither is
-// dropped and returned in notGranted.
+// deriveGrantedAccess sets each requested service's access level from the
+// scopes Google actually granted: full when every full scope is present
+// (even if only read-only was requested this time), read-only when only
+// the read-only scopes are, and dropped (returned in notGranted) when
+// neither set is complete.
 func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (access map[string]string, notGranted []string) {
 	granted := make(map[string]bool, len(grantedScopes))
 	for _, s := range grantedScopes {
@@ -258,10 +258,17 @@ func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (a
 			continue
 		}
 		one := []string{svc}
+		full := auth.ScopesForServices(one)
+		readOnly := auth.ReadOnlyScopesForServices(one)
+		// The granted scopes decide the level, in both directions: an
+		// incremental read-only login can still return write scopes that
+		// were granted earlier. A service whose full and read-only sets
+		// coincide (e.g. groups) keeps the requested label.
+		fullGranted := hasAll(full) && (level == auth.AccessFull || len(full) > len(readOnly))
 		switch {
-		case level == auth.AccessFull && hasAll(auth.ScopesForServices(one)):
+		case fullGranted:
 			access[svc] = auth.AccessFull
-		case hasAll(auth.ReadOnlyScopesForServices(one)):
+		case hasAll(readOnly):
 			access[svc] = auth.AccessReadOnly
 			if level == auth.AccessFull {
 				notGranted = append(notGranted, svc+" (write access)")

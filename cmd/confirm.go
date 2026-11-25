@@ -18,7 +18,9 @@ import (
 //     a naming rule, so a newly added delete command is covered without
 //     anyone remembering to list it;
 //   - the commands listed in sensitiveCommands, which send messages or
-//     change who can access data, and whose names follow no single pattern.
+//     change who can access data, and whose names follow no single pattern;
+//   - the commands in conditionalSensitive, when their triggering flag is
+//     used (e.g. `drive update --trashed`).
 //
 // sensitiveCommands also supplies a specific description for some
 // destructive commands. Keys are command paths without the leading "gws ".
@@ -84,6 +86,26 @@ var sensitiveCommands = map[string]string{
 	"events subscriptions delete": "deletes an event subscription",
 }
 
+// conditionalSensitive lists commands that send, share or delete only when
+// a specific flag carries a value: the same command without that flag is
+// an ordinary create or edit.
+var conditionalSensitive = map[string]struct{ flag, effect string }{
+	"drive update":     {"trashed", "moves a file to Trash"},
+	"chat setup-space": {"members", "creates a chat space and adds members to it"},
+	"calendar create":  {"attendees", "invites attendees to an event"},
+	"calendar update":  {"add-attendees", "invites attendees to an event"},
+}
+
+// flagIsSet reports whether a flag's string value is a real value rather
+// than the empty/false zero value of a string, bool, or slice flag.
+func flagIsSet(v string) bool {
+	switch strings.TrimSpace(v) {
+	case "", "false", "[]":
+		return false
+	}
+	return true
+}
+
 // destructivePrefixes are the command-name prefixes that mark a command as
 // deleting or clearing data. "untrash" and "unshare" style names are not
 // matched by prefix; unshare commands are listed explicitly above.
@@ -99,10 +121,10 @@ func sensitiveEffect(cmd *cobra.Command) (string, bool) {
 	if effect, ok := sensitiveCommands[key]; ok {
 		return effect, true
 	}
-	// `drive update` is only destructive when it trashes the file.
-	if key == "drive update" {
-		if trashed, err := cmd.Flags().GetBool("trashed"); err == nil && trashed {
-			return "moves a file to Trash", true
+	// Commands that are sensitive only when a particular flag is used.
+	if rule, ok := conditionalSensitive[key]; ok {
+		if f := cmd.Flags().Lookup(rule.flag); f != nil && flagIsSet(f.Value.String()) {
+			return rule.effect, true
 		}
 	}
 	// Only runnable leaf commands: a group such as `gws events
