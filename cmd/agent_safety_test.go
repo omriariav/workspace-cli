@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -11,9 +13,11 @@ import (
 
 	"github.com/omriariav/workspace-cli/internal/auth"
 	"github.com/omriariav/workspace-cli/internal/config"
+	"github.com/omriariav/workspace-cli/internal/printer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
+	"google.golang.org/api/googleapi"
 )
 
 // --- confirmation gate ---
@@ -602,6 +606,64 @@ func TestReadOnlyScopeHint(t *testing.T) {
 	}
 	if hint := readOnlyScopeHint(nil, insufficient, map[string]string{"gmail": auth.AccessReadOnly}); hint != "" {
 		t.Errorf("no hint expected without a command, got %q", hint)
+	}
+}
+
+func TestWithScopeHint_IsPartOfTheStructuredError(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	tok := &oauth2.Token{AccessToken: "a", RefreshToken: "r"}
+	if err := auth.SaveToken(tok); err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}, nil, "", tok); err != nil {
+		t.Fatal(err)
+	}
+	send, _, _ := rootCmd.Find([]string{"gmail", "send"})
+	previous := executedCmd
+	executedCmd = send
+	t.Cleanup(func() { executedCmd = previous })
+
+	apiErr := fmt.Errorf("failed to send: %w", &googleapi.Error{Code: 403, Message: "Request had insufficient authentication scopes."})
+
+	hinted := withScopeHint(apiErr)
+	if !strings.Contains(hinted.Error(), "gws auth login --add --services gmail") {
+		t.Fatalf("hint missing: %v", hinted)
+	}
+	// Exit-code mapping still sees the API error underneath.
+	if exitCodeForError(hinted) != ExitAuth {
+		t.Errorf("exit code = %d, want %d", exitCodeForError(hinted), ExitAuth)
+	}
+
+	// Printed as JSON, stderr is exactly one document, hint included.
+	var stderr bytes.Buffer
+	p := &hintingPrinter{Printer: printer.NewWithWriters(io.Discard, &stderr, "json")}
+	_ = p.PrintError(apiErr)
+	var doc map[string]string
+	if err := json.Unmarshal(stderr.Bytes(), &doc); err != nil {
+		t.Fatalf("stderr is not a single JSON document: %v\n%s", err, stderr.String())
+	}
+	if !strings.Contains(doc["error"], "insufficient authentication scopes") || !strings.Contains(doc["error"], "--add --services gmail") {
+		t.Errorf("error field = %q", doc["error"])
+	}
+
+	// No hint for an unrelated failure, a full-access service, or when
+	// another credential is in use.
+	if got := withScopeHint(errors.New("boom")); got.Error() != "boom" {
+		t.Errorf("non-auth error changed: %v", got)
+	}
+	viper.Set("access_token", "external")
+	if got := withScopeHint(apiErr); got != apiErr {
+		t.Errorf("hint added although an external token is in use: %v", got)
+	}
+	viper.Set("access_token", "")
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}, nil, "", tok); err != nil {
+		t.Fatal(err)
+	}
+	if got := withScopeHint(apiErr); got != apiErr {
+		t.Errorf("hint added for a full-access service: %v", got)
+	}
+	if withScopeHint(nil) != nil {
+		t.Error("nil should stay nil")
 	}
 }
 

@@ -574,13 +574,16 @@ func TestQueryBusySpans_ExpandsGroups(t *testing.T) {
 			Groups: map[string]calendar.FreeBusyGroup{
 				"team@example.com":   {Calendars: []string{"a@example.com", "b@example.com"}},
 				"broken@example.com": {Errors: []*calendar.Error{{Reason: "groupTooBig"}}},
-				"half@example.com":   {Calendars: []string{"a@example.com", "hidden@example.com"}},
-				"empty@example.com":  {},
+				// The unreadable member comes first: the readable one after
+				// it must still be processed.
+				"half@example.com":  {Calendars: []string{"hidden@example.com", "c@example.com"}},
+				"empty@example.com": {},
 			},
 			Calendars: map[string]calendar.FreeBusyCalendar{
 				"a@example.com":      {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T09:00:00Z", End: "2026-12-01T10:00:00Z"}}},
 				"b@example.com":      {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T14:00:00Z", End: "2026-12-01T15:00:00Z"}}},
 				"hidden@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
+				"c@example.com":      {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T16:00:00Z", End: "2026-12-01T17:00:00Z"}}},
 			},
 		})
 	})
@@ -597,8 +600,16 @@ func TestQueryBusySpans_ExpandsGroups(t *testing.T) {
 		t.Errorf("checked = %v, want only the fully readable group", checked)
 	}
 	merged := mergeSpans(busy)
-	if len(merged) != 2 || !merged[0].Start.Equal(mustTime(t, "2026-12-01T09:00:00Z")) || !merged[1].Start.Equal(mustTime(t, "2026-12-01T14:00:00Z")) {
-		t.Errorf("busy = %v, want both members' periods", merged)
+	// ...including the readable member of the partly unreadable group:
+	// c@example.com is known to be busy 16:00-17:00, so that hour must not
+	// be offered even though its group as a whole is unavailable.
+	if len(merged) != 3 || !merged[0].Start.Equal(mustTime(t, "2026-12-01T09:00:00Z")) || !merged[1].Start.Equal(mustTime(t, "2026-12-01T14:00:00Z")) || !merged[2].Start.Equal(mustTime(t, "2026-12-01T16:00:00Z")) {
+		t.Errorf("busy = %v, want every readable member's periods", merged)
+	}
+	for _, s := range suggestSlots(busy, from, to, time.Hour, 9*time.Hour, 17*time.Hour, time.UTC, true, 10) {
+		if s.Start.Before(mustTime(t, "2026-12-01T17:00:00Z")) && s.FreeUntil.After(mustTime(t, "2026-12-01T16:00:00Z")) {
+			t.Errorf("suggestion %v overlaps a known busy period of a group member", s)
+		}
 	}
 	reasons := map[string]string{}
 	for _, u := range unavailable {

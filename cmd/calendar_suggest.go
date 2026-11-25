@@ -554,19 +554,22 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 				markUnavailable(item.Id, "group has no readable members")
 				continue
 			}
-			groupOK := true
+			// Every member is processed even after one turns out to be
+			// unreadable: the busy time of the members that can be read
+			// must still block slots when --allow-partial continues.
+			var unreadable []string
 			for _, member := range group.Calendars {
 				ok, reason, err := addCalendar(member)
 				if err != nil {
 					return nil, nil, nil, err
 				}
 				if !ok {
-					markUnavailable(item.Id, fmt.Sprintf("group member %s: %s", member, reason))
-					groupOK = false
-					break
+					unreadable = append(unreadable, fmt.Sprintf("%s: %s", member, reason))
 				}
 			}
-			if groupOK {
+			if len(unreadable) > 0 {
+				markUnavailable(item.Id, "group member "+strings.Join(unreadable, "; group member "))
+			} else {
 				checked = append(checked, item.Id)
 			}
 			continue

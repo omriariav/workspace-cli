@@ -115,16 +115,7 @@ func executeAndResolve(errW io.Writer) int {
 	if handled, err := handleIntrospection(rootCmd, os.Args[1:], os.Stdout); handled {
 		return resolveExitError(err, errW)
 	}
-	err := rootCmd.Execute()
-	code := resolveExitError(err, errW)
-	// The hint points at `gws auth login`, which only helps when the stored
-	// OAuth login is the credential in use.
-	if code == ExitAuth && storedOAuthLoginActive() {
-		if hint := readOnlyScopeHint(executedCmd, err, auth.LoadGrantedAccess()); hint != "" {
-			fmt.Fprintln(errW, hint)
-		}
-	}
-	return code
+	return resolveExitError(rootCmd.Execute(), errW)
 }
 
 // storedOAuthLoginActive reports whether commands authenticate with the
@@ -274,5 +265,41 @@ func GetPrinter() printer.Printer {
 	if quiet {
 		return printer.NewNullPrinter()
 	}
-	return printer.New(os.Stdout, GetFormat())
+	return &hintingPrinter{Printer: printer.New(os.Stdout, GetFormat())}
 }
+
+// hintingPrinter adds the read-only scope hint to an insufficient-scope
+// error before it is printed, so the hint is part of the one structured
+// error (JSON, YAML or text) rather than an extra line after it, and is
+// suppressed together with it under --quiet.
+type hintingPrinter struct {
+	printer.Printer
+}
+
+func (h *hintingPrinter) PrintError(err error) error {
+	return h.Printer.PrintError(withScopeHint(err))
+}
+
+// withScopeHint returns err with the scope hint appended when it applies:
+// the failure is an auth error, the stored OAuth login is the credential
+// in use, and the command's service was not authorized in full.
+func withScopeHint(err error) error {
+	if err == nil || exitCodeForError(err) != ExitAuth || !storedOAuthLoginActive() {
+		return err
+	}
+	hint := readOnlyScopeHint(executedCmd, err, auth.LoadGrantedAccess())
+	if hint == "" {
+		return err
+	}
+	return &hintedError{err: err, hint: hint}
+}
+
+// hintedError carries a hint in its message while still unwrapping to the
+// original error, so exit-code mapping keeps seeing the API error.
+type hintedError struct {
+	err  error
+	hint string
+}
+
+func (e *hintedError) Error() string { return e.err.Error() + "\n" + e.hint }
+func (e *hintedError) Unwrap() error { return e.err }
