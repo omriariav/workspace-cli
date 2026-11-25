@@ -54,6 +54,16 @@ Workspace Events, and Custom Search.`,
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return err
 		}
+		// A token that was supplied but is empty is refused for every
+		// command, here, before any of them can act: not only the ones
+		// that go on to build an API client. Some answer from local data
+		// (the Chat space cache) and would otherwise serve the stored
+		// login's data to a caller that selected a different credential.
+		if cmd != versionCmd && (cmd.Parent() == nil || cmd.Parent().Name() != "completion") {
+			if err := config.CheckAccessToken(); err != nil {
+				return usageErrorf("%s", err.Error())
+			}
+		}
 		yes, _ := cmd.Flags().GetBool("yes")
 		return confirmGate(cmd, config.GetConfirmSensitive(), yes, os.Stdin, os.Stderr, stdinIsTerminal())
 	},

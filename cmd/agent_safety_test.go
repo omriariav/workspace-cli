@@ -1862,3 +1862,37 @@ func TestConfirmGate_EmptyReplacementNeedsConfirmation(t *testing.T) {
 		reset()
 	}
 }
+
+// A token that was supplied but is empty must not be read as "no token"
+// by the commands that answer from the local Chat space cache: they would
+// hand the stored login's cached spaces and members to a caller that
+// selected a different credential. Checked without --refresh, where no
+// API client is ever built.
+func TestChatSpaceCache_RefusedWithEmptyExternalToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("GWS_ACCESS_TOKEN", "")
+
+	for _, path := range [][]string{{"chat", "find-group"}, {"chat", "find-space"}, {"chat", "build-cache"}} {
+		cmd, _, err := rootCmd.Find(path)
+		if err != nil {
+			t.Fatalf("%v not found", path)
+		}
+		var runErr error
+		out := captureStderrStr(t, func() { runErr = cmd.RunE(cmd, nil) })
+		if runErr == nil || !strings.Contains(out, "is set but empty") {
+			t.Errorf("gws %s: err = %v, output = %q", strings.Join(path, " "), runErr, out)
+		}
+	}
+
+	// The same refusal applies to every command, before it runs.
+	list, _, _ := rootCmd.Find([]string{"chat", "list"})
+	var preErr error
+	_ = captureStderrStr(t, func() { preErr = rootCmd.PersistentPreRunE(list, nil) })
+	if preErr == nil || !strings.Contains(preErr.Error(), "is set but empty") {
+		t.Errorf("pre-run: err = %v, want the empty-token error", preErr)
+	}
+	// `gws version` needs no credential and still runs.
+	if err := rootCmd.PersistentPreRunE(versionCmd, nil); err != nil {
+		t.Errorf("version: %v", err)
+	}
+}

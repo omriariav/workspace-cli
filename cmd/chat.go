@@ -2840,6 +2840,11 @@ func spaceFromMessageName(name string) string {
 // another credential would mix that account's spaces and members into it,
 // where later commands would find them without the token.
 func requireStoredLoginForSpaceCache(cmd *cobra.Command) error {
+	// Supplied but empty is not "no token": refuse rather than answer
+	// from the stored login's cache.
+	if err := config.CheckAccessToken(); err != nil {
+		return usageErrorf("%s", err.Error())
+	}
 	if config.GetAccessToken() == "" {
 		return nil
 	}
