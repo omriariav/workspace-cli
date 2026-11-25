@@ -47,7 +47,7 @@ func TestParseSuggestDuration(t *testing.T) {
 		t.Errorf("24h in minutes = %v, %v", got, err)
 	}
 	// Huge values must be rejected, not overflow into a negative duration.
-	for _, in := range []string{"", "0", "-5", "-30m", "soon", "1441", "25h", "9223372036854775807", "153722867281"} {
+	for _, in := range []string{"", "0", "-5", "-30m", "soon", "1441", "25h", "9223372036854775807", "153722867281", "500ms", "90s", "1m30s"} {
 		if _, err := parseSuggestDuration(in); err == nil {
 			t.Errorf("parseSuggestDuration(%q) should fail", in)
 		}
@@ -242,6 +242,39 @@ func TestSuggestSlots_MidnightDSTTransition(t *testing.T) {
 	whole := suggestSlots(nil, from, to, time.Hour, 0, 24*time.Hour, loc, true, 10)
 	if len(whole) != 1 || !whole[0].Start.Equal(from) || !whole[0].FreeUntil.Equal(to) {
 		t.Errorf("whole-day windows = %v, want one continuous window", whole)
+	}
+}
+
+func TestCivilDateBoundaries_MidnightDSTTransition(t *testing.T) {
+	loc, err := time.LoadLocation("America/Sao_Paulo")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	// 2018-11-04 00:00 did not exist: the day began at 01:00 (-02:00),
+	// which is 03:00 UTC.
+	firstInstant := mustTime(t, "2018-11-04T03:00:00Z")
+
+	if got := startOfCivilDate(2018, 11, 4, loc); !got.Equal(firstInstant) {
+		t.Errorf("startOfCivilDate = %v, want %v", got.UTC(), firstInstant)
+	}
+	// A date-only --from on the transition date starts at that instant.
+	from, dateOnly, err := parseTimeIn("2018-11-04", loc)
+	if err != nil || !dateOnly || !from.Equal(firstInstant) {
+		t.Errorf("parseTimeIn = %v, %v, %v", from.UTC(), dateOnly, err)
+	}
+	// A date-only --to of the day before includes all of that day: the
+	// exclusive cutoff is the first instant of the transition date.
+	to, _, _ := parseTimeIn("2018-11-03", loc)
+	if got := endOfCivilDate(to, loc); !got.Equal(firstInstant) {
+		t.Errorf("endOfCivilDate(2018-11-03) = %v, want %v", got.UTC(), firstInstant)
+	}
+	// ...and a date-only --to on the transition date ends a civil day later.
+	if got := endOfCivilDate(from, loc); !got.Equal(time.Date(2018, 11, 5, 0, 0, 0, 0, loc)) {
+		t.Errorf("endOfCivilDate(2018-11-04) = %v", got)
+	}
+	// Ordinary dates and month overflow are unaffected.
+	if got := startOfCivilDate(2026, 1, 32, time.UTC); !got.Equal(mustTime(t, "2026-02-01T00:00:00Z")) {
+		t.Errorf("day overflow = %v", got)
 	}
 }
 

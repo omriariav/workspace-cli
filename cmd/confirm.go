@@ -94,6 +94,7 @@ var conditionalSensitive = map[string]struct{ flag, effect string }{
 	"chat setup-space": {"members", "creates a chat space and adds members to it"},
 	"calendar create":  {"attendees", "invites attendees to an event"},
 	"calendar update":  {"add-attendees", "invites attendees to an event"},
+	"calendar rsvp":    {"message", "sends a message to all attendees of an event"},
 }
 
 // flagIsSet reports whether a flag's string value is a real value rather

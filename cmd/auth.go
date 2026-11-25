@@ -127,11 +127,6 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	// Only an incremental login (--add) may keep the previous refresh
-	// token: its grant is a subset of the new one. A replacing login must
-	// come with its own refresh token, otherwise a login that narrows
-	// access (e.g. --readonly) would keep refreshing with the old, wider
-	// grant while reporting the narrower one.
 	// Report what Google actually granted, not what was requested: the
 	// user can untick scopes on the consent screen.
 	if granted, ok := token.Extra("scope").(string); ok && strings.TrimSpace(granted) != "" {
@@ -232,11 +227,17 @@ func mergeGrantedAccess(existing map[string]string, services []string, readOnly 
 	return access
 }
 
-// deriveGrantedAccess sets each requested service's access level from the
-// scopes Google actually granted: full when every full scope is present
-// (even if only read-only was requested this time), read-only when only
-// the read-only scopes are, and dropped (returned in notGranted) when
-// neither set is complete.
+// deriveGrantedAccess builds the per-service access levels from the
+// complete set of scopes Google returned. Every known service is examined,
+// not just the requested ones: incremental authorization can return scopes
+// granted in an earlier login that local metadata no longer knows about.
+//
+// A service is full when every one of its full scopes is present,
+// read-only when only its read-only scopes are, and absent otherwise.
+// Where the two sets coincide (e.g. groups, whose scopes are all
+// read-only) the requested label is kept, defaulting to read-only.
+// notGranted lists requested services that came back with less than was
+// asked for.
 func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (access map[string]string, notGranted []string) {
 	granted := make(map[string]bool, len(grantedScopes))
 	for _, s := range grantedScopes {
@@ -253,27 +254,20 @@ func deriveGrantedAccess(requested map[string]string, grantedScopes []string) (a
 
 	access = map[string]string{}
 	for _, svc := range auth.ValidServiceNames() {
-		level, ok := requested[svc]
-		if !ok {
-			continue
-		}
+		level, wasRequested := requested[svc]
 		one := []string{svc}
 		full := auth.ScopesForServices(one)
 		readOnly := auth.ReadOnlyScopesForServices(one)
-		// The granted scopes decide the level, in both directions: an
-		// incremental read-only login can still return write scopes that
-		// were granted earlier. A service whose full and read-only sets
-		// coincide (e.g. groups) keeps the requested label.
-		fullGranted := hasAll(full) && (level == auth.AccessFull || len(full) > len(readOnly))
+
 		switch {
-		case fullGranted:
+		case hasAll(full) && (len(full) > len(readOnly) || level == auth.AccessFull):
 			access[svc] = auth.AccessFull
 		case hasAll(readOnly):
 			access[svc] = auth.AccessReadOnly
 			if level == auth.AccessFull {
 				notGranted = append(notGranted, svc+" (write access)")
 			}
-		default:
+		case wasRequested:
 			notGranted = append(notGranted, svc)
 		}
 	}

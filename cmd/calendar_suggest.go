@@ -85,6 +85,10 @@ func parseSuggestDuration(s string) (time.Duration, error) {
 	if d > maxSuggestDuration {
 		return 0, fmt.Errorf("must be at most 24h")
 	}
+	// Slots are reported in whole minutes and RFC3339 seconds.
+	if d%time.Minute != 0 {
+		return 0, fmt.Errorf("must be a whole number of minutes")
+	}
 	return d, nil
 }
 
@@ -135,10 +139,35 @@ func parseTimeIn(s string, loc *time.Location) (t time.Time, dateOnly bool, err 
 	if t, err := time.ParseInLocation("2006-01-02 15:04", s, loc); err == nil {
 		return t, false, nil
 	}
-	if t, err := time.ParseInLocation("2006-01-02", s, loc); err == nil {
-		return t, true, nil
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return startOfCivilDate(t.Year(), t.Month(), t.Day(), loc), true, nil
 	}
 	return time.Time{}, false, fmt.Errorf("unrecognized time format: %s (use RFC3339, 'YYYY-MM-DD HH:MM', or 'YYYY-MM-DD')", s)
+}
+
+// startOfCivilDate returns the first instant of the given civil date in
+// loc. Day overflow is normalised (day 32 of January is February 1st).
+// Where a DST change skips midnight, time.Date resolves the missing
+// 00:00 to an instant on the previous date; this walks forward to the
+// first instant that really falls on the requested date.
+func startOfCivilDate(year int, month time.Month, day int, loc *time.Location) time.Time {
+	want := time.Date(year, month, day, 12, 0, 0, 0, time.UTC)
+	t := time.Date(year, month, day, 0, 0, 0, 0, loc)
+	for i := 0; i < 12; i++ { // up to 3 hours, in 15-minute steps
+		local := t.In(loc)
+		if local.Year() == want.Year() && local.Month() == want.Month() && local.Day() == want.Day() {
+			break
+		}
+		t = t.Add(15 * time.Minute)
+	}
+	return t
+}
+
+// endOfCivilDate returns the first instant after the civil date that t
+// falls on in loc — the exclusive end of that day.
+func endOfCivilDate(t time.Time, loc *time.Location) time.Time {
+	local := t.In(loc)
+	return startOfCivilDate(local.Year(), local.Month(), local.Day()+1, loc)
 }
 
 // mergeSpans sorts spans and merges the ones that overlap or touch.
@@ -235,6 +264,13 @@ func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.
 // atDayOffset returns the wall-clock time `offset` after midnight on the
 // civil date of day, in loc. An offset of 24h is midnight of the next day.
 func atDayOffset(day time.Time, offset time.Duration, loc *time.Location) time.Time {
+	// Day boundaries must be exact even when DST skips midnight.
+	if offset == 0 {
+		return startOfCivilDate(day.Year(), day.Month(), day.Day(), loc)
+	}
+	if offset == 24*time.Hour {
+		return startOfCivilDate(day.Year(), day.Month(), day.Day()+1, loc)
+	}
 	h := int(offset / time.Hour)
 	m := int((offset % time.Hour) / time.Minute)
 	return time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, loc)
@@ -281,7 +317,7 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 		return usageErrorf("invalid --to: %s", err.Error())
 	}
 	if toDateOnly {
-		to = to.AddDate(0, 0, 1)
+		to = endOfCivilDate(to, loc)
 	}
 	if !to.After(from) {
 		return usageErrorf("--to must be after --from")

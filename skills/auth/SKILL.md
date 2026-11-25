@@ -151,7 +151,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   content deletes such as `docs delete-table-row` or `sheets clear`).
 - Covered when a flag is used: `drive update --trashed`, `chat setup-space
   --members`, `calendar create --attendees`, `calendar update
-  --add-attendees`.
+  --add-attendees`, `calendar rsvp --message`.
 - Covered explicitly: commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`; Drive `share`, `unshare`,

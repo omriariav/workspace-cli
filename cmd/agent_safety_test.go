@@ -347,7 +347,7 @@ func TestSensitiveEffect_ChatSetupSpaceOnlyWithMembers(t *testing.T) {
 }
 
 func TestConditionalSensitive_RulesResolveAndTrigger(t *testing.T) {
-	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com"}
+	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late"}
 	for key, rule := range conditionalSensitive {
 		cmd, _, err := rootCmd.Find(strings.Fields(key))
 		if err != nil || commandKey(cmd) != key {
@@ -553,6 +553,18 @@ func TestDeriveGrantedAccess(t *testing.T) {
 	up, missing := deriveGrantedAccess(map[string]string{"drive": auth.AccessReadOnly, "sheets": auth.AccessReadOnly}, prior)
 	if up["drive"] != auth.AccessFull || up["sheets"] != auth.AccessReadOnly || len(missing) != 0 {
 		t.Errorf("readonly request with prior write scopes = %v (missing %v), want drive full", up, missing)
+	}
+
+	// Write scopes for a service that was never requested and is unknown
+	// to local metadata (e.g. the local token was deleted without revoking
+	// the grant) must still be reported: the token is not read-only.
+	leftover := append(auth.ReadOnlyScopesForServices([]string{"tasks"}), auth.ScopesForServices([]string{"gmail"})...)
+	seen, missing := deriveGrantedAccess(map[string]string{"tasks": auth.AccessReadOnly}, leftover)
+	if seen["gmail"] != auth.AccessFull || seen["tasks"] != auth.AccessReadOnly || len(missing) != 0 {
+		t.Errorf("unrequested write scopes = %v (missing %v), want gmail full", seen, missing)
+	}
+	if allReadOnly(seen) {
+		t.Error("a token carrying gmail write scopes must not be reported read-only")
 	}
 
 	// When a service's full and read-only scope sets coincide, the
