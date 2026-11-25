@@ -205,6 +205,9 @@ gws gmail send --to a@example.com --subject Hi --body Hello
 #         gws gmail send sends an email. Proceed? [y/N]:
 ```
 
+- If the config file exists but cannot be read or parsed, gws cannot tell
+  whether the gate is on: sensitive commands are then refused until the
+  file is fixed, `GWS_CONFIRM_SENSITIVE` is set, or `--yes` is given.
 - In a terminal, the prompt is written to stderr and reads `y`/`n` from stdin.
 - Without a terminal (agents, scripts), the command fails with
   `confirmation required` instead of hanging. **Ask the user for explicit

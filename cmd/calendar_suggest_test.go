@@ -1389,3 +1389,48 @@ func TestCivilInstant_LongRepeatedInterval(t *testing.T) {
 		t.Errorf("expected the same wall time 23h later, got %v", later)
 	}
 }
+
+// With a date-only end of Saturday 2010-11-06 in St. John's, the search
+// runs past Sunday's first minute to cover Saturday's repeated evening,
+// but no slot may start on, or run into, Sunday.
+func TestSuggestSlotsThrough_NoSlotAfterTheLastDate(t *testing.T) {
+	loc, err := time.LoadLocation("America/St_Johns")
+	if err != nil {
+		t.Skipf("timezone data unavailable: %v", err)
+	}
+	sundayStart := time.Date(2010, 11, 7, 2, 30, 0, 0, time.UTC) // Sunday 00:00 NDT
+	if l := sundayStart.In(loc); l.Day() != 7 || sundayStart.Add(2*time.Minute).In(loc).Day() != 6 {
+		t.Skipf("tzdata does not model the midnight-crossing change")
+	}
+	from := sundayStart.Add(-30 * time.Minute) // Saturday 23:30, first time round
+	to, err := endOfDateOnly("2010-11-06", loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastDate := time.Date(2010, 11, 6, 0, 0, 0, 0, time.UTC)
+
+	slots := suggestSlotsThrough(nil, from, to, lastDate, 20*time.Minute, 0, 24*time.Hour, loc, true, 20)
+	if len(slots) == 0 {
+		t.Fatal("no slots")
+	}
+	for _, slot := range slots {
+		for _, instant := range []time.Time{slot.Start, slot.End.Add(-time.Second), slot.FreeUntil.Add(-time.Second)} {
+			if l := instant.In(loc); l.Day() != 6 {
+				t.Errorf("slot %v..%v (free until %v) touches %v, want Saturday only",
+					slot.Start.In(loc), slot.End.In(loc), slot.FreeUntil.In(loc), l)
+			}
+		}
+	}
+
+	// Without the limit, Sunday's first minute is part of the range.
+	unlimited := suggestSlots(nil, from, to, 20*time.Minute, 0, 24*time.Hour, loc, true, 20)
+	crossed := false
+	for _, slot := range unlimited {
+		if slot.Start.Before(sundayStart.Add(time.Minute)) && slot.FreeUntil.After(sundayStart) {
+			crossed = true
+		}
+	}
+	if !crossed {
+		t.Log("note: the unlimited search did not cross into Sunday either")
+	}
+}

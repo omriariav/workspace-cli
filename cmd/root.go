@@ -65,6 +65,9 @@ Workspace Events, and Custom Search.`,
 			}
 		}
 		yes, _ := cmd.Flags().GetBool("yes")
+		if err := confirmPolicyUnknown(cmd, yes); err != nil {
+			return err
+		}
 		return confirmGate(cmd, config.GetConfirmSensitive(), yes, os.Stdin, os.Stderr, stdinIsTerminal())
 	},
 }
@@ -272,11 +275,38 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	// Read config file if it exists
+	configLoadErr = nil
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			configLoadErr = err
 			fmt.Fprintf(os.Stderr, "Error reading config: %v\n", err)
 		}
 	}
+}
+
+// configLoadErr is set when a config file exists but could not be read or
+// parsed. Most settings then fall back to their defaults, which is fine
+// for a format or a timezone but not for a safety policy: see
+// confirmPolicyUnknown.
+var configLoadErr error
+
+// confirmPolicyUnknown reports an error when a sensitive command is about
+// to run but the config file that may turn the confirmation gate on could
+// not be loaded. Treating that as "gate off" would let a broken config
+// file silently remove the protection the user asked for. The policy is
+// known when the environment sets it, and --yes is an explicit approval.
+func confirmPolicyUnknown(cmd *cobra.Command, yes bool) error {
+	if configLoadErr == nil || yes {
+		return nil
+	}
+	if _, set := os.LookupEnv("GWS_CONFIRM_SENSITIVE"); set {
+		return nil
+	}
+	effect, sensitive := sensitiveEffect(cmd)
+	if !sensitive {
+		return nil
+	}
+	return fmt.Errorf("the config file could not be read (%v), so it is unknown whether confirm_sensitive is on; `gws %s` %s and was not run. Fix the config file, set GWS_CONFIRM_SENSITIVE, or re-run with --yes after the user approves", configLoadErr, commandKey(cmd), effect)
 }
 
 func GetFormat() string {

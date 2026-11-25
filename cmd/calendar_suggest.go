@@ -298,7 +298,21 @@ func mergeSpans(spans []timeSpan) []timeSpan {
 // Windows that touch (e.g. whole-day windows on consecutive days) are
 // merged, so a slot may span midnight when working hours allow it.
 func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.Duration, loc *time.Location, includeWeekends bool, max int) []suggestion {
+	return suggestSlotsThrough(busy, from, to, time.Time{}, dur, whStart, whEnd, loc, includeWeekends, max)
+}
+
+// suggestSlotsThrough is suggestSlots with a last civil date. When the
+// range ends with a date-only value, lastDate is that date (any time on
+// it, in any zone: only year, month and day are read) and no window of a
+// later date is used, even where such a date begins before `to` — which
+// happens when a clock change makes the end date resume after the next
+// date has briefly started. A zero lastDate means no such limit.
+func suggestSlotsThrough(busy []timeSpan, from, to, lastDate time.Time, dur, whStart, whEnd time.Duration, loc *time.Location, includeWeekends bool, max int) []suggestion {
 	busy = mergeSpans(busy)
+	var lastCivil time.Time
+	if !lastDate.IsZero() {
+		lastCivil = time.Date(lastDate.Year(), lastDate.Month(), lastDate.Day(), 12, 0, 0, 0, time.UTC)
+	}
 
 	// Start one day early: a window ending at 24:00 belongs to the
 	// previous civil date but can still overlap the range.
@@ -311,6 +325,9 @@ func suggestSlots(busy []timeSpan, from, to time.Time, dur, whStart, whEnd time.
 		// for normalising day overflow, independent of loc's offsets.
 		civil := time.Date(y, m, d+i, 12, 0, 0, 0, time.UTC)
 		if !atDayOffset(civil, 0, loc).Before(to) {
+			break
+		}
+		if !lastCivil.IsZero() && civil.After(lastCivil) {
 			break
 		}
 		if wd := civil.Weekday(); !includeWeekends && (wd == time.Saturday || wd == time.Sunday) {
@@ -486,10 +503,14 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return usageErrorf("invalid --to: %s", err.Error())
 	}
+	// lastDate is set for a date-only --to: no slot may fall on a later
+	// date, even where one begins before the end of the requested day.
+	var lastDate time.Time
 	if toDateOnly {
 		if to, err = endOfDateOnly(toStr, loc); err != nil {
 			return usageErrorf("invalid --to: %s", err.Error())
 		}
+		lastDate, _ = time.Parse("2006-01-02", strings.TrimSpace(toStr))
 	}
 	// Work in whole seconds throughout: the free/busy query and the output
 	// are RFC3339 without fractions. Shrinking the range inward keeps every
@@ -559,7 +580,7 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	slots := suggestSlots(busy, from, to, dur, whStart, whEnd, loc, includeWeekends, max)
+	slots := suggestSlotsThrough(busy, from, to, lastDate, dur, whStart, whEnd, loc, includeWeekends, max)
 	suggestions := make([]map[string]interface{}, 0, len(slots))
 	for _, s := range slots {
 		suggestions = append(suggestions, map[string]interface{}{

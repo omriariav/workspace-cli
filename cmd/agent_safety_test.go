@@ -2171,3 +2171,58 @@ func TestStatus_RejectedTokenIsNotAuthenticated(t *testing.T) {
 		t.Errorf("transient failure: %s", out)
 	}
 }
+
+// A config file that cannot be loaded must not switch the confirmation
+// gate off by accident: the user may have turned it on there. Sensitive
+// commands are stopped before they run; everything else carries on.
+func TestConfirmGate_UnreadableConfigBlocksSensitiveCommands(t *testing.T) {
+	original := configLoadErr
+	t.Cleanup(func() { configLoadErr = original })
+	configLoadErr = errors.New("yaml: line 3: mapping values are not allowed in this context")
+	if v, set := os.LookupEnv("GWS_CONFIRM_SENSITIVE"); set {
+		os.Unsetenv("GWS_CONFIRM_SENSITIVE")
+		t.Cleanup(func() { os.Setenv("GWS_CONFIRM_SENSITIVE", v) })
+	}
+
+	send, _, _ := rootCmd.Find([]string{"gmail", "send"})
+	list, _, _ := rootCmd.Find([]string{"gmail", "list"})
+
+	err := confirmPolicyUnknown(send, false)
+	if err == nil || !strings.Contains(err.Error(), "unknown whether confirm_sensitive is on") {
+		t.Errorf("sensitive command with an unreadable config: err = %v", err)
+	}
+	if err := confirmPolicyUnknown(list, false); err != nil {
+		t.Errorf("a read command should not be blocked: %v", err)
+	}
+	if err := confirmPolicyUnknown(send, true); err != nil {
+		t.Errorf("--yes is an explicit approval: %v", err)
+	}
+
+	// Through the pre-run hook, which is what stops the handler: with the
+	// required flags given, the hook returns the error before RunE.
+	for _, kv := range [][2]string{{"to", "a@example.com"}, {"subject", "s"}, {"body", "b"}} {
+		_ = send.Flags().Set(kv[0], kv[1])
+	}
+	t.Cleanup(func() {
+		for _, name := range []string{"to", "subject", "body"} {
+			_ = send.Flags().Set(name, "")
+			send.Flags().Lookup(name).Changed = false
+		}
+	})
+	if err := rootCmd.PersistentPreRunE(send, nil); err == nil || !strings.Contains(err.Error(), "was not run") {
+		t.Errorf("pre-run: err = %v, want the command stopped", err)
+	}
+
+	// The environment states the policy explicitly: it is known.
+	t.Setenv("GWS_CONFIRM_SENSITIVE", "0")
+	if err := confirmPolicyUnknown(send, false); err != nil {
+		t.Errorf("with the policy set in the environment: %v", err)
+	}
+
+	// A config that loaded fine blocks nothing.
+	os.Unsetenv("GWS_CONFIRM_SENSITIVE")
+	configLoadErr = nil
+	if err := confirmPolicyUnknown(send, false); err != nil {
+		t.Errorf("with a readable config: %v", err)
+	}
+}
