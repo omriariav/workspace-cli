@@ -658,6 +658,17 @@ func readGrantedRecordFor(token *oauth2.Token) *grantedAccessRecord {
 	return &record
 }
 
+// GrantedMetadataExists reports whether either granted-metadata file is
+// present.
+func GrantedMetadataExists() bool {
+	for _, path := range []string{config.GetGrantedServicesPath(), config.GetGrantedAccessPath()} {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // DeleteGrantedMetadata removes the granted-services and granted-access
 // files. Missing files are not an error.
 func DeleteGrantedMetadata() {

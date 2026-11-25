@@ -701,6 +701,15 @@ func allReadOnly(access map[string]string) bool {
 func runLogout(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 
+	// Nothing stored at all: a no-op that needs neither the lock nor a
+	// writable config directory.
+	if !auth.TokenExists() && !auth.GrantedMetadataExists() {
+		return p.Print(map[string]interface{}{
+			"status":  "success",
+			"message": "Not authenticated (no token found)",
+		})
+	}
+
 	// Logout and login write the same files; holding the login lock keeps
 	// a logout from deleting metadata that a login is in the middle of
 	// writing (which would leave a token without its access record).

@@ -177,7 +177,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   destination folder (`drive upload --folder`, `drive create-folder --parent`), and `gmail label --add` / `gmail
   batch-modify --add-labels` when the labels include `TRASH` or `SPAM`.
 - Covered explicitly: `docs replace-content` (replaces the whole document
-  body); `events subscriptions create`, `reactivate`, `renew` and
+  body); `sheets copy-to` (copies a sheet into another spreadsheet); `events subscriptions create`, `reactivate`, `renew` and
   `update` (start, resume, extend or change delivery of events to a
   Pub/Sub topic); `auth logout` (revokes the stored login); commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar

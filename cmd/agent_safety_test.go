@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/omriariav/workspace-cli/internal/auth"
 	"github.com/omriariav/workspace-cli/internal/config"
@@ -398,6 +399,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},
 		{"drive", "move"}, {"drive", "copy"}, {"drive", "convert"},
+		{"sheets", "copy-to"},
 		{"calendar", "move"},
 	}
 	for _, path := range covered {
@@ -653,6 +655,34 @@ func TestExistingGrantedAccess_LegacyVersusInterruptedLogin(t *testing.T) {
 	}
 	if got := existingGrantedAccess(); len(got) != 1 || got["gmail"] != auth.AccessReadOnly {
 		t.Errorf("matching record = %v, want gmail readonly", got)
+	}
+}
+
+// With nothing stored, logout is a no-op that does not need the login
+// lock — so it still succeeds while the lock is held, or in a read-only
+// config directory.
+func TestLogout_NoOpWithoutCredentialsNeedsNoLock(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	unlock, err := auth.LockLoginState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+
+	done := make(chan error, 1)
+	var out string
+	go func() {
+		var runErr error
+		out, runErr = captureStdout(t, func() error { return runLogout(logoutCmd, nil) })
+		done <- runErr
+	}()
+	select {
+	case err := <-done:
+		if err != nil || !strings.Contains(out, "Not authenticated") {
+			t.Errorf("logout with nothing stored: out = %q, err = %v", out, err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("logout waited for the login lock although there was nothing to log out of")
 	}
 }
 
