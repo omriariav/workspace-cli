@@ -324,10 +324,12 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	joined := strings.Join(lacking, ",")
 	switch {
 	case completeReadOnly == len(lacking):
-		// Every read scope is already held, so the command needs more
-		// than read access: only the full login can help. Repeating the
-		// read-only login would change nothing.
-		return fmt.Sprintf("Hint: %s is authorized read-only and this command needs more. Grant full access with: gws auth login --add --services %s", joined, joined)
+		// Every read scope gws knows for the service is already held, so
+		// repeating the read-only login would change nothing. The usual
+		// cause is a command that changes data; say that rather than
+		// assert it, since the exact scope the endpoint wanted is not
+		// known here.
+		return fmt.Sprintf("Hint: %s is authorized read-only. If this command changes data, grant full access with: gws auth login --add --services %s", joined, joined)
 	case incompleteReadOnly == len(lacking):
 		// Some read scopes were declined. Completing read-only access may
 		// be all that is needed, so offer that before the wider grant.

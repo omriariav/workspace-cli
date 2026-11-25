@@ -1253,6 +1253,45 @@ func TestStoredAuthorizationIs(t *testing.T) {
 	}
 }
 
+// Two commands start with the same token from a login that predates access
+// records. One refreshes and the token is rotated; the other must see the
+// result as the same login, not as a different one.
+func TestEnsureFreshToken_LegacyLoginRotationIsRecognised(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	original := exchangeRefreshToken
+	t.Cleanup(func() { exchangeRefreshToken = original })
+	exchanges := 0
+	exchangeRefreshToken = func(context.Context, string, string, *oauth2.Token) (*oauth2.Token, error) {
+		exchanges++
+		return &oauth2.Token{AccessToken: "fresh", RefreshToken: "rotated", Expiry: time.Now().Add(time.Hour)}, nil
+	}
+	legacy := &oauth2.Token{AccessToken: "old", RefreshToken: "legacy", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(legacy); err != nil {
+		t.Fatal(err)
+	}
+	// A pre-upgrade login: a plain service list, no access record.
+	if err := SaveGrantedServices([]string{"gmail", "drive"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	if _, saveErr, err := EnsureFreshToken(ctx, "id", "secret", legacy); err != nil || saveErr != nil {
+		t.Fatalf("first caller: %v, %v", saveErr, err)
+	}
+	second, _, err := EnsureFreshToken(ctx, "id", "secret", legacy)
+	if err != nil || second.RefreshToken != "rotated" || exchanges != 1 {
+		t.Fatalf("second caller: token = %+v, err = %v after %d exchanges; want the rotated token reused", second, err, exchanges)
+	}
+	// The login's own service list is still used; no levels are invented.
+	rotated, _ := LoadToken()
+	if got := strings.Join(GrantedServicesFor(rotated), ","); got != "gmail,drive" {
+		t.Errorf("services after a legacy rotation = %q, want the legacy list", got)
+	}
+	if LoadGrantedAccess() != nil || LoadGrantedScopes() != nil {
+		t.Errorf("a legacy rotation must not invent access levels or scopes: %v / %v", LoadGrantedAccess(), LoadGrantedScopes())
+	}
+}
+
 func TestSameAuthorization(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := &oauth2.Token{RefreshToken: "r1"}

@@ -122,9 +122,13 @@ var conditionalSensitive = map[string]conditionalRule{
 	// Placing a file in a specific folder gives it that folder's sharing.
 	"drive upload":        {flag: "folder", effect: "uploads a file into a folder, where it takes on that folder's sharing"},
 	"drive create-folder": {flag: "parent", effect: "creates a folder inside another, where it takes on that folder's sharing"},
-	"forms update":        {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},
-	"gmail label":         {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam},
-	"gmail batch-modify":  {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam},
+	// Resolving or reopening a comment is not gated, but attaching a note
+	// posts a reply that everyone with access to the file can read.
+	"drive resolve-comment":   {flag: "content", effect: "posts a reply on a file comment, visible to everyone with access"},
+	"drive unresolve-comment": {flag: "content", effect: "posts a reply on a file comment, visible to everyone with access"},
+	"forms update":            {flag: "file", effect: "applies a batch of form changes from a file, which can delete questions"},
+	"gmail label":             {flag: "add", effect: "moves a message to Trash or Spam", when: addsTrashOrSpam},
+	"gmail batch-modify":      {flag: "add-labels", effect: "moves messages to Trash or Spam", when: addsTrashOrSpam},
 }
 
 // conditionalRule makes a command sensitive when flag is set, or, if when

@@ -249,12 +249,16 @@ func GrantedServicesFor(token *oauth2.Token) []string {
 	// written by another login, and so was the plain service list beside
 	// it: use neither.
 	if _, err := os.Stat(config.GetGrantedAccessPath()); err == nil {
-		var access map[string]string
-		if record := readGrantedRecordFor(token); record != nil {
-			access = record.Services
-		}
-		if access == nil {
+		record := readGrantedRecordFor(token)
+		if record == nil {
 			return nil
+		}
+		// A record with no services only notes a refresh-token rotation
+		// for a login that predates access records; the plain service
+		// list is still that login's own.
+		access := record.Services
+		if access == nil {
+			return LoadGrantedServices()
 		}
 		var services []string
 		for _, svc := range ValidServiceNames() {
@@ -584,6 +588,14 @@ func saveRefreshedTokenLocked(stored, refreshed *oauth2.Token) error {
 	// here would attach that login's account and scopes to this one.
 	record := readGrantedRecordFor(stored)
 	if record == nil {
+		// No record of this token's own. If there is no record on disk at
+		// all, this is a login that predates access records: note the
+		// rotation anyway, so another command that loaded the old token
+		// recognises the new one as the same login. A record belonging to
+		// some other login is left exactly as it is.
+		if _, statErr := os.Stat(config.GetGrantedAccessPath()); os.IsNotExist(statErr) {
+			_ = saveGrantedRecord(grantedAccessRecord{Token: tokenFingerprint(&toSave), PreviousToken: base})
+		}
 		return SaveToken(&toSave)
 	}
 	restore := SnapshotGrantedAccess()

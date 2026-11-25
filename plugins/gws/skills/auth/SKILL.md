@@ -175,7 +175,8 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   content deletes such as `docs delete-table-row` or `sheets clear`).
 - Covered when a flag is used: `drive update --trashed`, `chat setup-space
   --members`, `calendar create --attendees`, `calendar update
-  --add-attendees`, `calendar rsvp --message`, `forms update --file`, Drive commands given a
+  --add-attendees`, `calendar rsvp --message`, `forms update --file`, `drive resolve-comment --content` and
+  `drive unresolve-comment --content`, Drive commands given a
   destination folder (`drive upload --folder`, `drive create-folder --parent`), and `gmail label --add` / `gmail
   batch-modify --add-labels` when the labels include `TRASH` or `SPAM`.
 - Covered explicitly: `docs replace-content` (replaces the whole document

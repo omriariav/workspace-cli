@@ -590,7 +590,7 @@ func TestConditionalSensitive_GmailLabelsToTrashOrSpam(t *testing.T) {
 }
 
 func TestConditionalSensitive_RulesResolveAndTrigger(t *testing.T) {
-	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash", "file": "changes.json", "folder": "folder-id", "parent": "folder-id"}
+	values := map[string]string{"trashed": "true", "members": "users/1", "attendees": "a@example.com", "add-attendees": "a@example.com", "message": "running late", "add": "TRASH", "add-labels": "STARRED,trash", "file": "changes.json", "folder": "folder-id", "parent": "folder-id", "content": "done, thanks"}
 	for key, rule := range conditionalSensitive {
 		cmd, _, err := rootCmd.Find(strings.Fields(key))
 		if err != nil || commandKey(cmd) != key {
@@ -793,7 +793,7 @@ func TestReadOnlyScopeHint(t *testing.T) {
 	}
 	// A complete read-only login already holds every read scope: a write
 	// failure can only be fixed by full access, never by --readonly again.
-	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessReadOnly}); !strings.Contains(hint, "Grant full access with: gws auth login --add --services gmail") || strings.Contains(hint, "--readonly") {
+	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessReadOnly}); !strings.Contains(hint, "grant full access with: gws auth login --add --services gmail") || strings.Contains(hint, "--readonly") {
 		t.Errorf("complete read-only hint = %q", hint)
 	}
 	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessPartial}); strings.Contains(hint, "--readonly") {
