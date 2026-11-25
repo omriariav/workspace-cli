@@ -1,32 +1,30 @@
-# gws
+# gws — Unofficial Google Workspace CLI in Go
 
-<p align="center"><em>Unified CLI for Google Workspace — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, and more from your terminal.</em></p>
+<p align="center"><em>An unofficial, single-binary Go CLI for Google Workspace — a Gmail CLI, Google Drive CLI, Google Calendar CLI, and more in one tool, with a Claude Code plugin for AI agents.</em></p>
 
 <p align="center">
   <a href="https://github.com/omriariav/workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/omriariav/workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8.svg" alt="Go Version"></a>
+  <a href="https://pkg.go.dev/github.com/omriariav/workspace-cli"><img src="https://pkg.go.dev/badge/github.com/omriariav/workspace-cli.svg" alt="Go Reference"></a>
 </p>
 
-`gws` gives developers and AI agents a structured, token-efficient interface to 10+ Google Workspace services. Every command returns consistent JSON (or YAML or human-readable text), making it ideal for scripting, automation, and agent toolchains.
+> **Unofficial project.** `workspace-cli` is independent and is not affiliated with, endorsed by, or sponsored by Google LLC. See the [Disclaimer](#disclaimer).
 
-**Built for AI & automation:** Drop `gws` into Claude Code, Codex, or shell scripts and they inherit structured output, predictable flags, and safe defaults — no wrapper code required.
+`gws` is an unofficial Google Workspace CLI written in Go. It gives developers and AI agents a structured, token-efficient interface to 14 Google Workspace services — Gmail, Google Calendar, Google Drive, Docs, Sheets, Slides, Tasks, Chat, Contacts, Groups, Keep, Forms, Workspace Events, and Custom Search. Every command returns consistent JSON (or YAML or human-readable text), which suits scripting, automation, and agent toolchains.
 
-## Features
-
-- **10+ Google services** — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Forms, Contacts, Workspace Events, Custom Search.
-- **Scriptable output** — `--format json` (default), `--format yaml`, `--format text` for human-readable tables, or `--quiet` to suppress output.
-- **OAuth2 + PKCE** — Secure browser-based auth with automatic token refresh and `0600` file permissions.
-- **Single auth flow** — Authenticate once to access all services; scopes based on `--services` flag, config, or all by default.
-- **Lazy clients** — Service clients are initialized on-demand with mutex protection.
+- **One static Go binary.** No Node.js, Python, or other runtime to install.
+- **Built for AI agents.** Ships a Claude Code plugin and a Codex plugin with one skill per service, structured output, and predictable flags — no wrapper code required.
+- **Commands are compiled in.** About 300 task-shaped commands with stable flags; nothing is discovered over the network at startup.
 
 ## Installation
 
-### Go Install
-
 ```bash
+# Go 1.25+ — installs the `gws` binary
 go install github.com/omriariav/workspace-cli/cmd/gws@latest
 ```
+
+**Prebuilt binaries** for macOS and Linux (amd64 and arm64) are attached to every [GitHub release](https://github.com/omriariav/workspace-cli/releases/latest).
 
 ### From Source
 
@@ -37,7 +35,38 @@ make build    # produces ./bin/gws
 ./bin/gws --help
 ```
 
-### Prerequisites
+## Why omriariav/workspace-cli vs. Google's gws and gwscli?
+
+Google publishes two Workspace command-line tools of its own, and one of them shares this project's binary name:
+
+- [`googleworkspace/cli`](https://github.com/googleworkspace/cli) — also installs a binary called **`gws`**. It is hosted under Google's GitHub organization, and its README describes it as a community project that is not an officially supported Google product.
+- [`gwscli`](https://developers.google.com/workspace/guides/workspace-cli) — the official, Google-supported Google Workspace CLI.
+
+| | This project (`gws`) | `googleworkspace/cli` (`gws`) | Official `gwscli` |
+|---|---|---|---|
+| Status | Unofficial, independent, MIT | Community project in Google's GitHub org, Apache-2.0 | Official and supported by Google |
+| Language / install | Go; `go install` or a release binary | Rust; release binary, npm, Homebrew, or cargo | Prebuilt binary from Google's install script |
+| Command surface | About 300 hand-written commands compiled into the binary | Generated at runtime from Google's Discovery documents | A curated set of actions discovered from Google's backend at runtime |
+| Calling style | Task flags: `gws gmail send --to … --subject …` | API-shaped: `--params '{…}'` and `--json '{…}'` | Task flags: `gwscli gmail create_draft …` |
+| Services | 14, including Groups, Keep, Forms, Workspace Events | Every API with a Discovery document | 9 (Gmail, Calendar, Drive, Docs, Sheets, Slides, Chat, Tasks, People) |
+| Sending email | Yes (`send`, `reply`, `forward`) | Yes | Drafts only |
+| Admin governance | OAuth scopes only | OAuth scopes only | Workspace admin policies and approval prompts |
+| Agent integration | Claude Code and Codex plugins, one skill per service | Agent skills and a Gemini CLI extension | Packaged agent skills |
+
+**Choose this project** if you want stable, task-shaped commands with deep per-service coverage in a single Go binary. **Choose `gwscli`** if you need Google support or admin-enforced controls on what an agent may do. **Choose `googleworkspace/cli`** if you need an API method nothing else wraps.
+
+**Binary name overlap:** this project and `googleworkspace/cli` both install `gws`. If you use both, install one under another name — for example `go build -o ~/bin/gws-go ./cmd/gws` from a clone of this repository.
+
+## Features: Gmail CLI, Google Drive CLI, Google Calendar CLI, and more
+
+- **14 Google services** — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Chat, Contacts, Groups, Keep, Forms, Workspace Events, Custom Search.
+- **Scriptable output** — `--format json` (default), `--format yaml`, `--format text` for human-readable tables, or `--quiet` to suppress output.
+- **OAuth2 + PKCE** — Secure browser-based auth with automatic token refresh and `0600` file permissions.
+- **Single auth flow** — Authenticate once to access all services; scopes based on `--services` flag, config, or all by default.
+- **Least-privilege options** — read-only login, per-command scope and schema introspection, and an opt-in confirmation gate for commands that send, share, or delete.
+- **Lazy clients** — Service clients are initialized on-demand with mutex protection.
+
+## Prerequisites
 
 1. A [Google Cloud Project](https://console.cloud.google.com/) with an **OAuth 2.0 Client ID** (Desktop type).
 2. Enable the APIs you need in the [API Library](https://console.cloud.google.com/apis/library):
@@ -709,6 +738,10 @@ Applying this configuration does not itself activate lifecycle hooks. In Codex, 
 Preferences use this precedence: built-in defaults, user config `~/.config/gws/hooks.json`, workspace config `.gws/hooks.json`, then `GWS_HOOKS_ENABLED` and `GWS_HOOKS_TIMEZONE`. User scope exclusively owns the global hook gate and both provider enablement settings. A repository `.gws/hooks.json` may contain only consent-free preferences such as timezone, Workspace refresh TTL, and source selection or limits; it cannot enable hooks, a provider, or private Workspace reads. Writes are atomic, merge-only, and mode-restricted. Workspace configuration never accepts credentials, tokens, or cached content. Private, volatile snapshots live outside the repository with restrictive permissions, and a degraded refresh retains a more useful previous snapshot instead of clobbering it.
 
 Enable or disable hooks and providers only with `--scope user`. After a user has authorized the Workspace provider, a repository may preview consent-free source, limit, TTL, timezone, task-list, or Chat-space preferences with `gws hooks configure --scope workspace`, then repeat the exact command with `--apply` after approval. To stop all hook fetches without changing normal `gws` commands or authentication, preview and then apply `gws hooks disable --scope user`. Status detects likely personal time injectors such as `~/.codex/hooks/inject-time.sh`; it reports them but never silently modifies them.
+
+## Disclaimer
+
+workspace-cli is an independent, unofficial open-source project and is not affiliated with, endorsed by, or sponsored by Google LLC. Google Workspace, Gmail, Google Drive, and Google Calendar are trademarks of Google LLC.
 
 ## License
 
