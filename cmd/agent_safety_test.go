@@ -754,11 +754,14 @@ func TestReadOnlyScopeHint(t *testing.T) {
 	}
 	// A read-only (or partly read-only) login is offered the read-only
 	// retry first; one that already holds write scopes is not.
-	for _, level := range []string{auth.AccessReadOnly, auth.AccessPartialReadOnly} {
-		hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": level})
-		if !strings.Contains(hint, "--add --services gmail --readonly") || !strings.Contains(hint, "without --readonly") {
-			t.Errorf("%s hint = %q", level, hint)
-		}
+	// A login missing some read scopes is offered the read-only retry first.
+	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessPartialReadOnly}); !strings.Contains(hint, "--add --services gmail --readonly") || !strings.Contains(hint, "without --readonly") {
+		t.Errorf("partial-readonly hint = %q", hint)
+	}
+	// A complete read-only login already holds every read scope: a write
+	// failure can only be fixed by full access, never by --readonly again.
+	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessReadOnly}); !strings.Contains(hint, "Grant full access with: gws auth login --add --services gmail") || strings.Contains(hint, "--readonly") {
+		t.Errorf("complete read-only hint = %q", hint)
 	}
 	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessPartial}); strings.Contains(hint, "--readonly") {
 		t.Errorf("a login with write scopes should not be steered to --readonly: %q", hint)

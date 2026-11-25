@@ -288,7 +288,7 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	}
 
 	var lacking []string
-	onlyReadAccess := true
+	completeReadOnly, incompleteReadOnly := 0, 0
 	for _, svc := range scopeServicesFor(cmd) {
 		// A service that is not in the record at all was left out of a
 		// scoped login: as much a missing grant as a read-only one.
@@ -297,23 +297,31 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 			continue
 		}
 		lacking = append(lacking, svc)
-		if level != auth.AccessReadOnly && level != auth.AccessPartialReadOnly {
-			onlyReadAccess = false
+		switch level {
+		case auth.AccessReadOnly:
+			completeReadOnly++
+		case auth.AccessPartialReadOnly:
+			incompleteReadOnly++
 		}
 	}
 	if len(lacking) == 0 {
 		return ""
 	}
 	joined := strings.Join(lacking, ",")
+	switch {
+	case completeReadOnly == len(lacking):
+		// Every read scope is already held, so the command needs more
+		// than read access: only the full login can help. Repeating the
+		// read-only login would change nothing.
+		return fmt.Sprintf("Hint: %s is authorized read-only and this command needs more. Grant full access with: gws auth login --add --services %s", joined, joined)
+	case incompleteReadOnly == len(lacking):
+		// Some read scopes were declined. Completing read-only access may
+		// be all that is needed, so offer that before the wider grant.
+		return fmt.Sprintf("Hint: the stored login does not hold every scope %s needs. To complete read-only access: gws auth login --add --services %s --readonly. For full access, run it without --readonly.", joined, joined)
+	}
 	// Worded without "write access": some services (groups) have only
 	// read scopes, and a partial grant can be missing one of those.
-	hint := fmt.Sprintf("Hint: the stored login does not hold every scope %s needs. ", joined)
-	if onlyReadAccess {
-		// The login is read-only so far: offer to keep it that way before
-		// suggesting the wider grant.
-		return hint + fmt.Sprintf("To complete read-only access: gws auth login --add --services %s --readonly. For full access, run it without --readonly.", joined)
-	}
-	return hint + fmt.Sprintf("Grant them with: gws auth login --add --services %s", joined)
+	return fmt.Sprintf("Hint: the stored login does not hold every scope %s needs. Grant them with: gws auth login --add --services %s", joined, joined)
 }
 
 // discardValue is a flag value that stores nothing. It reports the
