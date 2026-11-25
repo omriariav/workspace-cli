@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -499,6 +501,84 @@ func TestAcquireLock_StaleLockCleanup(t *testing.T) {
 		t.Fatalf("should acquire lock after cleaning stale lock: %v", err)
 	}
 	unlock()
+}
+
+// Many processes find the same lock left behind by one that died. Exactly
+// one at a time may hold it: the takeover of a stale lock must not let a
+// second process remove the lock the first has just re-created.
+func TestAcquireLock_ConcurrentStaleRecoveryIsExclusive(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test-file")
+	lockPath := path + lockSuffix
+
+	const workers = 24
+	const rounds = 5
+	for round := 0; round < rounds; round++ {
+		// A lock from a dead process, old enough to be taken over.
+		if err := os.WriteFile(lockPath, []byte("999999999"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		past := time.Now().Add(-staleLockAge - time.Second)
+		if err := os.Chtimes(lockPath, past, past); err != nil {
+			t.Fatal(err)
+		}
+
+		var inside, maxInside, acquired int32
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				unlock, err := acquireLock(path)
+				if err != nil {
+					return // timed out waiting its turn: fine
+				}
+				n := atomic.AddInt32(&inside, 1)
+				for {
+					m := atomic.LoadInt32(&maxInside)
+					if n <= m || atomic.CompareAndSwapInt32(&maxInside, m, n) {
+						break
+					}
+				}
+				atomic.AddInt32(&acquired, 1)
+				time.Sleep(2 * time.Millisecond)
+				atomic.AddInt32(&inside, -1)
+				unlock()
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		if maxInside != 1 {
+			t.Fatalf("round %d: %d holders at once, want exactly 1", round, maxInside)
+		}
+		if acquired == 0 {
+			t.Fatalf("round %d: nobody recovered the stale lock", round)
+		}
+	}
+}
+
+// Unlock removes only its own lock: if the lock went stale and another
+// process took it over, the original holder must not delete the new one.
+func TestAcquireLock_UnlockLeavesAReplacedLockAlone(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test-file")
+	lockPath := path + lockSuffix
+
+	unlock, err := acquireLock(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The holder stalls past the stale age and someone else takes over.
+	if err := os.WriteFile(lockPath, []byte("someone-else"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	if held, err := os.ReadFile(lockPath); err != nil || string(held) != "someone-else" {
+		t.Errorf("the original holder removed a lock that was no longer its own (content %q, err %v)", held, err)
+	}
 }
 
 // --- MergeToken Tests ---

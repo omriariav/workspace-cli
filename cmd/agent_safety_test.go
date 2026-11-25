@@ -763,6 +763,16 @@ func TestReadOnlyScopeHint(t *testing.T) {
 	if hint := readOnlyScopeHint(send, insufficient, map[string]string{"gmail": auth.AccessPartial}); strings.Contains(hint, "--readonly") {
 		t.Errorf("a login with write scopes should not be steered to --readonly: %q", hint)
 	}
+	// Permanent Gmail deletion needs a scope no login grants: the hint
+	// must say that, not recommend a login that cannot help.
+	del, _, _ := rootCmd.Find([]string{"gmail", "delete"})
+	for _, access := range []map[string]string{{"gmail": auth.AccessReadOnly}, {"gmail": auth.AccessFull}} {
+		hint := readOnlyScopeHint(del, insufficient, access)
+		if !strings.Contains(hint, "https://mail.google.com/") || !strings.Contains(hint, "GWS_ACCESS_TOKEN") || strings.Contains(hint, "auth login --add") {
+			t.Errorf("gmail delete hint with %v = %q", access, hint)
+		}
+	}
+
 	// A service left out of a scoped login gets a hint too.
 	events, _, _ := rootCmd.Find([]string{"calendar", "events"})
 	if hint := readOnlyScopeHint(events, insufficient, map[string]string{"gmail": auth.AccessReadOnly}); !strings.Contains(hint, "--add --services calendar") {

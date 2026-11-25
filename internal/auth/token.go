@@ -685,29 +685,46 @@ func TokenExists() bool {
 
 // acquireLock creates a .lock file for the given path using O_CREATE|O_EXCL
 // for cross-platform mutual exclusion. Returns an unlock function.
+//
+// A lock left behind by a process that died is taken over once it is older
+// than staleLockAge. That takeover (check the age, remove, create anew) is
+// done under an OS-enforced guard where the platform has one, so two
+// processes recovering the same dead lock cannot both end up holding it:
+// without the guard, the second could remove the lock the first had just
+// re-created. The guard is held only for those few file operations, never
+// while the lock itself is held.
 func acquireLock(path string) (unlock func(), err error) {
 	lockPath := path + lockSuffix
 	deadline := time.Now().Add(lockTimeout)
+	// Identifies this acquisition, so unlock removes the lock only if it
+	// is still ours and not one that replaced it after it went stale.
+	owner := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
 
 	for {
-		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if err == nil {
-			// Write PID to lock file for debugging
-			fmt.Fprintf(f, "%d", os.Getpid())
-			f.Close()
-
+		var f *os.File
+		var createErr error
+		withLockGuard(lockPath, func() {
+			f, createErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if createErr != nil && os.IsExist(createErr) && removeStaleLock(lockPath) {
+				f, createErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			}
+			if createErr == nil {
+				fmt.Fprint(f, owner)
+				f.Close()
+			}
+		})
+		if createErr == nil {
 			return func() {
-				os.Remove(lockPath)
+				withLockGuard(lockPath, func() {
+					if held, readErr := os.ReadFile(lockPath); readErr == nil && string(held) == owner {
+						os.Remove(lockPath)
+					}
+				})
 			}, nil
 		}
 
-		if !os.IsExist(err) {
-			return nil, fmt.Errorf("lock file error: %w", err)
-		}
-
-		// Check for stale lock
-		if removeStaleLock(lockPath) {
-			continue // Retry immediately after cleaning stale lock
+		if !os.IsExist(createErr) {
+			return nil, fmt.Errorf("lock file error: %w", createErr)
 		}
 
 		if time.Now().After(deadline) {

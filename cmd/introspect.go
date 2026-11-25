@@ -281,6 +281,12 @@ func readOnlyScopeHint(cmd *cobra.Command, err error, access map[string]string) 
 	if !strings.Contains(strings.ToLower(err.Error()), "insufficient") {
 		return ""
 	}
+	// Some endpoints need a scope no gws login requests. Suggesting a
+	// login for those would send the user through consent for nothing.
+	if extra, ok := commandExtraScopes[commandKey(cmd)]; ok {
+		return fmt.Sprintf("Hint: this command needs %s. %s", strings.Join(extra.scopes, ", "), extra.note)
+	}
+
 	var lacking []string
 	onlyReadAccess := true
 	for _, svc := range scopeServicesFor(cmd) {
