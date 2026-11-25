@@ -204,3 +204,28 @@ func TestAcquireLock_UnremovableStaleLockFails(t *testing.T) {
 	}
 	unlock()
 }
+
+// A process that crashes while holding the lock leaves its ".lock" marker
+// behind, but the kernel releases its OS lock. The next process, now
+// holding the OS lock, knows the marker's writer is gone and replaces it
+// at once instead of waiting for it to look stale.
+func TestAcquireLock_RecoversAMarkerLeftByACrashedProcess(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test-file")
+	// What a crashed current-version holder leaves: a fresh marker with
+	// the current prefix, and no OS lock.
+	if err := os.WriteFile(path+lockSuffix, []byte(osLockMarkerPrefix+"12345-1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	unlock, err := acquireLock(path)
+	if err != nil {
+		t.Fatalf("an abandoned marker blocked the lock: %v", err)
+	}
+	if waited := time.Since(start); waited > time.Second {
+		t.Errorf("waited %v on a marker whose writer is gone", waited)
+	}
+	unlock()
+	if _, err := os.Stat(path + lockSuffix); !os.IsNotExist(err) {
+		t.Errorf("the marker was not removed on release: %v", err)
+	}
+}

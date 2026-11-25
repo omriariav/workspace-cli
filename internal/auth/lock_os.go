@@ -5,6 +5,7 @@ package auth
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -13,6 +14,11 @@ import (
 // file's existence as the lock and delete it once it looks stale, which
 // would pull the locked file out from under its holder.
 const osLockSuffix = ".flock"
+
+// osLockMarkerPrefix starts the contents of the ".lock" marker written by
+// versions that hold the OS lock, which tells them apart from the lock
+// files of older versions.
+const osLockMarkerPrefix = "gws-flock:"
 
 // acquireLock takes an exclusive lock for path and holds it until the
 // returned function is called.
@@ -61,7 +67,7 @@ func acquireLock(path string) (unlock func(), err error) {
 	}
 
 	// Holding the OS lock: now the lock file older versions look for.
-	owner := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
+	owner := fmt.Sprintf("%s%d-%d", osLockMarkerPrefix, os.Getpid(), time.Now().UnixNano())
 	for {
 		legacy, createErr := os.OpenFile(legacyPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if createErr == nil {
@@ -72,6 +78,15 @@ func acquireLock(path string) (unlock func(), err error) {
 		if !os.IsExist(createErr) {
 			release()
 			return nil, fmt.Errorf("lock file error: %w", createErr)
+		}
+		// A marker written by a version that uses the OS lock was created
+		// by a process holding that lock. This process holds it now, so
+		// that one is gone (it crashed before removing its marker): the
+		// marker is abandoned whatever its age, and is replaced at once.
+		if held, readErr := os.ReadFile(legacyPath); readErr == nil && strings.HasPrefix(string(held), osLockMarkerPrefix) {
+			if rmErr := os.Remove(legacyPath); rmErr == nil || os.IsNotExist(rmErr) {
+				continue
+			}
 		}
 		// Held by an older version, or left behind by one that died.
 		if info, statErr := os.Stat(legacyPath); statErr == nil && time.Since(info.ModTime()) > staleLockAge {

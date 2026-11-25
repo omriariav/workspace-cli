@@ -122,7 +122,7 @@ Add `--format text` for human-readable output, or `--format yaml` for YAML.
 #### Least-privilege login
 
 ```bash
-gws auth login --readonly                         # read-only scopes for every service
+gws auth login --readonly                         # read-only scopes for every service (or for `services` in config.yaml, if set)
 gws auth login --services gmail,drive --readonly  # read-only, selected services
 gws auth login --add --services gmail             # add (or upgrade) a service without replacing the rest
 ```
