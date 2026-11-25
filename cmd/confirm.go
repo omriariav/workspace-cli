@@ -144,8 +144,8 @@ var conditionalSensitive = map[string]conditionalRule{
 // express. flags and condition describe the rule for --schema.
 var payloadSensitive = map[string]payloadRule{
 	// The Sheets API treats an empty string as "clear this cell".
-	"sheets write":       {flags: []string{"values", "values-json"}, condition: "a cell value is empty", effect: "clears the cells it writes an empty value to", check: sheetsWriteClearsCells},
-	"sheets batch-write": {flags: []string{"values"}, condition: "a cell value is empty", effect: "clears the cells it writes an empty value to", check: sheetsBatchWriteClearsCells},
+	"sheets write":       {flags: []string{"values", "values-json"}, condition: "a cell value is an empty string", effect: "clears the cells it writes an empty value to", check: sheetsWriteClearsCells},
+	"sheets batch-write": {flags: []string{"values"}, condition: "a cell value is an empty string", effect: "clears the cells it writes an empty value to", check: sheetsBatchWriteClearsCells},
 }
 
 type payloadRule struct {
@@ -155,14 +155,12 @@ type payloadRule struct {
 	check     func(cmd *cobra.Command) bool
 }
 
-// hasEmptyCell reports whether any cell is an empty string or null: both
-// clear the cell they are written to.
+// hasEmptyCell reports whether any cell is an empty string, which clears
+// the cell it is written to. A JSON null is different: the Sheets API
+// skips it and leaves the existing cell as it is.
 func hasEmptyCell(rows [][]interface{}) bool {
 	for _, row := range rows {
 		for _, cell := range row {
-			if cell == nil {
-				return true
-			}
 			if text, ok := cell.(string); ok && text == "" {
 				return true
 			}

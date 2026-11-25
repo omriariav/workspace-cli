@@ -2039,7 +2039,8 @@ func TestConfirmGate_SheetsWritesThatClearCells(t *testing.T) {
 	for payload, want := range map[string]bool{
 		`[["a","b"]]`:    false,
 		`[[""]]`:         true,
-		`[["a"],[null]]`: true,
+		`[["a"],[null]]`: false, // null is skipped by the API: the cell is kept
+		`[[null, ""]]`:   true,
 		`[[0, false]]`:   false,
 		`not json`:       false, // the command rejects it itself
 	} {
@@ -2078,7 +2079,7 @@ func TestConfirmGate_SheetsWritesThatClearCells(t *testing.T) {
 
 	schema, _ := runIntrospection(t, "sheets", "write", "--schema")
 	when, _ := schema["sensitive_when"].(map[string]interface{})
-	if when == nil || when["condition"] != "a cell value is empty" {
+	if when == nil || when["condition"] != "a cell value is an empty string" {
 		t.Errorf("sheets write --schema sensitive_when = %v", schema["sensitive_when"])
 	}
 }

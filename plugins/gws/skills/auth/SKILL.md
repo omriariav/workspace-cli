@@ -209,7 +209,8 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   `docs replace`, `slides replace-text` and `sheets find-replace` when
   `--replace` is empty, and `docs replace-named-range` when `--text` is
   empty (that deletes every match), and `sheets write` / `sheets
-  batch-write` when a cell value is empty (that clears the cell).
+  batch-write` when a cell value is an empty string (that clears the
+  cell; a JSON `null` leaves the cell as it is and needs no confirmation).
 - Covered explicitly: `docs replace-content` (replaces the whole document
   body); `sheets merge` (discards every value in the range except the upper-left one); `sheets copy-to` (copies a sheet into another spreadsheet); `events subscriptions create`, `reactivate`, `renew` and
   `update` (start, resume, extend or change delivery of events to a
