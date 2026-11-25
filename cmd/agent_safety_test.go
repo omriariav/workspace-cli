@@ -1570,6 +1570,17 @@ func TestHookSubprocessEnv_DropsExternalAccessToken(t *testing.T) {
 	if strings.Contains(joined, "GWS_ACCESS_TOKEN") || strings.Contains(joined, "ya29.other-account") {
 		t.Errorf("the external token reached the hook subprocess: %v", env)
 	}
+	// Windows environment names are case-insensitive: any spelling of the
+	// variable must be dropped, while a different variable that merely
+	// starts with the same letters is kept.
+	mixed := hookSubprocessEnv([]string{"gws_access_token=lower", "Gws_Access_Token=mixed", "GWS_ACCESS_TOKEN_NOTE=keep", "=odd"})
+	mixedJoined := strings.Join(mixed, "\n")
+	if strings.Contains(mixedJoined, "lower") || strings.Contains(mixedJoined, "mixed") {
+		t.Errorf("a differently-cased token variable reached the hook subprocess: %v", mixed)
+	}
+	if !containsStr(mixed, "GWS_ACCESS_TOKEN_NOTE=keep") {
+		t.Errorf("an unrelated variable was dropped: %v", mixed)
+	}
 	for _, want := range []string{"PATH=/usr/bin", "GWS_CLIENT_ID=id", "HOME=/home/u", "GWS_NO_UPDATE_CHECK=1"} {
 		if !containsStr(env, want) {
 			t.Errorf("hook environment is missing %q: %v", want, env)

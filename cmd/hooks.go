@@ -472,7 +472,9 @@ func hookWorkspaceKey(cwd string) string {
 func hookSubprocessEnv(parent []string) []string {
 	env := make([]string, 0, len(parent)+1)
 	for _, kv := range parent {
-		if strings.HasPrefix(kv, config.AccessTokenEnv+"=") {
+		// Compared without regard to case: Windows environment names are
+		// case-insensitive, so `gws_access_token` is the same variable.
+		if name, _, found := strings.Cut(kv, "="); found && strings.EqualFold(name, config.AccessTokenEnv) {
 			continue
 		}
 		env = append(env, kv)

@@ -476,12 +476,18 @@ func runCalendarSuggestTime(cmd *cobra.Command, args []string) error {
 		return usageErrorf("too many calendars: %d given, but one free/busy query covers at most %d (--calendars and --attendees combined)", len(items), maxFreeBusyCalendars)
 	}
 
-	svc, err := suggestTimeCalendarService(context.Background())
+	// The command's own context, so cancelling the command also abandons
+	// the request instead of waiting for Google to answer.
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	svc, err := suggestTimeCalendarService(ctx)
 	if err != nil {
 		return p.PrintError(err)
 	}
 
-	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	busy, checked, unavailable, err := queryBusySpans(ctx, svc, items, from, to)
 	if err != nil {
 		return p.PrintError(err)
 	}
@@ -542,7 +548,7 @@ func unreadableCalendarsError(unavailable []map[string]interface{}, allowPartial
 // queryBusySpans runs the free/busy query and returns the busy periods of
 // the calendars that could be read, the IDs of those calendars, and the
 // calendars that could not be read (with the reason).
-func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem, from, to time.Time) (busy []timeSpan, checked []string, unavailable []map[string]interface{}, err error) {
+func queryBusySpans(ctx context.Context, svc *calendar.Service, items []*calendar.FreeBusyRequestItem, from, to time.Time) (busy []timeSpan, checked []string, unavailable []map[string]interface{}, err error) {
 	resp, err := svc.Freebusy.Query(&calendar.FreeBusyRequest{
 		// Sent in UTC, so the instant is exact whatever the local offset
 		// (RFC3339 cannot express offsets with a seconds component).
@@ -556,7 +562,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		// which is reported as unavailable.
 		GroupExpansionMax:    maxGroupExpansion,
 		CalendarExpansionMax: maxFreeBusyCalendars,
-	}).Do()
+	}).Context(ctx).Do()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to query free/busy: %w", err)
 	}

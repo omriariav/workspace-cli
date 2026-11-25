@@ -644,7 +644,7 @@ func TestQueryBusySpans_ExpandsGroups(t *testing.T) {
 	to := mustTime(t, "2026-12-02T00:00:00Z")
 	items := []*calendar.FreeBusyRequestItem{{Id: "team@example.com"}, {Id: "broken@example.com"}, {Id: "half@example.com"}, {Id: "empty@example.com"}}
 
-	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	busy, checked, unavailable, err := queryBusySpans(context.Background(), svc, items, from, to)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -694,7 +694,7 @@ func TestQueryBusySpans_GroupMemberOrderDoesNotMatter(t *testing.T) {
 				},
 			})
 		})
-		busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+		busy, checked, unavailable, err := queryBusySpans(context.Background(), svc, items, from, to)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -740,7 +740,7 @@ func TestQueryBusySpans_SingleGroupPartlyReadable(t *testing.T) {
 		"busy@example.com":   {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T09:00:00Z", End: "2026-12-01T12:00:00Z"}}},
 		"hidden@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
 	})
-	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	busy, checked, unavailable, err := queryBusySpans(context.Background(), svc, items, from, to)
 	if err != nil {
 		t.Fatalf("a partly readable group should not be a hard failure: %v", err)
 	}
@@ -760,7 +760,7 @@ func TestQueryBusySpans_SingleGroupPartlyReadable(t *testing.T) {
 		"busy@example.com":   {Errors: []*calendar.Error{{Reason: "notFound"}}},
 		"hidden@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
 	})
-	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil || !strings.Contains(err.Error(), "none of the requested calendars") {
+	if _, _, _, err := queryBusySpans(context.Background(), svc, items, from, to); err == nil || !strings.Contains(err.Error(), "none of the requested calendars") {
 		t.Errorf("error = %v, want none-readable error", err)
 	}
 }
@@ -777,7 +777,7 @@ func TestQueryBusySpans_NullEntriesDoNotPanic(t *testing.T) {
 	to := mustTime(t, "2026-12-02T00:00:00Z")
 	items := []*calendar.FreeBusyRequestItem{{Id: "primary"}, {Id: "a@example.com"}, {Id: "team@example.com"}, {Id: "n@example.com"}}
 
-	busy, _, unavailable, err := queryBusySpans(svc, items, from, to)
+	busy, _, unavailable, err := queryBusySpans(context.Background(), svc, items, from, to)
 	if err != nil {
 		t.Fatalf("queryBusySpans: %v", err)
 	}
@@ -833,7 +833,7 @@ func TestQueryBusySpans_EmptyBusyListIsFreeMissingIsUnknown(t *testing.T) {
 	to := mustTime(t, "2026-12-02T00:00:00Z")
 	items := []*calendar.FreeBusyRequestItem{{Id: "free@example.com"}, {Id: "blank@example.com"}, {Id: "null@example.com"}}
 
-	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	busy, checked, unavailable, err := queryBusySpans(context.Background(), svc, items, from, to)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -851,6 +851,36 @@ func TestQueryBusySpans_EmptyBusyListIsFreeMissingIsUnknown(t *testing.T) {
 
 // The free/busy request carries its bounds in UTC, so the instant sent is
 // the instant searched even where the local offset has a seconds part.
+// Cancelling the command abandons the free/busy request.
+func TestQueryBusySpans_HonoursCancellation(t *testing.T) {
+	release := make(chan struct{})
+	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	})
+	t.Cleanup(func() { close(release) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, _, _, err := queryBusySpans(ctx, svc, []*calendar.FreeBusyRequestItem{{Id: "primary"}},
+			mustTime(t, "2026-12-01T00:00:00Z"), mustTime(t, "2026-12-02T00:00:00Z"))
+		done <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil || !errors.Is(err, context.Canceled) {
+			t.Errorf("error = %v, want the cancellation", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the request kept waiting after the command was cancelled")
+	}
+}
+
 func TestQueryBusySpans_RequestBoundsAreUTC(t *testing.T) {
 	var got calendar.FreeBusyRequest
 	svc := newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
@@ -865,7 +895,7 @@ func TestQueryBusySpans_RequestBoundsAreUTC(t *testing.T) {
 	// Paris in 1900 was on local mean time, +00:09:21.
 	from := time.Date(1900, 6, 1, 9, 0, 0, 0, loc)
 	to := from.Add(8 * time.Hour)
-	if _, _, _, err := queryBusySpans(svc, []*calendar.FreeBusyRequestItem{{Id: "primary"}}, from, to); err != nil {
+	if _, _, _, err := queryBusySpans(context.Background(), svc, []*calendar.FreeBusyRequestItem{{Id: "primary"}}, from, to); err != nil {
 		t.Fatal(err)
 	}
 	sentFrom, err1 := time.Parse(time.RFC3339, got.TimeMin)
@@ -887,7 +917,7 @@ func TestQueryBusySpans_NullErrorEntriesDoNotPanic(t *testing.T) {
 	to := mustTime(t, "2026-12-02T00:00:00Z")
 	items := []*calendar.FreeBusyRequestItem{{Id: "a@example.com"}, {Id: "b@example.com"}, {Id: "team@example.com"}, {Id: "primary"}}
 
-	_, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	_, checked, unavailable, err := queryBusySpans(context.Background(), svc, items, from, to)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -947,7 +977,7 @@ func TestQueryBusySpans_MockServer(t *testing.T) {
 	to := mustTime(t, "2026-12-02T00:00:00Z")
 	items := []*calendar.FreeBusyRequestItem{{Id: "primary"}, {Id: "a@example.com"}, {Id: "b@example.com"}, {Id: "c@example.com"}}
 
-	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	busy, checked, unavailable, err := queryBusySpans(context.Background(), svc, items, from, to)
 	if err != nil {
 		t.Fatalf("queryBusySpans: %v", err)
 	}
@@ -1042,7 +1072,7 @@ func TestQueryBusySpans_FractionalSecondsAreWidened(t *testing.T) {
 	})
 	from := mustTime(t, "2026-12-01T09:00:00Z")
 	to := mustTime(t, "2026-12-01T12:00:00Z")
-	busy, _, _, err := queryBusySpans(svc, []*calendar.FreeBusyRequestItem{{Id: "primary"}}, from, to)
+	busy, _, _, err := queryBusySpans(context.Background(), svc, []*calendar.FreeBusyRequestItem{{Id: "primary"}}, from, to)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1081,7 +1111,7 @@ func TestQueryBusySpans_Failures(t *testing.T) {
 			},
 		})
 	})
-	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil ||
+	if _, _, _, err := queryBusySpans(context.Background(), svc, items, from, to); err == nil ||
 		!strings.Contains(err.Error(), "none of the requested calendars") || !strings.Contains(err.Error(), "a@example.com (notFound)") {
 		t.Errorf("error = %v, want unreadable-calendars error naming the calendar and reason", err)
 	}
@@ -1092,7 +1122,7 @@ func TestQueryBusySpans_Failures(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte(`{"error":{"code":403,"message":"Request had insufficient authentication scopes."}}`))
 	})
-	_, _, _, err := queryBusySpans(svc, items, from, to)
+	_, _, _, err := queryBusySpans(context.Background(), svc, items, from, to)
 	if err == nil {
 		t.Fatal("expected an API error")
 	}
@@ -1119,7 +1149,7 @@ func TestQueryBusySpans_Failures(t *testing.T) {
 			},
 		})
 	})
-	busy, checked, unavailable, err := queryBusySpans(svc, []*calendar.FreeBusyRequestItem{{Id: "a@example.com"}, {Id: "b@example.com"}, {Id: "primary"}}, from, to)
+	busy, checked, unavailable, err := queryBusySpans(context.Background(), svc, []*calendar.FreeBusyRequestItem{{Id: "a@example.com"}, {Id: "b@example.com"}, {Id: "primary"}}, from, to)
 	if err != nil {
 		t.Fatalf("an invalid interval should mark the calendar unavailable, not fail: %v", err)
 	}
@@ -1146,12 +1176,12 @@ func TestQueryBusySpans_Failures(t *testing.T) {
 			},
 		})
 	})
-	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil || !strings.Contains(err.Error(), "a@example.com (invalid busy period") {
+	if _, _, _, err := queryBusySpans(context.Background(), svc, items, from, to); err == nil || !strings.Contains(err.Error(), "a@example.com (invalid busy period") {
 		t.Errorf("error = %v, want the malformed calendar named", err)
 	}
 	// ...and next to a readable calendar it is reported as unavailable,
 	// so --allow-partial can still return results.
-	busy, checked, unavailable, err = queryBusySpans(svc, []*calendar.FreeBusyRequestItem{{Id: "a@example.com"}, {Id: "primary"}}, from, to)
+	busy, checked, unavailable, err = queryBusySpans(context.Background(), svc, []*calendar.FreeBusyRequestItem{{Id: "a@example.com"}, {Id: "primary"}}, from, to)
 	if err != nil || strings.Join(checked, ",") != "primary" || len(unavailable) != 1 || unavailable[0]["calendar"] != "a@example.com" || len(busy) != 1 {
 		t.Errorf("checked = %v, unavailable = %v, busy = %v, err = %v", checked, unavailable, busy, err)
 	}
