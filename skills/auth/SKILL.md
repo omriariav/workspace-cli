@@ -173,7 +173,7 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   body); commands that send (Gmail `send`, `reply`, `forward`,
   `send-draft`; Chat `send`) and commands that change access (Calendar
   `share`, `unshare`, `update-acl`, `unsubscribe`; Drive `share`, `unshare`,
-  `update-permission`, `start-approval`, `reassign-approval`; Chat
+  `update-permission`, `move`, `start-approval`, `reassign-approval`; Chat
   `add-member`, `update-member`).
 - Not covered: creating or editing content, `untrash`, and responding to
   a Drive approval (`approve`, `decline`, `cancel-approval`). `gws <command> --schema` shows `"sensitive": true` for a covered

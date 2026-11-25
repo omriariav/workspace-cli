@@ -517,6 +517,10 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 	markUnavailable := func(id, reason string) {
 		unavailable = append(unavailable, map[string]interface{}{"calendar": id, "reason": reason})
 	}
+	// readCalendars counts the individual calendars whose availability was
+	// actually read, including members of a group that is unavailable as
+	// a whole because another member could not be read.
+	readCalendars := 0
 	// addCalendar records one calendar's busy periods. It reports false,
 	// with the reason, when that calendar's availability is unknown.
 	addCalendar := func(id string) (bool, string, error) {
@@ -537,6 +541,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 			// without fractions can never sit inside one.
 			busy = append(busy, timeSpan{Start: start.Truncate(time.Second), End: ceilSecond(end)})
 		}
+		readCalendars++
 		return true, "", nil
 	}
 
@@ -585,7 +590,7 @@ func queryBusySpans(svc *calendar.Service, items []*calendar.FreeBusyRequestItem
 		}
 		checked = append(checked, item.Id)
 	}
-	if len(checked) == 0 {
+	if readCalendars == 0 {
 		// Never suggest from zero calendars, whatever --allow-partial says;
 		// name each one so a mistyped ID or missing sharing is visible.
 		names := make([]string, 0, len(unavailable))

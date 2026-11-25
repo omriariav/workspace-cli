@@ -667,6 +667,51 @@ func TestQueryBusySpans_GroupMemberOrderDoesNotMatter(t *testing.T) {
 	}
 }
 
+// A single group with one readable and one unreadable member: something
+// was read, so --allow-partial can proceed; nothing read at all cannot.
+func TestQueryBusySpans_SingleGroupPartlyReadable(t *testing.T) {
+	from := mustTime(t, "2026-12-01T00:00:00Z")
+	to := mustTime(t, "2026-12-02T00:00:00Z")
+	items := []*calendar.FreeBusyRequestItem{{Id: "team@example.com"}}
+	respond := func(calendars map[string]calendar.FreeBusyCalendar) *calendar.Service {
+		return newSuggestTestService(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(&calendar.FreeBusyResponse{
+				Groups:    map[string]calendar.FreeBusyGroup{"team@example.com": {Calendars: []string{"busy@example.com", "hidden@example.com"}}},
+				Calendars: calendars,
+			})
+		})
+	}
+
+	svc := respond(map[string]calendar.FreeBusyCalendar{
+		"busy@example.com":   {Busy: []*calendar.TimePeriod{{Start: "2026-12-01T09:00:00Z", End: "2026-12-01T12:00:00Z"}}},
+		"hidden@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
+	})
+	busy, checked, unavailable, err := queryBusySpans(svc, items, from, to)
+	if err != nil {
+		t.Fatalf("a partly readable group should not be a hard failure: %v", err)
+	}
+	if len(checked) != 0 || len(unavailable) != 1 || len(busy) != 1 {
+		t.Errorf("checked = %v, unavailable = %v, busy = %v", checked, unavailable, busy)
+	}
+	// Without --allow-partial the command still refuses; with it, it goes on.
+	if unreadableCalendarsError(unavailable, false) == nil {
+		t.Error("the group is unavailable, so the default must still refuse")
+	}
+	if err := unreadableCalendarsError(unavailable, true); err != nil {
+		t.Errorf("--allow-partial should proceed: %v", err)
+	}
+
+	// No member readable at all: an error regardless of --allow-partial.
+	svc = respond(map[string]calendar.FreeBusyCalendar{
+		"busy@example.com":   {Errors: []*calendar.Error{{Reason: "notFound"}}},
+		"hidden@example.com": {Errors: []*calendar.Error{{Reason: "notFound"}}},
+	})
+	if _, _, _, err := queryBusySpans(svc, items, from, to); err == nil || !strings.Contains(err.Error(), "none of the requested calendars") {
+		t.Errorf("error = %v, want none-readable error", err)
+	}
+}
+
 func newSuggestTestService(t *testing.T, handler http.HandlerFunc) *calendar.Service {
 	t.Helper()
 	server := httptest.NewServer(handler)

@@ -61,6 +61,7 @@ var sensitiveCommands = map[string]string{
 	"drive share":             "shares a file",
 	"drive unshare":           "removes access to a file",
 	"drive update-permission": "changes who can access a file",
+	"drive move":              "moves a file, which changes who can access it if the folders are shared differently",
 	"drive start-approval":    "sends an approval request to reviewers",
 	"drive reassign-approval": "changes the reviewers of an approval request",
 	"drive delete-revision":   "deletes a file revision",

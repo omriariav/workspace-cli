@@ -298,6 +298,7 @@ func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
 		{"drive", "start-approval"}, {"drive", "reassign-approval"},
 		{"calendar", "unsubscribe"},
 		{"docs", "replace-content"},
+		{"drive", "move"},
 	}
 	for _, path := range covered {
 		cmd, _, err := rootCmd.Find(path)
