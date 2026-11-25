@@ -1589,6 +1589,38 @@ func TestHookSubprocessEnv_DropsExternalAccessToken(t *testing.T) {
 	}
 }
 
+// The Chat space cache is one shared file that belongs to the stored
+// login: with an external access token the cache commands refuse to run,
+// before any client is created, so another account's spaces and members
+// can never be written into (or read out of) it.
+func TestChatSpaceCache_RefusedWithExternalToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	setTestAccessToken("external-account-token")
+	t.Cleanup(func() { setTestAccessToken("") })
+
+	for _, path := range [][]string{{"chat", "build-cache"}, {"chat", "find-group"}, {"chat", "find-space"}} {
+		cmd, _, err := rootCmd.Find(path)
+		if err != nil {
+			t.Fatalf("%v not found", path)
+		}
+		var runErr error
+		out := captureStderrStr(t, func() { runErr = cmd.RunE(cmd, nil) })
+		if runErr == nil || !strings.Contains(out, "not available with an external access token") {
+			t.Errorf("gws %s: err = %v, output = %q", strings.Join(path, " "), runErr, out)
+		}
+		if resolveExitError(runErr, io.Discard) != ExitUsage {
+			t.Errorf("gws %s: exit code = %d, want %d", strings.Join(path, " "), resolveExitError(runErr, io.Discard), ExitUsage)
+		}
+	}
+
+	// Without the token the guard lets them through.
+	setTestAccessToken("")
+	cache, _, _ := rootCmd.Find([]string{"chat", "build-cache"})
+	if err := requireStoredLoginForSpaceCache(cache); err != nil {
+		t.Errorf("stored login should be allowed: %v", err)
+	}
+}
+
 func TestAccessToken_NotReadFromConfigFile(t *testing.T) {
 	setTestAccessToken("")
 	viper.Set("access_token", "left-over-in-config")

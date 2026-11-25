@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/omriariav/workspace-cli/internal/client"
+	"github.com/omriariav/workspace-cli/internal/config"
 	"github.com/omriariav/workspace-cli/internal/spacecache"
 	"github.com/omriariav/workspace-cli/internal/usercache"
 	"github.com/spf13/cobra"
@@ -1172,8 +1173,11 @@ func runChatMembers(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve display names via People API + local cache
+	// The name cache on disk belongs to the stored login. With an external
+	// access token the members may come from another account's directory,
+	// so that cache is neither read nor written.
 	cache, cacheErr := usercache.New()
-	if cacheErr == nil {
+	if cacheErr == nil && config.GetAccessToken() == "" {
 		// Collect human user IDs missing display_name (skip bots)
 		var toResolve []string
 		for _, r := range results {
@@ -2464,6 +2468,9 @@ func mapSpaceEventToOutput(event *chat.SpaceEvent) map[string]interface{} {
 }
 
 func runChatBuildCache(cmd *cobra.Command, args []string) error {
+	if err := requireStoredLoginForSpaceCache(cmd); err != nil {
+		return err
+	}
 	p := GetPrinter()
 	ctx := context.Background()
 
@@ -2512,6 +2519,9 @@ func runChatBuildCache(cmd *cobra.Command, args []string) error {
 }
 
 func runChatFindGroup(cmd *cobra.Command, args []string) error {
+	if err := requireStoredLoginForSpaceCache(cmd); err != nil {
+		return err
+	}
 	p := GetPrinter()
 	ctx := context.Background()
 
@@ -2600,6 +2610,9 @@ var (
 )
 
 func runChatFindSpace(cmd *cobra.Command, args []string) error {
+	if err := requireStoredLoginForSpaceCache(cmd); err != nil {
+		return err
+	}
 	p := GetPrinter()
 	ctx := context.Background()
 
@@ -2815,4 +2828,16 @@ func spaceFromMessageName(name string) string {
 		return ""
 	}
 	return parts[0] + "/" + parts[1]
+}
+
+// requireStoredLoginForSpaceCache rejects the space-cache commands when an
+// external access token is in use. The cache is one file shared by every
+// invocation and belongs to the stored login; building or reading it with
+// another credential would mix that account's spaces and members into it,
+// where later commands would find them without the token.
+func requireStoredLoginForSpaceCache(cmd *cobra.Command) error {
+	if config.GetAccessToken() == "" {
+		return nil
+	}
+	return usageErrorf("gws %s uses a local cache that belongs to the stored login and is not available with an external access token (GWS_ACCESS_TOKEN / --access-token); unset the token, or use `gws chat list` and `gws chat members` instead", commandKey(cmd))
 }

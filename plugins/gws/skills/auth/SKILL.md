@@ -134,6 +134,9 @@ gws calendar events --days 1
   for example, has no Workspace scopes.
 - The token is read only from the environment variable or the flag,
   never from `config.yaml`.
+- Local caches belong to the stored login: with an external token,
+  `chat build-cache`, `chat find-group` and `chat find-space` refuse to
+  run, and `chat members` does not use the local name cache.
 - Session context hooks (`gws hooks`) never use it: they always read with
   the stored login, so cached hook context cannot mix accounts.
 - `--access-token <token>` also works, but a flag value is visible in process
