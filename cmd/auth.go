@@ -133,11 +133,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		// once, up front, and save the result, so those lookups reuse one
 		// valid token instead of each refreshing on its own — which, if
 		// the refresh token is rotated, could leave the stored login dead.
-		if err := refreshStoredToken(); err != nil {
+		// The token that refresh returns is the base for everything that
+		// follows; it is not re-read from disk, where another login could
+		// have replaced it in the meantime. nil when nothing is stored.
+		var err error
+		baseAuthorization, err = refreshStoredToken()
+		if err != nil {
 			return p.PrintError(fmt.Errorf("could not refresh the stored authorization (%v), so --add was not started; run `gws auth login` without --add to replace it", err))
 		}
-		// nil when nothing is stored yet.
-		baseAuthorization, _ = auth.LoadToken()
 		existingAccess = existingGrantedAccess()
 	}
 	access := mergeGrantedAccess(existingAccess, services, readOnly)
@@ -165,6 +168,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			return p.PrintError(fmt.Errorf("could not determine which scopes the stored authorization holds (%v), so --add was not started; try again, or run `gws auth login` without --add to replace it", err))
 		}
 		scopes = unionScopes(previousScopes, scopes)
+		// The access levels, account and scopes above were each read from
+		// disk. They describe the base authorization only if it is still
+		// the stored one: if another login finished while they were being
+		// read, they may belong to a different account.
+		if !auth.StoredAuthorizationIs(baseAuthorization) {
+			return p.PrintError(fmt.Errorf("the stored authorization changed while this login was starting (another `gws auth login` or `gws auth logout` finished first), so --add was not started; run it again"))
+		}
 	}
 
 	if config.GetAccessToken() != "" {
@@ -390,22 +400,25 @@ func redactSecrets(err error, secrets ...string) error {
 
 // refreshStoredToken makes sure the stored token is currently valid,
 // refreshing it if needed and saving the result (including a rotated
-// refresh token) through the same guarded path every refresh uses. It is
-// a no-op when nothing is stored. A variable so tests can replace the
-// network call.
-var refreshStoredToken = func() error {
+// refresh token) through the same guarded path every refresh uses. It
+// returns the token that is now stored, or nil when nothing is. A variable
+// so tests can replace the network call.
+var refreshStoredToken = func() (*oauth2.Token, error) {
 	if !auth.TokenExists() {
-		return nil
+		return nil, nil
 	}
 	stored, err := auth.LoadToken()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, saveErr, err := auth.EnsureFreshToken(context.Background(), config.GetClientID(), config.GetClientSecret(), stored)
+	fresh, saveErr, err := auth.EnsureFreshToken(context.Background(), config.GetClientID(), config.GetClientSecret(), stored)
 	if err != nil {
-		return redactSecrets(err, stored.AccessToken, stored.RefreshToken)
+		return nil, redactSecrets(err, stored.AccessToken, stored.RefreshToken)
 	}
-	return saveErr
+	if saveErr != nil {
+		return nil, saveErr
+	}
+	return fresh, nil
 }
 
 // storedScopes returns the exact scopes the stored authorization holds:
@@ -762,6 +775,13 @@ func runLogout(cmd *cobra.Command, args []string) error {
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
+
+	// A token that was supplied but is empty is the same error here as
+	// for every API command: status must not describe the stored login
+	// when the commands themselves would refuse to use it.
+	if err := config.CheckAccessToken(); err != nil {
+		return usageErrorf("%s", err.Error())
+	}
 
 	if config.GetAccessToken() != "" {
 		// The token itself is never printed, and it is not verified here:

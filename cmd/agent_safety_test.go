@@ -1493,7 +1493,10 @@ func TestAuthLogin_AddStopsIfTheStoredLoginCannotBeRefreshed(t *testing.T) {
 	})
 
 	var order []string
-	refreshStoredToken = func() error { order = append(order, "refresh"); return errors.New("invalid_grant") }
+	refreshStoredToken = func() (*oauth2.Token, error) {
+		order = append(order, "refresh")
+		return nil, errors.New("invalid_grant")
+	}
 	lookupAccountID = func(*oauth2.Token) (string, error) { order = append(order, "account"); return "acct", nil }
 	lookupTokenScopes = func(*oauth2.Token) ([]string, error) { order = append(order, "scopes"); return nil, nil }
 
@@ -1760,5 +1763,70 @@ func TestConfirmGate_PromptShowsTheInvocation(t *testing.T) {
 		if strings.Contains(out, unwanted) {
 			t.Errorf("prompt %q should not contain %q", out, unwanted)
 		}
+	}
+}
+
+// `auth status` applies the same rule as the API commands: a token that
+// was supplied but is empty is an error, not a reason to report on the
+// stored login.
+func TestStatus_EmptyAccessTokenIsRejected(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("GWS_ACCESS_TOKEN", "  ")
+	var err error
+	out := captureStderrStr(t, func() { err = runStatus(statusCmd, nil) })
+	if err == nil || !strings.Contains(out, "is set but empty") {
+		t.Errorf("blank env: err = %v, output = %q", err, out)
+	}
+
+	t.Setenv("GWS_ACCESS_TOKEN", "env-token")
+	origValue, origSet := config.AccessTokenFlag, config.AccessTokenFlagSet
+	t.Cleanup(func() { config.AccessTokenFlag, config.AccessTokenFlagSet = origValue, origSet })
+	config.AccessTokenFlag = func() string { return "" }
+	config.AccessTokenFlagSet = func() bool { return true }
+	out = captureStderrStr(t, func() { err = runStatus(statusCmd, nil) })
+	if err == nil || !strings.Contains(out, "--access-token was given but is empty") {
+		t.Errorf("empty flag: err = %v, output = %q", err, out)
+	}
+}
+
+// If another login replaces the stored one while --add is still reading
+// its starting point, the account and scopes it read may belong to that
+// other login. --add stops before any consent instead of extending it.
+func TestAuthLogin_AddStopsIfTheStoredLoginIsReplacedWhileStarting(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	viper.Set("client_id", "id")
+	viper.Set("client_secret", "secret")
+	_ = loginCmd.Flags().Set("add", "true")
+	_ = loginCmd.Flags().Set("services", "tasks")
+	originalRefresh, originalAccount, originalScopes := refreshStoredToken, lookupAccountID, lookupTokenScopes
+	t.Cleanup(func() {
+		viper.Set("client_id", "")
+		viper.Set("client_secret", "")
+		_ = loginCmd.Flags().Set("add", "false")
+		loginCmd.Flags().Lookup("add").Changed = false
+		_ = loginCmd.Flags().Set("services", "")
+		loginCmd.Flags().Lookup("services").Changed = false
+		refreshStoredToken, lookupAccountID, lookupTokenScopes = originalRefresh, originalAccount, originalScopes
+	})
+
+	accountA := &oauth2.Token{AccessToken: "access-a", RefreshToken: "refresh-a", Expiry: time.Now().Add(time.Hour)}
+	accountB := &oauth2.Token{AccessToken: "access-b", RefreshToken: "refresh-b", Expiry: time.Now().Add(time.Hour)}
+	// The refresh hands back account A's login; by the time the metadata
+	// is read, account B's login is the one on disk.
+	refreshStoredToken = func() (*oauth2.Token, error) {
+		if err := auth.SaveToken(accountB); err != nil {
+			t.Fatal(err)
+		}
+		return accountA, nil
+	}
+	lookupAccountID = func(*oauth2.Token) (string, error) { return "account-b", nil }
+	lookupTokenScopes = func(*oauth2.Token) ([]string, error) {
+		return []string{"https://www.googleapis.com/auth/drive"}, nil
+	}
+
+	var err error
+	out := captureStderrStr(t, func() { err = runLogin(loginCmd, nil) })
+	if err == nil || !strings.Contains(out, "changed while this login was starting") {
+		t.Fatalf("error = %v, output = %q", err, out)
 	}
 }
