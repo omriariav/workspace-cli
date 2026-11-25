@@ -87,6 +87,10 @@ gws auth login --add --services gmail           # later: upgrade gmail to full a
 - `--add` merges the selected services into the existing authorization
   instead of replacing it. Without `--add`, a login replaces the previous
   grant.
+- Every login must return its own refresh token; if Google returns none,
+  the login is rejected and the previous authorization is left unchanged.
+- The reported access levels come from the scopes Google actually granted,
+  so unticking a scope on the consent screen is reflected in `auth status`.
 - Adding a service read-only never downgrades a service that already has
   full access. To reduce access, run `gws auth logout` (which revokes the
   old grant) and then log in again with the narrower options.
@@ -141,12 +145,16 @@ gws gmail send --to a@example.com --subject Hi --body Hello
   `confirmation required` instead of hanging. **Ask the user for explicit
   approval, then re-run the same command with `--yes`.** Never add `--yes`
   on your own initiative.
-- Covered: Gmail send/reply/forward/send-draft and trash/delete commands;
-  Calendar delete, clear, share, unshare, update-acl; Tasks delete/clear;
-  Drive delete, empty-trash, share/unshare/update-permission and
-  comment/revision/drive deletes; Docs trash; Sheets delete-sheet; Slides
-  delete-slide; Chat send, delete, delete-space, add/remove/update-member;
-  Contacts deletes; Events subscription delete.
+- Covered by name: every command that starts with `delete`, `trash`,
+  `remove`, `clear`, `empty` or `batch-delete`, in any service (including
+  content deletes such as `docs delete-table-row` or `sheets clear`).
+- Covered explicitly: commands that send (Gmail `send`, `reply`, `forward`,
+  `send-draft`; Chat `send`) and commands that change access (Calendar
+  `share`, `unshare`, `update-acl`; Drive `share`, `unshare`,
+  `update-permission`; Chat `add-member`, `update-member`).
+- Not covered: creating or editing content, `untrash`, and Drive approval
+  actions. `gws <command> --schema` shows `"sensitive": true` for a covered
+  command.
 
 ## First-Time Setup
 

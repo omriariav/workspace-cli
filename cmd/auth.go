@@ -142,8 +142,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	existing, _ := auth.LoadToken()
-	token, err = loginTokenToStore(existing, token, add)
+	token, err = loginTokenToStore(token)
 	if err != nil {
 		return p.PrintError(err)
 	}
@@ -169,23 +168,26 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	})
 }
 
-// loginTokenToStore decides which token a login persists. An incremental
-// login may fall back to the previous refresh token; a replacing login
-// must bring its own.
-func loginTokenToStore(existing, incoming *oauth2.Token, add bool) (*oauth2.Token, error) {
-	if add {
-		return auth.MergeToken(existing, incoming), nil
-	}
-	if incoming.RefreshToken == "" {
+// loginTokenToStore decides which token a login persists. Every login
+// must bring its own refresh token: reusing the previous one could keep a
+// wider grant after access was narrowed, miss scopes that were just added,
+// or belong to a different account than the one that just consented.
+func loginTokenToStore(incoming *oauth2.Token) (*oauth2.Token, error) {
+	if incoming == nil || incoming.RefreshToken == "" {
 		return nil, fmt.Errorf("no refresh token was returned for this login, so the previous authorization was left unchanged; run `gws auth logout` and then `gws auth login` again")
 	}
 	return incoming, nil
 }
 
 // existingGrantedAccess returns the access levels recorded by earlier
-// logins. Logins made before access levels were recorded only have a
+// logins, or nothing when no authorization is stored. Logins made before access levels were recorded only have a
 // service list; those services were granted full access.
 func existingGrantedAccess() map[string]string {
+	// Metadata without a stored authorization describes a login that no
+	// longer exists; never merge it into a new one.
+	if !auth.TokenExists() {
+		return map[string]string{}
+	}
 	if access := auth.LoadGrantedAccess(); access != nil {
 		return access
 	}
@@ -300,6 +302,7 @@ func runLogout(cmd *cobra.Command, args []string) error {
 	p := GetPrinter()
 
 	if !auth.TokenExists() {
+		auth.DeleteGrantedMetadata()
 		return p.Print(map[string]interface{}{
 			"status":  "success",
 			"message": "Not authenticated (no token found)",
@@ -319,6 +322,9 @@ func runLogout(cmd *cobra.Command, args []string) error {
 	if err := auth.DeleteToken(); err != nil {
 		return p.PrintError(err)
 	}
+	// The recorded services and access levels describe the grant that was
+	// just removed.
+	auth.DeleteGrantedMetadata()
 
 	return p.Print(map[string]interface{}{
 		"status":  "success",

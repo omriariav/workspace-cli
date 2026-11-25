@@ -117,12 +117,25 @@ func executeAndResolve(errW io.Writer) int {
 	}
 	err := rootCmd.Execute()
 	code := resolveExitError(err, errW)
-	if code == ExitAuth {
+	// The hint points at `gws auth login`, which only helps when the stored
+	// OAuth login is the credential in use.
+	if code == ExitAuth && storedOAuthLoginActive() {
 		if hint := readOnlyScopeHint(executedCmd, err, auth.LoadGrantedAccess()); hint != "" {
 			fmt.Fprintln(errW, hint)
 		}
 	}
 	return code
+}
+
+// storedOAuthLoginActive reports whether commands authenticate with the
+// token stored by `gws auth login` (not an external access token and not
+// a service-account mode).
+func storedOAuthLoginActive() bool {
+	if config.GetAccessToken() != "" {
+		return false
+	}
+	modeCfg, err := resolveConfiguredAuthMode()
+	return err == nil && modeCfg.Mode == auth.AuthModeOAuth
 }
 
 // resolveExitError maps a Cobra execution error to an exit code. Pure

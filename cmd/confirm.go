@@ -11,12 +11,17 @@ import (
 	"golang.org/x/term"
 )
 
-// sensitiveCommands lists the commands that send messages, change who can
-// access data, or delete data. When the opt-in confirmation gate is on
-// (confirm_sensitive / GWS_CONFIRM_SENSITIVE), these commands require an
-// explicit approval before they run. Keys are command paths without the
-// leading "gws "; values describe the effect shown in the prompt.
+// The opt-in confirmation gate (confirm_sensitive / GWS_CONFIRM_SENSITIVE)
+// covers two kinds of command:
 //
+//   - every command whose name starts with one of destructivePrefixes —
+//     a naming rule, so a newly added delete command is covered without
+//     anyone remembering to list it;
+//   - the commands listed in sensitiveCommands, which send messages or
+//     change who can access data, and whose names follow no single pattern.
+//
+// sensitiveCommands also supplies a specific description for some
+// destructive commands. Keys are command paths without the leading "gws ".
 // TestSensitiveCommands_Exist fails if an entry no longer resolves to a
 // real command, so renames cannot silently drop a command from the gate.
 var sensitiveCommands = map[string]string{
@@ -79,6 +84,34 @@ var sensitiveCommands = map[string]string{
 	"events subscriptions delete": "deletes an event subscription",
 }
 
+// destructivePrefixes are the command-name prefixes that mark a command as
+// deleting or clearing data. "untrash" and "unshare" style names are not
+// matched by prefix; unshare commands are listed explicitly above.
+var destructivePrefixes = []string{"delete", "trash", "remove", "clear", "empty", "batch-delete"}
+
+// sensitiveEffect reports whether cmd is covered by the confirmation gate
+// and describes its effect for the prompt.
+func sensitiveEffect(cmd *cobra.Command) (string, bool) {
+	if cmd == nil {
+		return "", false
+	}
+	if effect, ok := sensitiveCommands[commandKey(cmd)]; ok {
+		return effect, true
+	}
+	// Only runnable leaf commands: a group such as `gws events
+	// subscriptions` is never the thing being confirmed.
+	if cmd.HasSubCommands() || !cmd.HasParent() || cmd.Parent() == cmd.Root() {
+		return "", false
+	}
+	name := cmd.Name()
+	for _, prefix := range destructivePrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return "deletes or clears data", true
+		}
+	}
+	return "", false
+}
+
 // commandKey returns the command path without the root command name,
 // e.g. "gmail send" for `gws gmail send`.
 func commandKey(cmd *cobra.Command) string {
@@ -107,11 +140,11 @@ func confirmGate(cmd *cobra.Command, enabled, yes bool, in io.Reader, errW io.Wr
 	if !enabled || yes {
 		return nil
 	}
-	key := commandKey(cmd)
-	effect, sensitive := sensitiveCommands[key]
+	effect, sensitive := sensitiveEffect(cmd)
 	if !sensitive {
 		return nil
 	}
+	key := commandKey(cmd)
 
 	if !interactive {
 		return fmt.Errorf("confirmation required: `gws %s` %s and confirm_sensitive is on; ask the user to approve, then re-run with --yes", key, effect)

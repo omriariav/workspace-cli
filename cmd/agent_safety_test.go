@@ -226,20 +226,127 @@ func TestIntrospection_DoesNotMutateCommandFlags(t *testing.T) {
 }
 
 func TestLoginTokenToStore(t *testing.T) {
-	old := &oauth2.Token{AccessToken: "old", RefreshToken: "old-refresh"}
-
-	// Replacing login without a refresh token must not inherit the old grant.
-	if _, err := loginTokenToStore(old, &oauth2.Token{AccessToken: "new"}, false); err == nil {
-		t.Error("replacing login without a refresh token should fail")
+	// A login without its own refresh token is never stored, whether it
+	// replaces or extends the previous authorization.
+	for _, tok := range []*oauth2.Token{nil, {AccessToken: "new"}} {
+		if _, err := loginTokenToStore(tok); err == nil {
+			t.Errorf("login %+v without a refresh token should fail", tok)
+		}
 	}
-	got, err := loginTokenToStore(old, &oauth2.Token{AccessToken: "new", RefreshToken: "new-refresh"}, false)
+	got, err := loginTokenToStore(&oauth2.Token{AccessToken: "new", RefreshToken: "new-refresh"})
 	if err != nil || got.RefreshToken != "new-refresh" {
-		t.Errorf("replacing login = %+v, %v", got, err)
+		t.Errorf("login = %+v, %v", got, err)
 	}
-	// Incremental login may keep the previous refresh token.
-	got, err = loginTokenToStore(old, &oauth2.Token{AccessToken: "new"}, true)
-	if err != nil || got.AccessToken != "new" || got.RefreshToken != "old-refresh" {
-		t.Errorf("incremental login = %+v, %v", got, err)
+}
+
+func TestSensitiveEffect_CoversDestructiveCommandsByName(t *testing.T) {
+	covered := [][]string{
+		{"docs", "delete"}, {"docs", "delete-object"}, {"docs", "delete-table-row"}, {"docs", "delete-tab"}, {"docs", "remove-list"},
+		{"slides", "delete-object"}, {"slides", "delete-text"}, {"slides", "delete-table-row"},
+		{"sheets", "delete-rows"}, {"sheets", "clear"}, {"sheets", "delete-chart"},
+		{"drive", "empty-trash"}, {"gmail", "batch-delete"}, {"gmail", "trash-thread"},
+		{"tasks", "clear"}, {"chat", "remove-member"}, {"contacts", "delete-photo"},
+		{"calendar", "update-acl"}, {"chat", "update-member"}, {"drive", "update-permission"},
+		{"gmail", "send"}, {"chat", "send"}, {"drive", "share"}, {"calendar", "unshare"},
+		{"events", "subscriptions", "delete"},
+	}
+	for _, path := range covered {
+		cmd, _, err := rootCmd.Find(path)
+		if err != nil || commandKey(cmd) != strings.Join(path, " ") {
+			t.Fatalf("command %v not found", path)
+		}
+		if _, ok := sensitiveEffect(cmd); !ok {
+			t.Errorf("gws %s should require confirmation", strings.Join(path, " "))
+		}
+	}
+
+	notCovered := [][]string{
+		{"gmail", "list"}, {"gmail", "untrash"}, {"gmail", "untrash-thread"}, {"gmail", "create-draft"},
+		{"drive", "download"}, {"docs", "read"}, {"sheets", "write"}, {"calendar", "create"},
+		{"auth", "logout"}, {"hooks", "disable"}, {"gmail"}, {"events", "subscriptions"},
+	}
+	for _, path := range notCovered {
+		cmd, _, err := rootCmd.Find(path)
+		if err != nil {
+			t.Fatalf("command %v not found", path)
+		}
+		if _, ok := sensitiveEffect(cmd); ok {
+			t.Errorf("gws %s should not require confirmation", strings.Join(path, " "))
+		}
+	}
+	if _, ok := sensitiveEffect(nil); ok {
+		t.Error("nil command is not sensitive")
+	}
+}
+
+// TestSensitiveEffect_EveryDestructiveNameIsGated walks the whole command
+// tree: any runnable command whose name starts with a destructive prefix
+// must be gated, so a new delete command cannot be added ungated.
+func TestSensitiveEffect_EveryDestructiveNameIsGated(t *testing.T) {
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		for _, sub := range c.Commands() {
+			if sub.HasSubCommands() {
+				walk(sub)
+				continue
+			}
+			for _, prefix := range destructivePrefixes {
+				if strings.HasPrefix(sub.Name(), prefix) {
+					if _, ok := sensitiveEffect(sub); !ok {
+						t.Errorf("gws %s has a destructive name but is not gated", commandKey(sub))
+					}
+				}
+			}
+		}
+	}
+	walk(rootCmd)
+}
+
+func TestStoredOAuthLoginActive(t *testing.T) {
+	if !storedOAuthLoginActive() {
+		t.Error("default configuration uses the stored OAuth login")
+	}
+	viper.Set("access_token", "tok")
+	if storedOAuthLoginActive() {
+		t.Error("an external access token is not the stored OAuth login")
+	}
+	viper.Set("access_token", "")
+	setAuthModeConfig(t, "service-account-dwd", "/tmp/key.json", "user@example.com")
+	if storedOAuthLoginActive() {
+		t.Error("a service-account mode is not the stored OAuth login")
+	}
+}
+
+func TestExistingGrantedAccess_IgnoresMetadataWithoutToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessFull}); err != nil {
+		t.Fatal(err)
+	}
+	if got := existingGrantedAccess(); len(got) != 0 {
+		t.Errorf("metadata without a stored token must be ignored, got %v", got)
+	}
+	if err := auth.SaveToken(&oauth2.Token{AccessToken: "a", RefreshToken: "r"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := existingGrantedAccess(); got["gmail"] != auth.AccessFull {
+		t.Errorf("metadata with a stored token should load, got %v", got)
+	}
+}
+
+func TestLogout_ClearsGrantedMetadata(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := auth.SaveGrantedAccess(map[string]string{"gmail": auth.AccessReadOnly}); err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.SaveGrantedServices([]string{"gmail"}); err != nil {
+		t.Fatal(err)
+	}
+	// No token stored: logout makes no network call and still clears metadata.
+	if _, err := captureStdout(t, func() error { return runLogout(logoutCmd, nil) }); err != nil {
+		t.Fatalf("runLogout: %v", err)
+	}
+	if auth.LoadGrantedAccess() != nil || auth.LoadGrantedServices() != nil {
+		t.Error("logout should remove granted-services and granted-access metadata")
 	}
 }
 

@@ -163,7 +163,7 @@ func commandSchema(cmd *cobra.Command) map[string]interface{} {
 		schema["subcommands"] = subs
 	}
 
-	if effect, ok := sensitiveCommands[commandKey(cmd)]; ok {
+	if effect, ok := sensitiveEffect(cmd); ok {
 		schema["sensitive"] = true
 		schema["effect"] = effect
 	}
