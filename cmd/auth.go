@@ -273,12 +273,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return p.PrintError(err)
 	}
 
-	// The service list goes last. If it cannot be written, remove both
-	// metadata files: no metadata is better than a list that still
-	// describes the previous token.
+	// The service list goes last. If it cannot be written, only that file
+	// is removed, so a list from the previous login cannot linger. The
+	// access record saved above stays: it is bound to the new token, it
+	// holds the exact scopes and account, and it is what is read first.
 	if err := auth.SaveGrantedServices(grantedServiceNames(access)); err != nil {
-		auth.DeleteGrantedMetadata()
-		fmt.Fprintf(os.Stderr, "Warning: failed to record granted services (%v); `gws auth status` will not show per-service access until the next login\n", err)
+		os.Remove(config.GetGrantedServicesPath())
+		fmt.Fprintf(os.Stderr, "Warning: failed to record the granted services list (%v); the access record was saved and is used instead\n", err)
 	}
 
 	return p.Print(map[string]interface{}{

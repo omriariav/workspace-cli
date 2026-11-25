@@ -18,11 +18,12 @@ const guardPollInterval = 5 * time.Millisecond
 // releases the lock when the handle closes or the process dies, so it can
 // never be left behind. The lock is requested without blocking and
 // retried until the deadline; if it stays busy, fn does not run. If the
-// guard cannot be set up at all, fn runs unguarded rather than not at all.
-func withLockGuard(lockPath string, deadline time.Time, fn func()) bool {
+// guard cannot be set up at all, fn still runs, but is told so (guarded
+// is false) and must then not do anything that needs the guard.
+func withLockGuard(lockPath string, deadline time.Time, fn func(guarded bool)) bool {
 	guard, err := os.OpenFile(lockPath+".guard", os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		fn()
+		fn(false)
 		return true
 	}
 	defer guard.Close()
@@ -34,7 +35,7 @@ func withLockGuard(lockPath string, deadline time.Time, fn func()) bool {
 			break
 		}
 		if err != windows.ERROR_LOCK_VIOLATION && err != windows.ERROR_IO_PENDING {
-			fn()
+			fn(false)
 			return true
 		}
 		if time.Now().After(deadline) {
@@ -43,6 +44,6 @@ func withLockGuard(lockPath string, deadline time.Time, fn func()) bool {
 		time.Sleep(guardPollInterval)
 	}
 	defer windows.UnlockFileEx(handle, 0, 1, 0, overlapped) //nolint:errcheck // released on close anyway
-	fn()
+	fn(true)
 	return true
 }

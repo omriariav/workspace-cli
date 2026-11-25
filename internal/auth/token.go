@@ -747,9 +747,13 @@ func acquireLock(path string) (unlock func(), err error) {
 	for {
 		var f *os.File
 		var createErr error
-		guarded := withLockGuard(lockPath, deadline, func() {
+		guarded := withLockGuard(lockPath, deadline, func(guardHeld bool) {
 			f, createErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-			if createErr != nil && os.IsExist(createErr) && removeStaleLock(lockPath) {
+			// A stale lock is taken over only while the guard is held.
+			// Without it, two processes could both judge the same lock
+			// stale and the second remove the one the first had just
+			// re-created; the lock is then simply waited for.
+			if createErr != nil && os.IsExist(createErr) && guardHeld && removeStaleLock(lockPath) {
 				f, createErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 			}
 			if createErr == nil {
@@ -764,16 +768,22 @@ func acquireLock(path string) (unlock func(), err error) {
 		}
 		if createErr == nil {
 			return func() {
-				release := func() {
+				release := func(guardHeld bool) {
+					// Without the guard, a lock old enough to be taken
+					// over is left alone: another process may be replacing
+					// it at this moment, and its replacement would be the
+					// file removed. It goes away as a stale lock instead.
+					if !guardHeld {
+						if info, statErr := os.Stat(lockPath); statErr != nil || time.Since(info.ModTime()) > staleLockAge/2 {
+							return
+						}
+					}
 					if held, readErr := os.ReadFile(lockPath); readErr == nil && string(held) == owner {
 						os.Remove(lockPath)
 					}
 				}
-				// Releasing must not hang, and must not happen unguarded:
-				// between the owner check and the removal another process
-				// could take over the lock, and its replacement would be
-				// the file removed. If the guard stays busy the lock is
-				// left where it is and goes away as a stale lock.
+				// Releasing must not hang: if the guard stays busy the
+				// lock is left where it is and goes away as a stale lock.
 				withLockGuard(lockPath, time.Now().Add(lockTimeout), release)
 			}, nil
 		}

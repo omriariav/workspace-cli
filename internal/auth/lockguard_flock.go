@@ -18,11 +18,12 @@ const guardPollInterval = 5 * time.Millisecond
 // be left behind. The guard is requested without blocking and retried
 // until the deadline, so a suspended guard holder cannot make the caller
 // wait longer than its own timeout; in that case fn does not run. If the
-// guard cannot be set up at all, fn runs unguarded rather than not at all.
-func withLockGuard(lockPath string, deadline time.Time, fn func()) bool {
+// guard cannot be set up at all, fn still runs, but is told so (guarded
+// is false) and must then not do anything that needs the guard.
+func withLockGuard(lockPath string, deadline time.Time, fn func(guarded bool)) bool {
 	guard, err := os.OpenFile(lockPath+".guard", os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		fn()
+		fn(false)
 		return true
 	}
 	defer guard.Close()
@@ -35,7 +36,7 @@ func withLockGuard(lockPath string, deadline time.Time, fn func()) bool {
 			continue
 		}
 		if err != syscall.EWOULDBLOCK {
-			fn()
+			fn(false)
 			return true
 		}
 		if time.Now().After(deadline) {
@@ -44,6 +45,6 @@ func withLockGuard(lockPath string, deadline time.Time, fn func()) bool {
 		time.Sleep(guardPollInterval)
 	}
 	defer syscall.Flock(int(guard.Fd()), syscall.LOCK_UN) //nolint:errcheck // released on close anyway
-	fn()
+	fn(true)
 	return true
 }
