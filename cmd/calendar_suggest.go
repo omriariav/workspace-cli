@@ -342,9 +342,19 @@ func dayWindows(civil time.Time, whStart, whEnd time.Duration, loc *time.Locatio
 	dayStart := atDayOffset(civil, 0, loc)
 	dayEnd := atDayOffset(civil, 24*time.Hour, loc)
 
-	_, startOffset := dayStart.In(loc).Zone()
-	_, endOffset := dayEnd.Add(-time.Second).In(loc).Zone()
-	if startOffset == endOffset && dayEnd.Sub(dayStart) == 24*time.Hour {
+	// A clock change shortly before or after the date matters as well as
+	// one inside it: when clocks roll back across midnight, part of this
+	// date's evening occurs again after the next date has begun (and so
+	// after dayEnd, its first instant). The scan therefore reaches past
+	// both ends, and the date check below keeps only this date's instants.
+	const reach = 26 * time.Hour
+	offsetAt := func(t time.Time) int {
+		_, offset := t.In(loc).Zone()
+		return offset
+	}
+	startOffset := offsetAt(dayStart)
+	if dayEnd.Sub(dayStart) == 24*time.Hour && offsetAt(dayEnd.Add(-time.Second)) == startOffset &&
+		offsetAt(dayStart.Add(-reach)) == startOffset && offsetAt(dayEnd.Add(reach)) == startOffset {
 		return []timeSpan{{Start: atDayOffset(civil, whStart, loc), End: atDayOffset(civil, whEnd, loc)}}
 	}
 
@@ -355,7 +365,7 @@ func dayWindows(civil time.Time, whStart, whEnd time.Duration, loc *time.Locatio
 	// and a minute-wide sample would overshoot the working-hours cutoff.
 	// This path only runs on days that have a transition.
 	const step = time.Second
-	for c := dayStart; c.Before(dayEnd); c = c.Add(step) {
+	for c := dayStart.Add(-reach); c.Before(dayEnd.Add(reach)); c = c.Add(step) {
 		l := c.In(loc)
 		wall := time.Duration(l.Hour())*time.Hour + time.Duration(l.Minute())*time.Minute + time.Duration(l.Second())*time.Second
 		// The date is checked too: a change that crosses midnight makes

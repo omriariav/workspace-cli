@@ -1941,7 +1941,7 @@ func TestReadOnlyScopeHint_EventsNamesTheDriveException(t *testing.T) {
 		t.Fatal(err)
 	}
 	hint := readOnlyScopeHint(create, errors.New("googleapi: Error 403: insufficient authentication scopes"), map[string]string{"events": auth.AccessReadOnly})
-	if !strings.Contains(hint, "covers Chat and Meet subscriptions") || !strings.Contains(hint, "Drive") {
+	if !strings.Contains(hint, "covers Chat subscriptions") || !strings.Contains(hint, "Drive") || !strings.Contains(hint, "--meet-created-scope") {
 		t.Errorf("hint = %q, want it to name the Chat/Meet coverage and the Drive exception", hint)
 	}
 	if strings.Contains(hint, "If this command changes data") {

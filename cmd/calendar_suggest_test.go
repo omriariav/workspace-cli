@@ -1262,6 +1262,24 @@ func TestDayWindows_TransitionAcrossMidnight(t *testing.T) {
 		t.Skipf("tzdata does not model the midnight-crossing change (%v -> %v)", before, after)
 	}
 
+	// Saturday's 23:00-24:00 happens twice: 23:00-24:00 before the change
+	// and 23:01-24:00 again after Sunday's first minute. Both belong to
+	// Saturday's working hours, so no valid slot is lost.
+	saturday := time.Date(2010, 11, 6, 12, 0, 0, 0, time.UTC)
+	var total time.Duration
+	satWindows := dayWindows(saturday, 23*time.Hour, 24*time.Hour, loc)
+	for _, w := range satWindows {
+		total += w.End.Sub(w.Start)
+		for _, instant := range []time.Time{w.Start, w.End.Add(-time.Second)} {
+			if l := instant.In(loc); l.Day() != 6 || l.Hour() != 23 {
+				t.Errorf("Saturday window %v..%v contains %v", w.Start.In(loc), w.End.In(loc), l)
+			}
+		}
+	}
+	if len(satWindows) != 2 || total != time.Hour+59*time.Minute {
+		t.Errorf("Saturday 23:00-24:00 windows = %v (total %v), want two windows totalling 1h59m", satWindows, total)
+	}
+
 	sunday := time.Date(2010, 11, 7, 12, 0, 0, 0, time.UTC)
 	windows := dayWindows(sunday, 23*time.Hour, 24*time.Hour, loc)
 	if len(windows) == 0 {
