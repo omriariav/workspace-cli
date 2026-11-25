@@ -178,7 +178,10 @@ gws drive share --show-scopes   # full and read-only scopes of the command's ser
 `"sensitive_when": {"flag": "...", "effect": "..."}` when it does only if
 that flag is used. If only certain values of the flag trigger it, they are
 listed as `"values"` (for example `["TRASH", "SPAM"]` for
-`gmail label --add`); any other value runs without confirmation. Scope
+`gmail label --add`); any other value runs without confirmation. Where it
+depends on the payload instead, the shape is
+`"sensitive_when": {"flags": ["..."], "condition": "...", "effect": "..."}`
+(for example `sheets write`, when a cell value is an empty string). Scope
 output is per service, not per command.
 
 ## Confirmation Gate for Sensitive Commands

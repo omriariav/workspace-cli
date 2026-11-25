@@ -606,13 +606,20 @@ func saveRefreshedTokenLocked(stored, refreshed *oauth2.Token) error {
 		// If the token cannot then be saved, the note is taken back: a
 		// rotation that never happened must not be left on record.
 		restore := func() {}
+		var noteErr error
 		if _, statErr := os.Stat(config.GetGrantedAccessPath()); os.IsNotExist(statErr) {
 			restore = SnapshotGrantedAccess()
-			_ = saveGrantedRecord(grantedAccessRecord{Token: tokenFingerprint(&toSave), PreviousToken: base})
+			noteErr = saveGrantedRecord(grantedAccessRecord{Token: tokenFingerprint(&toSave), PreviousToken: base})
 		}
 		if err := SaveToken(&toSave); err != nil {
 			restore()
 			return err
+		}
+		if noteErr != nil {
+			// The rotated token is saved, which is what matters most. But
+			// without the note, a command that loaded the old token will
+			// take the new one for a different login; say so.
+			return fmt.Errorf("the rotated token was saved, but the rotation could not be recorded (a gws command already running may report that the login changed; running it again fixes that): %w", noteErr)
 		}
 		return nil
 	}

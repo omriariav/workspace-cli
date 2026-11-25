@@ -1436,3 +1436,28 @@ func TestEnsureFreshToken_DoesNotRefreshWhenTheLockIsUnavailable(t *testing.T) {
 		t.Errorf("valid token: got %v, err %v", got, err)
 	}
 }
+
+// A login without an access record whose refresh token is rotated: if the
+// note linking old and new token cannot be written, the rotated token is
+// still saved (losing it would lose the login) and the failure is
+// reported rather than swallowed.
+func TestSaveRefreshedToken_LegacyRotationReportsAFailedNote(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	stored := &oauth2.Token{AccessToken: "a0", RefreshToken: "r0", Expiry: time.Now().Add(-time.Hour)}
+	if err := SaveToken(stored); err != nil {
+		t.Fatal(err)
+	}
+	original := saveGrantedRecord
+	saveGrantedRecord = func(grantedAccessRecord) error { return errors.New("disk full") }
+	t.Cleanup(func() { saveGrantedRecord = original })
+
+	rotated := &oauth2.Token{AccessToken: "a1", RefreshToken: "r1", Expiry: time.Now().Add(time.Hour)}
+	err := SaveRefreshedToken(stored, rotated)
+	if err == nil || !strings.Contains(err.Error(), "rotation could not be recorded") {
+		t.Errorf("err = %v, want the failed note reported", err)
+	}
+	if now, loadErr := LoadToken(); loadErr != nil || now.RefreshToken != "r1" {
+		t.Errorf("stored token = %+v (%v), want the rotated one saved", now, loadErr)
+	}
+}
