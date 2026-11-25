@@ -993,9 +993,20 @@ func TestMissingScopes_ComparesScopeByScope(t *testing.T) {
 	if got := strings.Join(shortScopeNames(missingScopes([]string{pfx + "some.other.scope"}, swapped)), ","); got != "some.other.scope" {
 		t.Errorf("missing = %q, want the unknown scope reported", got)
 	}
-	// Identity scopes come back under several names and are not compared.
-	if got := missingScopes([]string{"openid", "email", pfx + "userinfo.profile"}, swapped); len(got) != 0 {
-		t.Errorf("identity scopes should not be reported missing, got %v", got)
+	// Sign-in scopes come back under two names each and are compared by
+	// meaning: `profile` satisfies userinfo.profile and the reverse.
+	both := append([]string{"email", "profile"}, swapped...)
+	if got := missingScopes([]string{"openid", pfx + "userinfo.email", pfx + "userinfo.profile"}, both); len(got) != 0 {
+		t.Errorf("equivalent sign-in scopes reported missing: %v", got)
+	}
+	if got := missingScopes([]string{"profile", "email"}, append([]string{pfx + "userinfo.email", pfx + "userinfo.profile"}, swapped...)); len(got) != 0 {
+		t.Errorf("equivalent sign-in scopes reported missing: %v", got)
+	}
+	// They are still required to carry over: the people service reads
+	// people/me with userinfo.profile, so a grant that drops it would
+	// break a command that worked before. Only openid is not required.
+	if got := strings.Join(shortScopeNames(missingScopes([]string{"openid", pfx + "userinfo.profile"}, swapped)), ","); got != "userinfo.profile" {
+		t.Errorf("missing = %q, want the dropped profile scope reported", got)
 	}
 }
 

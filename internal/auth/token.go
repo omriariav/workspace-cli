@@ -20,7 +20,6 @@ const (
 	lockSuffix       = ".lock"
 	lockTimeout      = 5 * time.Second
 	lockPollInterval = 50 * time.Millisecond
-	staleLockAge     = 30 * time.Second
 )
 
 // LoadToken loads the OAuth token from the token file.
@@ -443,10 +442,10 @@ var errLockTimeout = errors.New("timeout waiting for lock")
 // sent to Google; running the command again is safe.
 var ErrRefreshBusy = errors.New("another gws command is refreshing or changing the stored login; run the command again")
 
-// refreshExchangeTimeout bounds the network refresh. It is well under the
-// age at which a held lock is treated as stale, so a slow exchange cannot
-// outlive its own lock.
-const refreshExchangeTimeout = staleLockAge * 2 / 3
+// refreshExchangeTimeout bounds the network refresh, which runs while the
+// login lock is held: a stalled request must not keep other commands
+// waiting on the lock indefinitely.
+const refreshExchangeTimeout = 20 * time.Second
 
 // Errors returned by EnsureFreshToken when the stored login is no longer
 // the one the command started with. They say what to do, so callers
@@ -725,95 +724,4 @@ func TokenExists() bool {
 	tokenPath := config.GetTokenPath()
 	_, err := os.Stat(tokenPath)
 	return err == nil
-}
-
-// acquireLock creates a .lock file for the given path using O_CREATE|O_EXCL
-// for cross-platform mutual exclusion. Returns an unlock function.
-//
-// A lock left behind by a process that died is taken over once it is older
-// than staleLockAge. That takeover (check the age, remove, create anew) is
-// done under an OS-enforced guard where the platform has one, so two
-// processes recovering the same dead lock cannot both end up holding it:
-// without the guard, the second could remove the lock the first had just
-// re-created. The guard is held only for those few file operations, never
-// while the lock itself is held.
-func acquireLock(path string) (unlock func(), err error) {
-	lockPath := path + lockSuffix
-	deadline := time.Now().Add(lockTimeout)
-	// Identifies this acquisition, so unlock removes the lock only if it
-	// is still ours and not one that replaced it after it went stale.
-	owner := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
-
-	for {
-		var f *os.File
-		var createErr error
-		guarded := withLockGuard(lockPath, deadline, func(guardHeld bool) {
-			f, createErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-			// A stale lock is taken over only while the guard is held.
-			// Without it, two processes could both judge the same lock
-			// stale and the second remove the one the first had just
-			// re-created; the lock is then simply waited for.
-			if createErr != nil && os.IsExist(createErr) && guardHeld && removeStaleLock(lockPath) {
-				f, createErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-			}
-			if createErr == nil {
-				fmt.Fprint(f, owner)
-				f.Close()
-			}
-		})
-		if !guarded {
-			// The guard stayed busy until the deadline: give up on time
-			// instead of waiting on whoever holds it.
-			return nil, fmt.Errorf("%w: %s", errLockTimeout, lockPath)
-		}
-		if createErr == nil {
-			return func() {
-				release := func(guardHeld bool) {
-					// Without the guard, a lock old enough to be taken
-					// over is left alone: another process may be replacing
-					// it at this moment, and its replacement would be the
-					// file removed. It goes away as a stale lock instead.
-					if !guardHeld {
-						if info, statErr := os.Stat(lockPath); statErr != nil || time.Since(info.ModTime()) > staleLockAge/2 {
-							return
-						}
-					}
-					if held, readErr := os.ReadFile(lockPath); readErr == nil && string(held) == owner {
-						os.Remove(lockPath)
-					}
-				}
-				// Releasing must not hang: if the guard stays busy the
-				// lock is left where it is and goes away as a stale lock.
-				withLockGuard(lockPath, time.Now().Add(lockTimeout), release)
-			}, nil
-		}
-
-		if !os.IsExist(createErr) {
-			return nil, fmt.Errorf("lock file error: %w", createErr)
-		}
-
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("%w: %s", errLockTimeout, lockPath)
-		}
-
-		time.Sleep(lockPollInterval)
-	}
-}
-
-// removeStaleLock removes a lock file if it's older than staleLockAge.
-// A token write takes milliseconds, so a 30s-old lock is reliably stale.
-// We use age-only detection (no PID probing) for cross-platform safety.
-// Returns true if the lock was removed.
-func removeStaleLock(lockPath string) bool {
-	info, err := os.Stat(lockPath)
-	if err != nil {
-		return false
-	}
-
-	if time.Since(info.ModTime()) > staleLockAge {
-		os.Remove(lockPath)
-		return true
-	}
-
-	return false
 }

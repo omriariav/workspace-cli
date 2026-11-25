@@ -544,19 +544,33 @@ func unrequestedScopes(requested, granted []string) []string {
 	return extra
 }
 
+// canonicalScope maps the short names Google reports for its sign-in
+// scopes onto their full spellings, so the two compare equal.
+func canonicalScope(s string) string {
+	switch s {
+	case "email":
+		return "https://www.googleapis.com/auth/userinfo.email"
+	case "profile":
+		return "https://www.googleapis.com/auth/userinfo.profile"
+	}
+	return s
+}
+
 // missingScopes returns the scopes in previous that are absent from
 // granted. Every previously held scope counts, including one gws does not
-// itself use: --add promises to preserve what the login had. Only Google's
-// identity scopes are skipped, since they are reported under several
-// equivalent names (email / userinfo.email) and give no data access.
+// itself use: --add promises to preserve what the login had. That
+// includes the profile and email scopes, which commands rely on (the
+// people service reads people/me with userinfo.profile); they are
+// compared by meaning, since Google reports each under two names. Only
+// openid, which grants no API access, is not required to carry over.
 func missingScopes(previous, granted []string) []string {
 	have := make(map[string]bool, len(granted))
 	for _, s := range granted {
-		have[s] = true
+		have[canonicalScope(s)] = true
 	}
 	var missing []string
 	for _, s := range previous {
-		if !have[s] && !identityScopes[s] {
+		if s != "openid" && !have[canonicalScope(s)] {
 			missing = append(missing, s)
 		}
 	}
