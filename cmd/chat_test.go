@@ -3344,7 +3344,7 @@ func TestChatFindGroup_CommandE2E(t *testing.T) {
 
 	// Capture stdout
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stdout = w
 
 	err := cmd.RunE(cmd, []string{})
@@ -3408,7 +3408,7 @@ func TestChatFindGroup_ErrorOnEmptyMembers(t *testing.T) {
 
 	// Capture stderr (PrintError writes error JSON to stderr per #190)
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stderr = w
 
 	cmd.RunE(cmd, []string{})
@@ -3558,7 +3558,7 @@ func TestChatFindSpace_MatchesByDisplayName(t *testing.T) {
 	cmd.Flags().Set("name", "sales")
 
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stdout = w
 	cmd.RunE(cmd, []string{})
 	w.Close()
@@ -3597,7 +3597,7 @@ func TestChatFindSpace_TypeFilter(t *testing.T) {
 	cmd.Flags().Set("type", "SPACE")
 
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stdout = w
 	cmd.RunE(cmd, []string{})
 	w.Close()
@@ -3626,7 +3626,7 @@ func TestChatFindSpace_InvalidType(t *testing.T) {
 	cmd.Flags().Set("type", "BOGUS")
 
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stderr = w
 	cmd.RunE(cmd, []string{})
 	w.Close()
@@ -3695,7 +3695,7 @@ func TestChatFindSpace_RefreshTypeScoped(t *testing.T) {
 	_ = cmd.Flags().Set("refresh", "true")
 
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stdout = w
 	if err := cmd.RunE(cmd, []string{}); err != nil {
 		os.Stdout = oldStdout
@@ -3764,7 +3764,7 @@ func TestChatFindSpace_NoCache(t *testing.T) {
 	cmd.Flags().Set("name", "sales")
 
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stderr = w
 	cmd.RunE(cmd, []string{})
 	w.Close()
@@ -3791,7 +3791,7 @@ func TestChatFindGroup_NoCache(t *testing.T) {
 	cmd.Flags().Set("members", "alice@example.com")
 
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stderr = w
 
 	cmd.RunE(cmd, []string{})
@@ -3981,7 +3981,7 @@ func TestChatRecent_CommandPathFiltersSortsAndCaps(t *testing.T) {
 	}()
 
 	originalStdout := os.Stdout
-	reader, writer, err := os.Pipe()
+	reader, writer, err := captureFile(t)
 	if err != nil {
 		t.Fatalf("failed to create stdout pipe: %v", err)
 	}

@@ -832,7 +832,7 @@ func TestSlidesAddTextCommand_ValidationErrors(t *testing.T) {
 
 			// Capture os.Stderr since PrintError writes to stderr (#190)
 			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
+			r, w, _ := captureFile(t)
 			os.Stderr = w
 
 			// Execute the command with a dummy presentation ID
@@ -1069,7 +1069,7 @@ func TestSlidesAddTextCommand_NotesValidation(t *testing.T) {
 			}
 
 			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
+			r, w, _ := captureFile(t)
 			os.Stderr = w
 
 			_ = cmd.RunE(cmd, []string{"test-presentation-id"})
@@ -1137,7 +1137,7 @@ func TestSlidesDeleteTextCommand_NotesValidation(t *testing.T) {
 			}
 
 			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
+			r, w, _ := captureFile(t)
 			os.Stderr = w
 
 			_ = cmd.RunE(cmd, []string{"test-presentation-id"})

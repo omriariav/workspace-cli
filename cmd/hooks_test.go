@@ -251,7 +251,7 @@ func captureHookCommandOutput(t *testing.T, outputFormat string, quietValue bool
 		t.Fatal("root --format flag is not registered")
 	}
 	oldFormat, oldQuiet, oldStdout := formatFlag.Value.String(), quiet, os.Stdout
-	reader, writer, err := os.Pipe()
+	reader, writer, err := captureFile(t)
 	if err != nil {
 		t.Fatal(err)
 	}
