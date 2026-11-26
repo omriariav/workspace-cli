@@ -3983,7 +3983,7 @@ func TestChatRecent_CommandPathFiltersSortsAndCaps(t *testing.T) {
 	originalStdout := os.Stdout
 	reader, writer, err := captureFile(t)
 	if err != nil {
-		t.Fatalf("failed to create stdout pipe: %v", err)
+		t.Fatalf("failed to create stdout capture file: %v", err)
 	}
 	os.Stdout = writer
 	defer func() {

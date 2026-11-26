@@ -586,18 +586,21 @@ func TestChatListRaw_ClampsPageSizeToMax(t *testing.T) {
 // so the write blocks for good once the output exceeds the pipe's buffer,
 // and that buffer is not a fixed size (macOS shrinks it to 512 bytes when
 // a process holds many pipes). A file has no such limit. Both handles are
-// closed when the test ends.
+// closed when the test ends. The error is always nil.
 func captureFile(t *testing.T) (r, w *os.File, err error) {
 	t.Helper()
+	// Setup failures end the test here, so a caller that ignores the
+	// returned error (kept only to match os.Pipe's signature) can never
+	// go on to install a nil file as os.Stdout or os.Stderr.
 	path := filepath.Join(t.TempDir(), "captured-output")
 	w, err = os.Create(path)
 	if err != nil {
-		return nil, nil, err
+		t.Fatalf("failed to create capture file: %v", err)
 	}
 	r, err = os.Open(path)
 	if err != nil {
 		_ = w.Close()
-		return nil, nil, err
+		t.Fatalf("failed to open capture file: %v", err)
 	}
 	t.Cleanup(func() {
 		_ = r.Close()
