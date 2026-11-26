@@ -13,9 +13,9 @@ import (
 func captureOutput(t *testing.T, fn func()) string {
 	t.Helper()
 	old := os.Stderr
-	r, w, err := os.Pipe()
+	r, w, err := captureFile(t)
 	if err != nil {
-		t.Fatalf("failed to create pipe: %v", err)
+		t.Fatalf("failed to create capture file: %v", err)
 	}
 	os.Stderr = w
 

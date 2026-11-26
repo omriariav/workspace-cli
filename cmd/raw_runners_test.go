@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -48,6 +49,7 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 	runErr := fn()
 	_ = w.Close()
 	wg.Wait()
+	_ = r.Close()
 	os.Stdout = orig
 	return buf.String(), runErr
 }
@@ -517,6 +519,7 @@ func captureStderrStr(t *testing.T, fn func()) string {
 	fn()
 	_ = w.Close()
 	wg.Wait()
+	_ = r.Close()
 	os.Stderr = orig
 	return buf.String()
 }
@@ -573,4 +576,35 @@ func TestChatListRaw_ClampsPageSizeToMax(t *testing.T) {
 	if got.NextPageToken != "page-2-after-5" {
 		t.Errorf("expected verbatim nextPageToken positioned after item 5, got %q", got.NextPageToken)
 	}
+}
+
+// captureFile returns a file to write captured output to and a second
+// handle to read it back from, as a drop-in for os.Pipe() in tests that
+// run a command first and read its output afterwards.
+//
+// A pipe cannot be used that way: nothing reads while the command writes,
+// so the write blocks for good once the output exceeds the pipe's buffer,
+// and that buffer is not a fixed size (macOS shrinks it to 512 bytes when
+// a process holds many pipes). A file has no such limit. Both handles are
+// closed when the test ends. The error is always nil.
+func captureFile(t *testing.T) (r, w *os.File, err error) {
+	t.Helper()
+	// Setup failures end the test here, so a caller that ignores the
+	// returned error (kept only to match os.Pipe's signature) can never
+	// go on to install a nil file as os.Stdout or os.Stderr.
+	path := filepath.Join(t.TempDir(), "captured-output")
+	w, err = os.Create(path)
+	if err != nil {
+		t.Fatalf("failed to create capture file: %v", err)
+	}
+	r, err = os.Open(path)
+	if err != nil {
+		_ = w.Close()
+		t.Fatalf("failed to open capture file: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = r.Close()
+		_ = w.Close()
+	})
+	return r, w, nil
 }

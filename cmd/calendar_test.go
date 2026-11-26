@@ -2163,7 +2163,7 @@ func TestCalendarCreate_AddsSelfByDefault(t *testing.T) {
 	_ = cmd.Flags().Set("attendees", "someone-else@example.com")
 
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stdout = w
 	if err := cmd.RunE(cmd, []string{}); err != nil {
 		os.Stdout = oldStdout
@@ -2249,7 +2249,7 @@ func TestCalendarCreate_PrimaryLookupFailureDefaultPath(t *testing.T) {
 	// Note: --add-self left at default true and NOT explicitly set.
 
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stdout = w
 	if err := cmd.RunE(cmd, []string{}); err != nil {
 		os.Stdout = oldStdout
@@ -2316,7 +2316,7 @@ func TestCalendarCreate_RespectsAddSelfFalse(t *testing.T) {
 	_ = cmd.Flags().Set("add-self", "false")
 
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, _ := captureFile(t)
 	os.Stdout = w
 	if err := cmd.RunE(cmd, []string{}); err != nil {
 		os.Stdout = oldStdout
